@@ -228,8 +228,34 @@ docker compose up -d --build
 ```
 
 Порт публикуется на `127.0.0.1` намеренно: Docker пишет правила в обход UFW,
-и `ports: "8080:8080"` открыл бы панель всему интернету. Наружу пускает
-системный nginx — конфиг с настройками WebSocket в `deploy/ai-support.conf`.
+и `ports: "8080:8080"` открыл бы панель всему интернету. Наружу панель отдаёт
+реверс-прокси.
+
+### Реверс-прокси (nginx + TLS)
+
+Панель слушает только `127.0.0.1:8080`, поэтому доступ снаружи — через nginx,
+который терминирует TLS, пробрасывает WebSocket живого обновления и добавляет
+`X-Forwarded-For` (по нему панель отличает адрес оператора от локального).
+Готовый конфиг — в [`deploy/ai-support.conf`](deploy/ai-support.conf).
+
+```bash
+# домен support.вашдомен.ru должен A-записью указывать на сервер
+apt install -y nginx certbot python3-certbot-nginx
+
+cp deploy/ai-support.conf /etc/nginx/sites-available/ai-support.conf
+sed -i 's/support\.example\.com/support.вашдомен.ru/g' \
+  /etc/nginx/sites-available/ai-support.conf
+ln -s /etc/nginx/sites-available/ai-support.conf /etc/nginx/sites-enabled/
+rm -f /etc/nginx/sites-enabled/default
+
+certbot --nginx -d support.вашдомен.ru     # выпустит сертификат и пропишет пути
+nginx -t && systemctl reload nginx
+ufw allow 80,443/tcp
+```
+
+После этого `PANEL_URL=https://support.вашдомен.ru` в `.env` — чтобы ссылки из
+уведомлений открывали нужный диалог. Полный разбор (DNS, продление, другие
+прокси вроде Caddy) — в **[DEPLOY.md](DEPLOY.md)**, раздел «Панель наружу».
 
 ## Если клиент не находится в Remnawave
 
