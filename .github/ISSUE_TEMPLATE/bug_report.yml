@@ -1,0 +1,34 @@
+name: Сообщить об ошибке
+description: Воспроизводимая проблема в ai-support
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Не публикуйте токены, персональные данные и содержимое `.env`.
+  - type: input
+    id: version
+    attributes:
+      label: Версия
+      placeholder: 1.15.0
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Что произошло?
+      description: Опишите ожидаемое и фактическое поведение.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как воспроизвести?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Очищенные логи
+      description: Удалите токены, сообщения пользователей и другие секреты.
+      render: shell
