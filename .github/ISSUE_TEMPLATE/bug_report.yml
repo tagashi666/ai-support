@@ -10,7 +10,7 @@ body:
     id: version
     attributes:
       label: Версия
-      placeholder: 1.15.0
+      placeholder: 1.16.0
     validations:
       required: true
   - type: textarea

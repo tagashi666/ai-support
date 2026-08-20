@@ -1,6 +1,6 @@
 {
   "name": "ai-support",
-  "version": "1.15.0",
+  "version": "1.16.0",
   "description": "Self-hosted Telegram support inbox with AI-assisted replies, knowledge base and operator dashboard",
   "private": true,
   "license": "MIT",
