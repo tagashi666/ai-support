@@ -1,0 +1,39 @@
+services:
+  ai-support:
+    build: .
+    container_name: ai-support
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DB_PATH: /app/data/ai-support.db
+      MEDIA_DIR: /app/data/media
+      KB_DIR: /app/kb
+      DRAFT_DIR: /app/data/kb-draft
+      PANEL_HOST: 0.0.0.0
+    volumes:
+      - ./data:/app/data
+      # Панель редактирует статьи, поэтому каталог на запись.
+      # Черновики лежат отдельно, в data/kb-draft.
+      - ./kb:/app/kb
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # Порт публикуем только на loopback: наружу пускает системный nginx.
+    # Docker обходит UFW, поэтому 127.0.0.1 здесь принципиально.
+    ports:
+      - "127.0.0.1:8080:8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

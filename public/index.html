@@ -1,0 +1,2403 @@
+<!doctype html>
+<html lang="ru" data-theme="graphite" data-accent="lavender">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>ai-support</title>
+<style media="not all" id="legacy-ui">
+/* Скрытие обязано побеждать любой display у класса — иначе экраны
+   рисуются друг под другом. Правило первое и с !important. */
+[hidden] { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════
+   ПРОСТРАНСТВА ИМЁН
+   Отступы, плоскости, текст и линии живут в разных префиксах.
+   Раньше --s1..--s3 означали и шаг сетки, и цвет поверхности:
+   тема переопределяла их цветом, padding: var(--s2) становился
+   padding: #141618, свойство отбрасывалось — и весь интерфейс
+   терял отступы. Один префикс — одна роль, без исключений.
+   ═══════════════════════════════════════════════════════════ */
+:root {
+  /* Шаг 4px */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+  /* Радиусы: контрол, контейнер, пилюля */
+  --r-ctl:8px; --r-box:14px; --r-pill:999px;
+  --ctl:28px;
+
+  --lavender:#6E7BE8; --azure:#3B8CF5; --teal:#1FB2BE; --mint:#35B87A;
+  --amber:#D89417; --coral:#E8566E; --orchid:#A96AE8; --steel:#6B7C96;
+  --accent: var(--lavender);
+  --warn:#D89417; --danger:#E8566E; --ok:#35B87A;
+
+  --sans:"Inter var", Inter, -apple-system, BlinkMacSystemFont, "SF Pro Text",
+         "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono:ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo, monospace;
+
+  --fast:120ms; --mid:220ms; --slow:420ms;
+  --ease:cubic-bezier(.32,.72,0,1);
+  --spring:cubic-bezier(.34,1.4,.42,1);
+}
+[data-accent="azure"]  { --accent:var(--azure); }
+[data-accent="teal"]   { --accent:var(--teal); }
+[data-accent="mint"]   { --accent:var(--mint); }
+[data-accent="amber"]  { --accent:var(--amber); }
+[data-accent="coral"]  { --accent:var(--coral); }
+[data-accent="orchid"] { --accent:var(--orchid); }
+[data-accent="steel"]  { --accent:var(--steel); }
+
+/* Плоскости: холст → 1 → 2 → 3. Стекло отдельным слоем, только
+   для навигации: стекло поверх стекла превращается в кашу. */
+[data-theme="graphite"] {
+  --bg:#08080A; --bg-1:#101114; --bg-2:#16181C; --bg-3:#1D2025;
+  --line:rgba(255,255,255,.07); --line-2:rgba(255,255,255,.13);
+  --fg:#F3F4F6; --fg-2:#A7ADB8; --fg-3:#6B717D;
+  --glass:rgba(20,22,26,.62); --glass-edge:rgba(255,255,255,.09);
+  --tint:rgba(255,255,255,.045); --halo:rgba(110,123,232,.16);
+}
+[data-theme="obsidian"] {
+  --bg:#000000; --bg-1:#0A0A0C; --bg-2:#101013; --bg-3:#17181C;
+  --line:rgba(255,255,255,.06); --line-2:rgba(255,255,255,.12);
+  --fg:#FFFFFF; --fg-2:#A3A5AD; --fg-3:#63666E;
+  --glass:rgba(12,12,14,.66); --glass-edge:rgba(255,255,255,.08);
+  --tint:rgba(255,255,255,.04); --halo:rgba(110,123,232,.14);
+}
+[data-theme="abyss"] {
+  --bg:#050A18; --bg-1:#0A1122; --bg-2:#0F172C; --bg-3:#151F38;
+  --line:rgba(130,165,225,.10); --line-2:rgba(130,165,225,.18);
+  --fg:#E9EFFA; --fg-2:#9EAECB; --fg-3:#647391;
+  --glass:rgba(11,18,36,.66); --glass-edge:rgba(150,180,240,.11);
+  --tint:rgba(130,165,225,.05); --halo:rgba(59,140,245,.18);
+}
+[data-theme="daylight"] {
+  --bg:#F7F8FA; --bg-1:#FFFFFF; --bg-2:#F1F3F6; --bg-3:#E7EAEF;
+  --line:rgba(16,20,28,.09); --line-2:rgba(16,20,28,.16);
+  --fg:#12151A; --fg-2:#525863; --fg-3:#858B95;
+  --glass:rgba(255,255,255,.68); --glass-edge:rgba(16,20,28,.07);
+  --tint:rgba(16,20,28,.032); --halo:rgba(110,123,232,.14);
+}
+[data-theme="sand"] {
+  --bg:#F5F1E9; --bg-1:#FDFBF7; --bg-2:#F0EBE0; --bg-3:#E7E0D2;
+  --line:rgba(92,74,50,.12); --line-2:rgba(92,74,50,.2);
+  --fg:#221B12; --fg-2:#5C5243; --fg-3:#8A8071;
+  --glass:rgba(250,246,238,.7); --glass-edge:rgba(92,74,50,.09);
+  --tint:rgba(92,74,50,.035); --halo:rgba(216,148,23,.16);
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { height:100%; }
+body {
+  background:var(--bg); color:var(--fg);
+  font:400 13.5px/1.5 var(--sans); letter-spacing:-.006em;
+  font-feature-settings:"cv01","ss03";
+  -webkit-font-smoothing:antialiased; overflow:hidden;
+}
+button, input, select, textarea { font:inherit; color:inherit; letter-spacing:inherit; }
+button { background:none; border:0; cursor:pointer; }
+button:active:not(:disabled) { transform:scale(.97); }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; border-radius:var(--r-ctl); }
+::-webkit-scrollbar { width:9px; height:9px; }
+::-webkit-scrollbar-thumb { background:var(--line-2); border-radius:var(--r-pill); border:3px solid transparent; background-clip:content-box; }
+::-webkit-scrollbar-thumb:hover { background:var(--fg-3); background-clip:content-box; }
+::selection { background:color-mix(in srgb, var(--accent) 34%, transparent); }
+.mono { font:400 11px/1.45 var(--mono); letter-spacing:0; }
+.scroll-y { overflow-y:auto; overscroll-behavior:contain; min-height:0; }
+
+/* Анимируем только transform и opacity: всё остальное заставляет браузер
+   пересчитывать раскладку, и на 144 Гц это видно сразу. */
+@keyframes rise { from { opacity:0; transform:translateY(8px); } }
+@keyframes pop { from { opacity:0; transform:translateY(6px) scale(.985); } }
+@keyframes fade { from { opacity:0; } }
+@keyframes slideIn { from { opacity:0; transform:translateX(-6px); } }
+@keyframes glow { 0%,100% { opacity:.5; } 50% { opacity:1; } }
+@keyframes shimmer { 100% { transform:translateX(100%); } }
+
+/* Заглушка на время загрузки переписки: пустой экран читается как зависание. */
+.bubble.skel { position:relative; overflow:hidden; background:var(--bg-2); border-radius:var(--r-box); }
+.bubble.skel::after { content:''; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg, transparent, var(--tint), transparent);
+  animation:shimmer 1.1s var(--ease) infinite; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; transition-duration:.01ms !important; }
+}
+
+/* ═══ Вход ═══ */
+.gate { position:fixed; inset:0; z-index:100; display:grid; place-items:center; padding:var(--sp-5);
+  background:var(--bg); overflow:hidden; }
+.gate::before { content:''; position:absolute; width:min(720px,90vw); aspect-ratio:1; border-radius:50%;
+  background:radial-gradient(circle, var(--halo), transparent 68%); filter:blur(48px);
+  animation:glow 7s ease-in-out infinite; pointer-events:none; }
+.gate-card { position:relative; width:min(348px,100%); padding:var(--sp-6);
+  background:var(--glass); backdrop-filter:blur(24px) saturate(180%); -webkit-backdrop-filter:blur(24px) saturate(180%);
+  border:1px solid var(--glass-edge); border-radius:20px;
+  box-shadow:0 1px 0 rgba(255,255,255,.07) inset, 0 24px 64px rgba(0,0,0,.4);
+  display:grid; gap:var(--sp-4); animation:pop var(--slow) var(--spring); }
+.gate-mark { width:38px; height:38px; border-radius:12px; display:grid; place-items:center;
+  background:linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 45%, transparent));
+  color:#fff; font:590 15px/1 var(--sans); }
+.gate h1 { font:590 17px/1.25 var(--sans); letter-spacing:-.018em; }
+.gate p { color:var(--fg-3); font-size:12.5px; }
+.gate .err { min-height:16px; }
+
+/* ═══ Каркас ═══
+   Ширины текучие: на широком мониторе колонки растут в разумных
+   пределах, а переписка держит комфортную строку по центру. */
+.app { display:grid; height:100dvh; overflow:hidden;
+  /* Ширины в переменных: их двигают ручками между колонками. По умолчанию
+     на широком мониторе лишнее место достаётся списку и карточке клиента —
+     переписке ширина сверх комфортной строки не нужна, а им полезна. */
+  --w-side:clamp(184px, 13vw, 240px);
+  /* Потолок карточки поднят: на 2К при 22vw/408px она упиралась в предел
+     задолго до края экрана, и справа зияла пустота. 24vw/520px даёт ей
+     дорасти до полезной ширины на широком мониторе. */
+  --w-ctx:clamp(272px, 24vw, 520px);
+  grid-template-columns:var(--w-side) minmax(0,1fr) var(--w-ctx); }
+.app[data-context="off"] { grid-template-columns:var(--w-side) minmax(0,1fr); }
+.app[data-context="off"] .context { display:none; }
+/* Ручки между колонками. Ширины живут в переменных, значение запоминается:
+   на разных мониторах удобны разные пропорции. */
+.grip { position:absolute; top:0; bottom:0; width:9px; cursor:col-resize; z-index:5; }
+.grip::after { content:''; position:absolute; top:0; bottom:0; left:4px; width:1px;
+  background:transparent; transition:background var(--fast); }
+.grip:hover::after, .grip.dragging::after { background:var(--accent); }
+body.resizing { cursor:col-resize; user-select:none; }
+.main { min-width:0; min-height:0; display:grid; grid-template:minmax(0,1fr) / minmax(0,1fr); }
+.view { grid-area:1 / 1; min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.view:not([hidden]) { animation:rise var(--mid) var(--ease); }
+
+
+/* ═══ Навигация — единственный стеклянный слой ═══ */
+/* Размытие фона на больших поверхностях пересчитывается при каждой
+   перерисовке и на 2K съедает кадр целиком. Стекло оставлено только на
+   мелких всплывающих слоях: лист, всплывашка, вход. */
+.sidebar { min-height:0; display:flex; flex-direction:column; gap:2px; padding:var(--sp-3) var(--sp-3) var(--sp-4);
+  background:var(--bg); border-right:1px solid var(--line); }
+.brand { display:flex; align-items:center; gap:var(--sp-2); height:40px; padding:0 var(--sp-2); margin-bottom:var(--sp-2); }
+.brand-mark { width:22px; height:22px; border-radius:7px; display:grid; place-items:center; flex:none;
+  background:linear-gradient(150deg, var(--accent), color-mix(in srgb, var(--accent) 42%, transparent));
+  color:#fff; font:590 10px/1 var(--sans); }
+.brand b { font:590 13.5px/1 var(--sans); letter-spacing:-.015em; }
+.pulse { width:6px; height:6px; border-radius:50%; background:var(--danger); margin-left:auto; flex:none;
+  transition:background var(--mid), box-shadow var(--mid); }
+.pulse.live { background:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 20%, transparent); }
+.side-cap { font:510 10px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-3);
+  padding:var(--sp-4) var(--sp-2) var(--sp-1); }
+.nav { display:flex; align-items:center; gap:var(--sp-2); height:30px; padding:0 var(--sp-2);
+  border-radius:var(--r-ctl); color:var(--fg-2); text-align:left; position:relative;
+  transition:background var(--fast), color var(--fast); }
+.nav:hover { background:var(--tint); color:var(--fg); }
+.nav[aria-current="true"] { background:var(--bg-3); color:var(--fg); font-weight:510; }
+.nav::before { content:''; position:absolute; left:calc(var(--sp-3) * -1); top:50%;
+  width:3px; height:16px; border-radius:0 3px 3px 0; background:var(--accent);
+  transform:translateY(-50%) scaleY(0); transition:transform var(--mid) var(--spring); }
+.nav[aria-current="true"]::before { transform:translateY(-50%) scaleY(1); }
+.nav .glyph { width:15px; text-align:center; font-size:11px; color:var(--fg-3); flex:none; }
+.nav[aria-current="true"] .glyph { color:var(--accent); }
+.nav .count { margin-left:auto; font:400 10.5px/1 var(--mono); color:var(--fg-3); }
+.sidebar .grow { flex:1; }
+.sidebar .foot { padding:var(--sp-3) var(--sp-2) 0; color:var(--fg-3); font:400 10px/1 var(--mono); }
+/* Сводка в подвале навигации: место всё равно пустовало, а цифры отвечают
+   на вопрос «нужно ли мне сейчас открывать инбокс». */
+.board { display:grid; gap:1px; }
+.board button { display:flex; align-items:center; gap:var(--sp-2); height:26px; padding:0 var(--sp-2);
+  border-radius:var(--r-ctl); font-size:12px; color:var(--fg-2); text-align:left;
+  transition:background var(--fast); }
+.board button:hover { background:var(--tint); color:var(--fg); }
+.board b { margin-left:auto; font:510 12px/1 var(--mono); font-variant-numeric:tabular-nums; }
+.board .mark { width:6px; height:6px; border-radius:50%; flex:none; background:var(--fg-3); }
+.board .mark.hot { background:var(--danger); }
+.board .mark.warn { background:var(--warn); }
+.board .mark.ok { background:var(--ok); }
+
+/* ═══ Тулбар ═══ */
+.bar { flex:none; min-height:46px; display:flex; align-items:center; gap:var(--sp-2);
+  padding:var(--sp-2) var(--sp-4); border-bottom:1px solid var(--line);
+  background:var(--bg); position:relative; z-index:2; }
+.bar h1 { font:510 14px/1.3 var(--sans); letter-spacing:-.014em; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.bar .right { margin-left:auto; display:flex; align-items:center; gap:var(--sp-2); flex:none; }
+.bar .note { color:var(--fg-3); font-size:11.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* ═══ Контролы ═══ */
+.seg { display:inline-flex; gap:2px; flex:none; background:var(--bg-2);
+  border:1px solid var(--line); border-radius:var(--r-ctl); padding:2px; }
+.seg button { height:22px; padding:0 var(--sp-3); border-radius:6px; font-size:12px; color:var(--fg-3);
+  white-space:nowrap; transition:background var(--fast), color var(--fast); }
+.seg button:hover { color:var(--fg-2); }
+.seg button[aria-pressed="true"] { background:var(--bg-3); color:var(--fg); font-weight:510; }
+.btn { height:var(--ctl); padding:0 var(--sp-3); border-radius:var(--r-ctl); background:var(--bg-2);
+  border:1px solid var(--line); font-size:12.5px; color:var(--fg-2); white-space:nowrap;
+  display:inline-flex; align-items:center; justify-content:center; gap:6px;
+  transition:background var(--fast), color var(--fast), border-color var(--fast); }
+.btn:hover:not(:disabled) { background:var(--bg-3); color:var(--fg); border-color:var(--line-2); }
+.btn { transition:background var(--fast), color var(--fast), border-color var(--fast), transform var(--fast); }
+.btn.primary { background:var(--accent); border-color:transparent; color:#fff; font-weight:510; }
+.btn.primary:hover:not(:disabled) { filter:brightness(1.12); }
+.btn.danger { color:var(--danger); }
+.btn.danger:hover:not(:disabled) { border-color:color-mix(in srgb, var(--danger) 42%, transparent); }
+.btn.quiet { background:none; border-color:transparent; }
+.btn.quiet:hover:not(:disabled) { background:var(--tint); }
+.btn:disabled { opacity:.42; cursor:not-allowed; }
+.btn.wide { width:100%; }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  height:var(--ctl); padding:0 var(--sp-3); border-radius:var(--r-ctl); border:1px solid var(--line);
+  background:var(--bg-2); font-size:12.5px; width:100%;
+  transition:border-color var(--fast), background var(--fast), box-shadow var(--fast); }
+textarea { height:auto; padding:var(--sp-2) var(--sp-3); resize:none; line-height:1.5; }
+input:hover, select:hover, textarea:hover { border-color:var(--line-2); }
+input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); background:var(--bg-1);
+  box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 16%, transparent); }
+
+/* ═══ Список диалогов ═══ */
+/* Ширина списка была фиксированной (352px): на 2К она не масштабировалась,
+   и колонка выглядела зажатой рядом с растянутой перепиской. Делаем текучей
+   с потолком, чтобы на широком мониторе список тоже получал место. */
+.split { flex:1; min-height:0; display:grid; --w-list:clamp(320px, 22vw, 480px); grid-template-columns:var(--w-list) minmax(0,1fr); }
+.col { min-width:0; min-height:0; display:flex; flex-direction:column; overflow:hidden; }
+.col.left { border-right:1px solid var(--line); background:var(--bg); position:relative; }
+#list { padding:var(--sp-2); display:flex; flex-direction:column; gap:2px; }
+.row { position:relative; display:grid; gap:3px; padding:var(--sp-2) var(--sp-3); border-radius:var(--r-box);
+  cursor:pointer; transition:background var(--fast); contain:content; }
+.row:hover { background:var(--bg-1); }
+.row[aria-selected="true"] { background:var(--bg-2); }
+/* Полоска выделения растёт из центра: переключение читается как движение,
+   а не как мгновенная подмена цвета. Масштаб, а не размеры — раскладка
+   при этом не пересчитывается. */
+.row::before { content:''; position:absolute; left:0; top:10px; bottom:10px;
+  width:3px; border-radius:0 3px 3px 0; background:var(--accent);
+  transform:scaleY(0); transform-origin:center;
+  transition:transform var(--mid) var(--spring); }
+.row[aria-selected="true"]::before { transform:scaleY(1); }
+.who { display:flex; align-items:baseline; gap:var(--sp-2); min-width:0; }
+.who b { font:510 13px/1.35 var(--sans); letter-spacing:-.01em; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.who small { margin-left:auto; color:var(--fg-3); font:400 10.5px/1 var(--mono); flex:none; }
+.snippet { color:var(--fg-3); font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chips { display:flex; gap:var(--sp-1); align-items:center; flex-wrap:wrap; margin-top:2px; }
+.chip { font:400 10.5px/1 var(--sans); padding:3px 7px; border-radius:var(--r-pill);
+  background:var(--bg-3); color:var(--fg-3); animation:fade var(--fast); }
+.chip.hot { background:color-mix(in srgb, var(--danger) 16%, transparent); color:var(--danger); }
+.chip.ai { background:color-mix(in srgb, var(--accent) 18%, transparent); color:var(--accent); }
+.dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; }
+
+/* ═══ Переписка ═══ */
+.thread { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-6) var(--sp-5);
+  /* Браузер сам подкручивает позицию, когда содержимое над видимой областью
+     меняет высоту. С нашей прокруткой к низу это спорит и добавляет рывок. */
+  overflow-anchor:none;
+  /* Место под вертикальный скроллбар резервируется всегда: иначе при его
+     появлении/исчезновении контент прыгает по горизонтали — это и выглядело
+     как «съезжает интерфейс». Жёлоб только справа, чтобы левый край входящих
+     совпадал с левым краем предложки и поля ввода. */
+  scrollbar-gutter:stable; }
+.thread-inner.enter { animation:fade var(--mid) var(--ease); }
+/* Переписка занимает всю ширину колонки, а не узкую полосу по центру:
+   входящие прижаты к левому краю (к списку), исходящие — к правому
+   (к карточке). Так сообщения привязаны к соседним колонкам и никуда не
+   уплывают при изменении ширины. */
+.thread-inner { width:100%; margin:0; display:flex; flex-direction:column; gap:3px; }
+/* align-items обязателен: без него колонка растягивает пузырь до ширины
+   самого широкого потомка — строки времени с кнопкой «ответить». Короткое
+   «Да» превращалось в широкий пузырь с пустотой справа. */
+.msg { max-width:min(62ch, 78%); display:flex; flex-direction:column; contain:content; }
+/* Анимируем только то, что действительно только что пришло. */
+.msg.fresh { animation:rise var(--mid) var(--ease); }
+.msg.in { align-self:flex-start; align-items:flex-start; }
+.msg.out { align-self:flex-end; align-items:flex-end; }
+.msg.note { align-self:center; align-items:center; max-width:60ch; }
+.bubble { padding:var(--sp-2) var(--sp-3); border-radius:var(--r-box); font-size:13.5px; line-height:1.5;
+  white-space:pre-wrap; overflow-wrap:anywhere; }
+.msg.in  .bubble { background:var(--bg-2); border-bottom-left-radius:6px; }
+.msg.out .bubble { background:var(--accent); color:#fff; border-bottom-right-radius:6px; }
+.msg.note .bubble { background:none; border:1px dashed var(--line-2); color:var(--fg-3); font-size:12.5px; }
+.msg .meta { margin:3px var(--sp-2) 0; font:400 10.5px/1 var(--mono); color:var(--fg-3); }
+.msg + .msg { margin-top:var(--sp-1); }
+/* Скриншот с телефона — вертикальный и огромный: без ограничения по высоте
+   одно вложение занимает весь экран и выдавливает переписку. Показываем
+   превью, полный размер открывается по клику. */
+/* Вертикальный скриншот с телефона показываем целиком, но мелко: обрезка
+   по cover прятала как раз то, о чём спрашивает клиент.
+   Место под картинку резервируется по её пропорциям ДО загрузки: иначе
+   каждая догрузившаяся фотография меняет высоту и толкает всю переписку —
+   это и выглядело как дёрганье при открытии диалога. */
+.bubble .shot { display:block; margin-top:var(--sp-2); border-radius:10px; overflow:hidden;
+  background:var(--bg-3); cursor:zoom-in; contain:paint;
+  max-width:min(240px, 100%); max-height:280px; }
+.bubble .shot img { display:block; width:100%; height:100%; object-fit:contain;
+  transition:opacity var(--mid) var(--ease); opacity:0; }
+.bubble .shot img.ready { opacity:1; }
+.bubble .shot:hover { filter:brightness(1.06); }
+.bubble img:hover { filter:brightness(1.08); }
+.lightbox { position:fixed; inset:0; z-index:70; display:grid; place-items:center; padding:var(--sp-6);
+  background:color-mix(in srgb, var(--bg) 84%, transparent);
+  backdrop-filter:blur(12px); -webkit-backdrop-filter:blur(12px); animation:fade var(--fast); cursor:zoom-out; }
+.lightbox img { max-width:min(1100px, 92vw); max-height:88dvh; border-radius:14px;
+  box-shadow:0 24px 64px rgba(0,0,0,.5); animation:pop var(--mid) var(--spring); }
+.msg.in .bubble a { color:var(--accent); } .msg.out .bubble a { color:#fff; text-decoration:underline; }
+.reply-to { display:flex; padding:var(--sp-1) var(--sp-2); margin-bottom:3px; border-radius:var(--r-ctl);
+  background:var(--tint); border-left:2px solid var(--accent); font-size:11.5px; color:var(--fg-2);
+  max-width:100%; overflow:hidden; }
+.reply-to span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.msg.out .reply-to { background:rgba(255,255,255,.16); border-left-color:rgba(255,255,255,.6); color:#fff; }
+/* Ответ виден всегда: спрятанный за наведение, он остаётся ненайденным. */
+.msg .meta { display:flex; align-items:center; gap:var(--sp-2); }
+.act { font:400 10.5px/1 var(--sans); color:var(--fg-3); opacity:.65;
+  transition:opacity var(--fast), color var(--fast); }
+.msg:hover .act { opacity:1; }
+.act:hover { color:var(--accent); opacity:1; }
+/* Цитата кликабельна: ведёт к исходному сообщению. */
+.reply-to { cursor:pointer; transition:background var(--fast); }
+.reply-to:hover { background:color-mix(in srgb, var(--accent) 14%, transparent); }
+.msg.flash .bubble { animation:flash 1.1s var(--ease); }
+@keyframes flash { 0%,100% { box-shadow:0 0 0 0 transparent; }
+  25% { box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent); } }
+
+/* ═══ Предложка ═══ */
+.suggest-wrap { flex:none; padding:0 var(--sp-5) var(--sp-3); }
+.suggest { margin:0; background:var(--bg-1);
+  border:1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); border-radius:var(--r-box);
+  overflow:hidden; animation:pop var(--mid) var(--spring); }
+.suggest .head { display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-3) var(--sp-3) 0; }
+.suggest .head b { font:510 10px/1 var(--sans); letter-spacing:.07em; text-transform:uppercase; color:var(--accent); }
+.suggest .head span { margin-left:auto; color:var(--fg-3); font:400 10.5px/1 var(--mono); }
+.suggest .text { padding:var(--sp-2) var(--sp-3) 0; white-space:pre-wrap; font-size:13px; max-height:170px; overflow-y:auto; }
+.suggest .src { padding:var(--sp-2) var(--sp-3) 0; color:var(--fg-3); font-size:11px; }
+.suggest .acts { display:flex; gap:var(--sp-2); padding:var(--sp-3); }
+.gauge { height:2px; background:var(--line); }
+.gauge i { display:block; height:100%; background:var(--accent); transition:width var(--slow) var(--ease); }
+
+/* ═══ Композер ═══
+   Кольцо вокруг отправки — окно ответа. Тает вместе с сутками,
+   желтеет за три часа до конца, гаснет, когда Telegram уже не
+   пропустит сообщение. Главное ограничение продукта видно всегда. */
+.composer { flex:none; padding:var(--sp-3) var(--sp-5) var(--sp-4); border-top:1px solid var(--line);
+  background:var(--bg); }
+.composer-inner { margin:0; }
+.tools { display:flex; gap:var(--sp-2); align-items:center; margin-bottom:var(--sp-2); }
+.tools select { width:auto; max-width:170px; }
+.quoting { display:flex; align-items:center; gap:var(--sp-2); padding:var(--sp-2) var(--sp-3);
+  margin-bottom:var(--sp-2); border-radius:var(--r-ctl); background:var(--tint);
+  border-left:2px solid var(--accent); font-size:11.5px; animation:fade var(--fast); }
+.quoting span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--fg-2); }
+.field { display:flex; gap:var(--sp-2); align-items:flex-end; background:var(--bg-1);
+  border:1px solid var(--line); border-radius:20px; padding:var(--sp-1) var(--sp-1) var(--sp-1) var(--sp-4);
+  transition:border-color var(--mid), box-shadow var(--mid); }
+.field:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.field textarea { border:0; background:none; padding:var(--sp-2) 0; min-height:22px; max-height:148px;
+  font-size:13.5px; box-shadow:none; }
+.field textarea:focus { outline:none; border:0; background:none; box-shadow:none; }
+.ring { --p:100; width:30px; height:30px; flex:none; border-radius:50%; padding:2px;
+  background:conic-gradient(var(--ring,var(--accent)) calc(var(--p)*1%), var(--line-2) 0);
+  transition:background var(--slow) linear; }
+.send { width:100%; height:100%; border-radius:50%; background:var(--accent); color:#fff;
+  display:grid; place-items:center; font-size:13px; transition:filter var(--fast); }
+.send:hover:not(:disabled) { filter:brightness(1.15); }
+.send:disabled { background:var(--bg-3); color:var(--fg-3); }
+.composer[data-window="soon"]   { --ring:var(--warn); }
+.composer[data-window="closed"] { --ring:var(--danger); }
+.composer[data-window="closed"] .ring { --p:0; }
+.composer[data-window="closed"] .field { background:var(--bg-2); }
+.wleft { font:400 10.5px/1 var(--mono); color:var(--fg-3); margin-left:auto; }
+.composer[data-window="soon"]   .wleft { color:var(--warn); }
+.composer[data-window="closed"] .wleft { color:var(--danger); }
+
+/* ═══ Группы ═══ */
+.group { background:var(--bg-1); border:1px solid var(--line); border-radius:var(--r-box); overflow:hidden; }
+.group.scrolls { max-height:266px; overflow-y:auto; overscroll-behavior:contain; }
+.cap { font:510 10px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase; color:var(--fg-3);
+  padding:0 var(--sp-3) var(--sp-2); }
+/* Разделы правой колонки сворачиваются: сразу вся карточка клиента,
+   подписка и полтора десятка устройств — это стена, в которой теряешься. */
+.fold > summary { list-style:none; cursor:pointer; display:flex; align-items:center; gap:var(--sp-2);
+  padding:0 var(--sp-3) var(--sp-2); font:510 10px/1 var(--sans); letter-spacing:.06em;
+  text-transform:uppercase; color:var(--fg-3); }
+.fold > summary::-webkit-details-marker { display:none; }
+.fold > summary::before { content:'▸'; font-size:9px; transition:transform var(--mid) var(--spring); }
+.fold[open] > summary::before { transform:rotate(90deg); }
+.fold > summary:hover { color:var(--fg-2); }
+.fold > summary .tag { margin-left:auto; font:400 10px/1 var(--mono); color:var(--fg-3); }
+.item { display:flex; align-items:center; gap:var(--sp-3); min-height:36px; padding:var(--sp-2) var(--sp-3);
+  border-bottom:1px solid var(--line); font-size:12.5px; flex:0 0 auto; }
+.item:last-child { border-bottom:0; }
+.item .lbl { color:var(--fg-2); flex:none; }
+.item .val { margin-left:auto; text-align:right; min-width:0; overflow-wrap:anywhere; }
+.item .ctl { margin-left:auto; width:auto; min-width:132px; max-width:200px; }
+.item > .btn { flex:none; }
+.item.col-item { flex-direction:column; align-items:stretch; gap:var(--sp-2); }
+
+/* ═══ Контекст ═══ */
+.context { min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-4) var(--sp-3);
+  display:flex; flex-direction:column; gap:var(--sp-3); background:var(--bg); border-left:1px solid var(--line);
+  /* Место под скроллбар держим всегда: карточки разных клиентов разной высоты,
+     и без этого при переключении скроллбар то появлялся, то исчезал — правую
+     колонку дёргало по горизонтали. */
+  scrollbar-gutter:stable; }
+.context > * { flex:0 0 auto; }
+/* Плавное появление содержимого модулей: асинхронные блоки (подписка,
+   устройства) подгружаются с задержкой и раньше выскакивали резко. Анимируем
+   только opacity и transform — без анимации высоты, чтобы не было рывков. */
+.reveal { animation:rise var(--mid) var(--ease); }
+.device { display:flex; align-items:center; gap:var(--sp-2); min-height:34px; padding:var(--sp-1) var(--sp-3);
+  border-bottom:1px solid var(--line); font-size:12px; }
+.device:last-child { border-bottom:0; }
+.device .grow { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.device .btn { flex:none; height:24px; padding:0 var(--sp-2); font-size:11.5px; }
+
+/* ═══ Страницы ═══ */
+.page { flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:var(--sp-6) var(--sp-5); }
+.page-inner { max-width:min(1080px, 100%); margin:0 auto; }
+.narrow { max-width:600px; display:grid; gap:var(--sp-4); }
+.grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:var(--sp-3); align-content:start; }
+.doc { background:var(--bg-1); border:1px solid var(--line); border-radius:var(--r-box); padding:var(--sp-4);
+  display:grid; gap:var(--sp-2); align-content:start; contain:content;
+  transition:border-color var(--fast), transform var(--fast); }
+.doc:hover { border-color:var(--line-2); transform:translateY(-2px); }
+.doc b { font:510 13px/1.4 var(--sans); letter-spacing:-.01em; overflow-wrap:anywhere; }
+.doc .acts { display:flex; gap:var(--sp-2); flex-wrap:wrap; margin-top:var(--sp-1); }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:var(--sp-3); margin-bottom:var(--sp-6); }
+.kpi { background:var(--bg-1); border:1px solid var(--line); border-radius:var(--r-box); padding:var(--sp-4); }
+.kpi b { display:block; font:510 26px/1.15 var(--sans); letter-spacing:-.024em; font-variant-numeric:tabular-nums; }
+.kpi span { font-size:11px; color:var(--fg-3); }
+.kpi .sub { display:block; margin-top:2px; font:400 10.5px/1.3 var(--mono); color:var(--fg-3); }
+/* Столбики рисуем плоским CSS: ради четырёх графиков тянуть библиотеку
+   и полмегабайта скрипта в панель незачем. */
+.bars { display:flex; align-items:flex-end; gap:3px; height:120px; padding:var(--sp-3);
+  background:var(--bg-1); border:1px solid var(--line); border-radius:var(--r-box); }
+.bars .col2 { flex:1; display:flex; flex-direction:column; justify-content:flex-end; gap:2px;
+  min-width:0; height:100%; }
+.bars .col2 i { display:block; border-radius:3px 3px 0 0; transform-origin:bottom;
+  animation:grow-y var(--slow) var(--ease); }
+@keyframes grow-y { from { transform:scaleY(0); } }
+.bars .col2 i.in { background:var(--accent); opacity:.85; }
+.bars .col2 i.out { background:var(--fg-3); opacity:.55; }
+.bars .col2 span { font:400 9px/1 var(--mono); color:var(--fg-3); text-align:center;
+  overflow:hidden; white-space:nowrap; }
+.legend { display:flex; gap:var(--sp-4); font-size:11px; color:var(--fg-3); padding:var(--sp-2) var(--sp-1) 0; }
+.legend i { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:5px; }
+.split2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:var(--sp-3); }
+.meter { display:flex; align-items:center; gap:var(--sp-2); font-size:12px; padding:var(--sp-2) var(--sp-3);
+  border-bottom:1px solid var(--line); }
+.meter:last-child { border-bottom:0; }
+.meter .track { flex:1; height:5px; border-radius:3px; background:var(--bg-3); overflow:hidden; }
+.meter .track i { display:block; height:100%; background:var(--accent);
+  transform-origin:left; animation:grow var(--slow) var(--ease); }
+@keyframes grow { from { transform:scaleX(0); } }
+.meter b { font:510 12px/1 var(--mono); min-width:34px; text-align:right; }
+table { width:100%; border-collapse:collapse; font-size:12.5px; background:var(--bg-1);
+  border:1px solid var(--line); border-radius:var(--r-box); overflow:hidden; }
+th, td { text-align:left; padding:var(--sp-2) var(--sp-3); border-bottom:1px solid var(--line); }
+th { font:510 10px/1 var(--sans); text-transform:uppercase; letter-spacing:.06em; color:var(--fg-3); }
+td { font-variant-numeric:tabular-nums; }
+tr:last-child td { border-bottom:0; }
+
+.themes { display:grid; grid-template-columns:repeat(auto-fit,minmax(92px,1fr)); gap:var(--sp-2); padding:var(--sp-3); }
+.theme-card { border-radius:var(--r-ctl); border:1px solid var(--line); overflow:hidden; text-align:left;
+  transition:border-color var(--fast), transform var(--fast); }
+.theme-card:hover { border-color:var(--line-2); transform:translateY(-1px); }
+.theme-card[aria-pressed="true"] { border-color:var(--accent); box-shadow:0 0 0 2px color-mix(in srgb, var(--accent) 22%, transparent); }
+.theme-card .prev { height:34px; display:flex; }
+.theme-card .prev i { flex:1; } .theme-card .prev i:first-child { flex:.42; }
+.theme-card span { display:block; padding:var(--sp-1) var(--sp-2); font:400 11px/1.3 var(--sans);
+  background:var(--bg-2); color:var(--fg-2); }
+.swatches { display:flex; gap:var(--sp-2); flex-wrap:wrap; padding:var(--sp-3); }
+.swatch { width:24px; height:24px; border-radius:50%; border:2px solid transparent;
+  transition:border-color var(--fast), transform var(--fast); }
+.swatch:hover { transform:scale(1.1); }
+.swatch[aria-pressed="true"] { border-color:var(--fg); }
+
+.empty { margin:auto; text-align:center; color:var(--fg-3); max-width:32ch; padding:var(--sp-8) var(--sp-5); font-size:12.5px; }
+.err { color:var(--danger); font-size:12px; min-height:16px; margin-top:var(--sp-2); }
+.hint { color:var(--fg-3); font-size:12px; }
+/* Пояснения свёрнуты: развёрнутые под каждым полем, они перебивают сами
+   настройки и превращают страницу в стену текста. */
+.why { align-self:flex-start; font:400 11px/1 var(--sans); color:var(--fg-3);
+  padding:3px 7px; border:1px solid var(--line); border-radius:var(--r-pill);
+  transition:color var(--fast), border-color var(--fast); }
+.why:hover { color:var(--fg-2); border-color:var(--line-2); }
+.why[aria-expanded="true"] { color:var(--accent); border-color:color-mix(in srgb, var(--accent) 40%, transparent); }
+.why-text { display:none; }
+.why-text.open { display:block; animation:fade var(--fast); }
+.log { font:400 11px/1.7 var(--mono); color:var(--fg-2); background:var(--bg-2);
+  border:1px solid var(--line); border-radius:var(--r-ctl); padding:var(--sp-3);
+  max-height:200px; overflow-y:auto; white-space:pre-wrap; }
+
+/* ═══ Лист ═══ */
+.backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:var(--sp-5);
+  background:color-mix(in srgb, var(--bg) 62%, transparent);
+  backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); animation:fade var(--fast); }
+.sheet { background:var(--bg-1); border:1px solid var(--line-2); border-radius:18px;
+  width:min(608px,100%); max-height:84dvh; display:flex; flex-direction:column; overflow:hidden;
+  box-shadow:0 24px 64px rgba(0,0,0,.34); animation:pop var(--mid) var(--spring); }
+.sheet header { flex:none; display:flex; align-items:center; gap:var(--sp-2); min-height:48px;
+  padding:var(--sp-2) var(--sp-4); border-bottom:1px solid var(--line); }
+.sheet header b { font:510 13.5px/1.3 var(--sans); letter-spacing:-.012em; min-width:0;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sheet .body { padding:var(--sp-4); overflow-y:auto; display:grid; gap:var(--sp-3); min-height:0; }
+.sheet .foot { flex:none; padding:var(--sp-3) var(--sp-4); border-top:1px solid var(--line);
+  display:flex; gap:var(--sp-2); justify-content:flex-end; }
+.sheet textarea { min-height:288px; font-family:var(--mono); font-size:12px; }
+.frow { display:grid; gap:var(--sp-1); }
+.frow label { font-size:11.5px; color:var(--fg-3); }
+.toast { position:fixed; bottom:var(--sp-6); left:50%; transform:translateX(-50%); z-index:60;
+  background:var(--glass); backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
+  border:1px solid var(--glass-edge); padding:var(--sp-2) var(--sp-5); border-radius:var(--r-pill);
+  font-size:12.5px; box-shadow:0 12px 32px rgba(0,0,0,.3); animation:rise var(--mid) var(--spring); }
+
+@media (max-width:1240px) { .app { grid-template-columns:clamp(184px,15vw,220px) minmax(0,1fr); } .context { display:none; } }
+@media (max-width:900px) { .split { grid-template-columns:1fr; } .col.left { display:none; } }
+@media (max-width:720px) { .app, .app[data-context="off"] { grid-template-columns:1fr; } .sidebar { display:none; } }
+</style>
+<link rel="stylesheet" href="/ui.css">
+</head>
+<body>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-shell">
+    <section class="gate-story" aria-label="ai-support">
+      <div class="gate-brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
+          </svg>
+        </span>
+        <span>ai-support</span>
+      </div>
+      <div>
+        <span class="eyebrow">Рабочее пространство поддержки</span>
+        <h1>Помогать людям — спокойно.</h1>
+        <p>Диалоги, знания и AI-помощник в одном быстром пространстве для команды.</p>
+      </div>
+      <div class="gate-points" aria-label="Возможности">
+        <span>Живая очередь</span><span>Ответы с AI</span><span>Контекст клиента</span>
+      </div>
+    </section>
+    <form class="gate-card" id="gateForm">
+      <div class="gate-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
+        </svg>
+      </div>
+      <div>
+        <span class="eyebrow">Защищённый вход</span>
+        <h2>С возвращением</h2>
+        <p>Введите токен панели, чтобы продолжить работу.</p>
+      </div>
+      <label class="sr-only" for="gateToken">Токен панели</label>
+      <input type="password" id="gateToken" placeholder="Токен панели" autocomplete="current-password" autofocus>
+      <button class="btn primary wide" type="submit" id="gateGo">
+        Войти
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m8 5 5 5-5 5M3 10h10"/></svg>
+      </button>
+      <div class="err" id="gateErr" role="alert"></div>
+      <p class="gate-help">Токен хранится только в этом браузере.</p>
+    </form>
+  </div>
+</div>
+
+<div class="app" id="app" data-context="on" hidden>
+
+  <aside class="sidebar"><div class="grip" id="gripSide" style="right:-4px"></div>
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
+        </svg>
+      </span>
+      <span class="brand-copy"><b>ai-support</b><small>operator desk</small></span>
+      <span class="pulse" id="pulse" title="Соединение с сервером"></span>
+    </div>
+    <div class="side-cap">Работа</div>
+    <button class="nav" data-view="inbox" aria-current="true" aria-label="Инбокс">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 14h4l2 2h4l2-2h4"/></svg></span><span class="nav-label">Инбокс</span><span class="count" id="cntInbox">0</span>
+    </button>
+    <button class="nav" data-view="kb" aria-label="База знаний">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span><span class="nav-label">База знаний</span><span class="count" id="cntKb">0</span>
+    </button>
+    <div class="side-cap">Сервис</div>
+    <button class="nav" data-view="lab" aria-label="Песочница AI">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.4 4.1L17.5 8l-4.1 1.4L12 13.5l-1.4-4.1L6.5 8l4.1-.9L12 3ZM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg></span><span class="nav-label">Песочница AI</span>
+    </button>
+    <button class="nav" data-view="nodes" aria-label="Серверы">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"/></svg></span><span class="nav-label">Серверы</span><span class="count" id="cntNodes"></span>
+    </button>
+    <button class="nav" data-view="stats" aria-label="Статистика">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span><span class="nav-label">Статистика</span>
+    </button>
+    <button class="nav" data-view="settings" aria-label="Настройки">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span><span class="nav-label">Настройки</span>
+    </button>
+    <div class="grow"></div>
+    <div class="side-cap">Сейчас</div>
+    <div id="pulseBoard" class="board"></div>
+    <div class="sidebar-foot"><span class="foot" id="ver">—</span><button class="lock-btn" id="lockBtn" title="Выйти из панели" aria-label="Выйти из панели"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg></button></div>
+  </aside>
+
+  <main class="main">
+
+    <section class="view" id="view-inbox">
+      <div class="split" id="inboxSplit" data-pane="list">
+        <div class="col left">
+          <div class="queue-head">
+            <div class="queue-top">
+              <div><span class="bar-kicker">Рабочая очередь</span><h2>Диалоги</h2></div>
+              <div class="seg" id="filters">
+                <button data-filter="all" aria-pressed="true">Все</button>
+                <button data-filter="waiting" aria-pressed="false">Ждут</button>
+                <button data-filter="hot" aria-pressed="false">Важные</button>
+              </div>
+            </div>
+            <label class="queue-search" for="listSearch">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+              <span class="sr-only">Поиск диалогов</span>
+              <input type="text" id="listSearch" placeholder="Найти клиента или диалог…" autocomplete="off">
+              <kbd>/</kbd>
+            </label>
+          </div>
+          <div class="scroll-y" id="list" role="listbox" aria-label="Диалоги"></div>
+          <div class="grip" id="gripList" style="right:-4px"></div>
+        </div>
+
+        <div class="col conversation">
+          <div class="bar conversation-head">
+            <button class="mobile-back" id="backToList" title="Назад к диалогам" aria-label="Назад к диалогам">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            <span class="title-avatar" id="titleAvatar" aria-hidden="true">—</span>
+            <div class="title-stack">
+              <span class="bar-kicker">Текущий диалог</span>
+              <h1 id="title">Диалог не выбран</h1>
+              <span class="note mono" id="subtitle"></span>
+            </div>
+            <div class="right">
+              <button class="icon-btn inspector-toggle" id="contextToggle" title="Открыть карточку клиента" aria-label="Открыть карточку клиента" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M6 19c.7-3.1 2.7-5 6-5s5.3 1.9 6 5M4 3h16v18H4z"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="thread" id="thread" aria-live="polite"><div class="thread-inner"><div class="empty empty-thread">
+            <span class="empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/></svg></span>
+            <b>Выберите диалог</b><span>Переписка и контекст клиента появятся здесь.</span>
+          </div></div></div>
+          <div class="suggest-wrap" id="suggestBox"></div>
+          <div class="composer" id="composer" hidden>
+            <div class="composer-inner">
+              <div class="tools">
+                <select id="templates" aria-label="Шаблон ответа"><option value="">Шаблон…</option></select>
+                <button class="btn quiet" id="noteBtn">В заметку</button>
+                <span class="wleft" id="wleft">—</span>
+              </div>
+              <div id="quotingBox"></div>
+              <div class="field">
+                <label class="sr-only" for="input">Ответ клиенту</label>
+                <textarea id="input" rows="1" placeholder="Ответ уйдёт от имени аккаунта поддержки"></textarea>
+                <span class="ring" id="ring"><button class="send" id="send" title="Отправить (⌘↵)" aria-label="Отправить сообщение">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/></svg>
+                </button></span>
+              </div>
+              <div class="err" id="err" role="alert"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-kb" hidden>
+      <div class="bar">
+        <div class="bar-title">
+          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span>
+          <div><span class="bar-kicker">Материалы для ответов</span><h1>База знаний</h1></div>
+        </div>
+        <div class="right">
+          <span class="note" id="kbHint"></span>
+          <div class="seg" id="kbTabs">
+            <button data-tab="kb" aria-pressed="true">Рабочие</button>
+            <button data-tab="draft" aria-pressed="false">Черновики</button>
+          </div>
+          <button class="btn" id="newDoc"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>Статья</button>
+          <button class="btn primary" id="mineBtn"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 3 1.1 3.4L14.5 7l-3.4 1.1L10 11.5 8.9 8.1 5.5 7l3.4-.6L10 3ZM15 12l.7 2.3L18 15l-2.3.7L15 18l-.7-2.3L12 15l2.3-.7L15 12Z"/></svg>Собрать из чатов</button>
+        </div>
+      </div>
+      <div class="page"><div class="page-inner"><div class="grid" id="docs"></div><div id="mineLog"></div></div></div>
+    </section>
+
+    <section class="view" id="view-lab" hidden>
+      <div class="bar">
+        <div class="bar-title">
+          <span class="page-icon ai" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 1.4 4.1L17.5 8l-4.1 1.4L12 13.5l-1.4-4.1L6.5 8l4.1-.9L12 3ZM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg></span>
+          <div><span class="bar-kicker">Без отправки клиенту</span><h1>Песочница AI</h1></div>
+        </div>
+        <div class="right"><span class="note">Тот же промпт и база, что в бою</span><button class="btn" id="pingBtn">Проверить связь</button></div>
+      </div>
+      <div class="page"><div class="page-inner lab-layout">
+        <section class="work-card">
+          <div class="work-card-head"><span class="step">01</span><div><b>Запрос клиента</b><span>Введите реальный вопрос или тестовый сценарий</span></div></div>
+          <div class="frow">
+            <label for="labInput">Вопрос клиента</label>
+            <textarea id="labInput" rows="7" placeholder="Например: не подключается на iPhone — что проверить?"></textarea>
+          </div>
+          <div class="work-actions">
+            <button class="btn primary" id="labRun"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 8 6-8 6V4Z"/></svg>Прогнать сценарий</button>
+            <span class="note" id="labNote"></span>
+          </div>
+        </section>
+        <section class="work-card result-card">
+          <div class="work-card-head"><span class="step">02</span><div><b>Результат</b><span>Черновик, уверенность и найденные источники</span></div></div>
+          <div id="labOut"><div class="empty"><span>Результат появится после запуска.</span></div></div>
+        </section>
+      </div></div>
+    </section>
+
+    <section class="view" id="view-nodes" hidden>
+      <div class="bar">
+        <div class="bar-title">
+          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"/></svg></span>
+          <div><span class="bar-kicker">Инфраструктура</span><h1>Серверы</h1></div>
+        </div>
+        <div class="right"><span class="note" id="nodesNote"></span><button class="btn" id="nodesRefresh"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 7a6 6 0 1 0 .3 5M15 3v4h-4"/></svg>Обновить</button></div>
+      </div>
+      <div class="page"><div class="page-inner" id="nodesBody"></div></div>
+    </section>
+
+    <section class="view" id="view-stats" hidden>
+      <div class="bar">
+        <div class="bar-title">
+          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span>
+          <div><span class="bar-kicker">Качество поддержки</span><h1>Статистика</h1></div>
+        </div>
+        <div class="right"><div class="seg" id="statsRange">
+          <button data-days="7" aria-pressed="false">7 дней</button>
+          <button data-days="14" aria-pressed="true">14 дней</button>
+          <button data-days="30" aria-pressed="false">30 дней</button>
+          <button data-days="90" aria-pressed="false">90 дней</button>
+        </div></div>
+      </div>
+      <div class="page"><div class="page-inner" id="stats"></div></div>
+    </section>
+
+    <section class="view" id="view-settings" hidden>
+      <div class="bar">
+        <div class="bar-title">
+          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span>
+          <div><span class="bar-kicker">Персонализация и AI</span><h1>Настройки</h1></div>
+        </div>
+        <div class="right"><span class="save-state" role="status" aria-live="polite"><i></i><span class="note" id="setHint"></span></span></div>
+      </div>
+      <div class="page"><div class="page-inner">
+        <div class="narrow">
+          <section class="settings-section"><div class="section-copy"><span class="cap">Оформление</span><h2>Рабочая среда</h2><p>Выберите спокойную тему и акцент под себя.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Пять палитр нового интерфейса</span></header><div class="themes" id="themePick"></div></div><div class="appearance-panel"><header><b>Акцент</b><span>Цвет действий и выделений</span></header><div class="swatches" id="accentPick"></div></div></div></section>
+          <section class="settings-section"><div class="section-copy"><span class="cap">Поведение AI</span><h2>Помощник оператора</h2><p>Как AI предлагает и отправляет ответы.</p></div><div><div class="settings-content" id="aiSettings"></div><p class="hint settings-hint">Ключи, адреса и токены живут в <span class="mono">.env</span> на сервере — из панели они не меняются.</p></div></section>
+          <section class="settings-section"><div class="section-copy"><span class="cap">Состояние</span><h2>Интеграции</h2><p>Подключения, база и системные проверки.</p></div><div class="health-grid" id="health"></div></section>
+        </div>
+      </div></div>
+    </section>
+
+  </main>
+
+  <aside class="context" id="context"><div class="grip" id="gripCtx" style="left:-4px"></div>
+    <div class="context-head">
+      <div><span class="bar-kicker">Контекст</span><h2>Карточка клиента</h2><p>Управление диалогом и подпиской</p></div>
+      <button class="icon-btn context-close" id="contextClose" title="Закрыть" aria-label="Закрыть карточку клиента">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <details class="fold" open data-fold="dialog">
+      <summary>Диалог<span class="tag" id="foldDialog"></span></summary>
+      <div class="group">
+        <div class="item"><span class="lbl">Статус</span>
+          <select class="ctl" id="statusSel"><option value="open">Открыт</option><option value="pending">Ждёт клиента</option><option value="resolved">Решён</option></select></div>
+        <div class="item"><span class="lbl">Режим AI</span>
+          <select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></div>
+        <div class="item"><span class="hint" id="aiModeNote"></span></div>
+        <div class="item context-action"><button class="btn wide" id="escBtn">Пометить важным</button></div>
+        <div class="item context-action"><button class="btn primary wide" id="handoffBtn">Передать человеку</button></div>
+      </div>
+    </details>
+    <details class="fold" open data-fold="client">
+      <summary>Клиент<span class="tag" id="foldClient"></span></summary>
+      <div class="group" id="customerCard"><div class="item"><span class="hint">Выберите диалог.</span></div></div>
+    </details>
+    <details class="fold" data-fold="sub" id="subWrap" hidden>
+      <summary>Подписка<span class="tag" id="foldSub"></span></summary>
+      <div class="group" id="subBody"></div>
+    </details>
+    <details class="fold" data-fold="devices" id="devicesWrap" hidden>
+      <summary>Устройства<span class="tag" id="devicesCap"></span></summary>
+      <div class="group scrolls" id="devicesBody"></div>
+    </details>
+  </aside>
+</div>
+
+<div class="backdrop" id="backdrop" hidden><div class="sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<script type="module">
+const WINDOW_MS = 864e5, SOON_MS = 108e5;
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let token = localStorage.getItem('panelToken') || '';
+
+const api = async (path, options = {}) => {
+  // content-type объявляем только когда тело есть: заголовок без тела
+  // Fastify считает ошибкой и отбивает запрос до обработчика.
+  const headers = { authorization: `Bearer ${token}`, ...options.headers };
+  if (options.body !== undefined && headers['content-type'] === undefined) {
+    headers['content-type'] = 'application/json';
+  }
+  const res = await fetch(path, { ...options, headers });
+  if (res.status === 401) { localStorage.removeItem('panelToken'); location.reload(); }
+  return res;
+};
+const json = async (path, options) => { const r = await api(path, options); return r.ok ? r.json() : null; };
+
+/**
+ * Изменение состояния. Ошибку сервера показываем всегда: раньше отказ
+ * возвращался как null, и кнопка выглядела нерабочей — так пропала
+ * публикация черновиков, падавшая с нехваткой прав.
+ */
+async function mutate(path, options, okText) {
+  let res;
+  try { res = await api(path, options); }
+  catch (err) { toast(`Нет связи с сервером: ${err.message}`); return null; }
+  if (res.ok) { if (okText) toast(okText); return await res.json().catch(() => ({})); }
+  const body = await res.json().catch(() => ({}));
+  toast(body.error ?? `Ошибка ${res.status}`);
+  return null;
+}
+
+// Билет для вложений и WebSocket: сам токен панели в адресную строку не
+// попадает — оттуда он утекает в историю браузера и в логи nginx.
+let ticket = '';
+async function refreshTicket() {
+  const data = await json('/api/ticket');
+  if (data?.ticket) ticket = data.ticket;
+  return ticket;
+}
+
+let conversations = [], current = null, suggestion = null, filter = 'all', listQuery = '', templates = [], settings = null;
+let kbTab = 'kb', docs = { kb: [], drafts: [] }, quoting = null;
+
+/* ═══ оформление ═══ */
+const THEMES = [
+  ['graphite','Аврора','Мягкая тёмная'],
+  ['obsidian','Полночь','Контрастная тёмная'],
+  ['abyss','Фьорд','Холодная тёмная'],
+  ['daylight','Облако','Чистая светлая'],
+  ['sand','Рассвет','Тёплая светлая'],
+];
+const ACCENTS = [['lavender','#9298FF','Лаванда'],['azure','#5BADFF','Небо'],['teal','#3BC5C7','Лагуна'],['mint','#55CD96','Мята'],
+  ['amber','#F3BC52','Солнце'],['coral','#FF7B91','Коралл'],['orchid','#CC8AF6','Орхидея'],['steel','#8B9CB4','Туман']];
+
+$('themePick').innerHTML = THEMES.map(([id, name, description]) =>
+  `<button type="button" class="theme-card" data-theme="${id}" title="${name}" aria-label="Тема: ${name} — ${description}">
+     <span class="theme-preview" aria-hidden="true"><i class="preview-rail"></i><span class="preview-list"><i></i><i></i><i></i></span><span class="preview-chat"><i></i><i></i></span></span>
+     <span class="theme-meta"><span><b>${name}</b><small>${description}</small></span><i class="theme-check">✓</i></span>
+   </button>`).join('');
+$('accentPick').innerHTML = ACCENTS.map(([n,hex,label]) =>
+  `<button type="button" class="swatch" data-accent="${n}" style="--swatch:${hex}" title="${label}" aria-label="Акцент: ${label}"><i></i><span>${label}</span></button>`).join('');
+
+function applyLook() {
+  const savedTheme = localStorage.getItem('theme');
+  const savedAccent = localStorage.getItem('accent');
+  const theme = THEMES.some(([id]) => id === savedTheme) ? savedTheme : 'graphite';
+  const accent = ACCENTS.some(([id]) => id === savedAccent) ? savedAccent : 'lavender';
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.accent = accent;
+  for (const b of $('themePick').children) b.setAttribute('aria-pressed', String(b.dataset.theme === theme));
+  for (const b of $('accentPick').children) b.setAttribute('aria-pressed', String(b.dataset.accent === accent));
+}
+$('themePick').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const change = () => { localStorage.setItem('theme', b.dataset.theme); applyLook(); };
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(change);
+  else change();
+};
+$('accentPick').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  const change = () => { localStorage.setItem('accent', b.dataset.accent); applyLook(); };
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(change);
+  else change();
+};
+applyLook();
+
+/* ═══ вход ═══
+   Раньше здесь стоял prompt() — он не показывает ошибку, не даёт
+   стереть неверный токен и выглядит как сбой браузера. */
+async function checkToken(candidate) {
+  return fetch('/api/settings', { headers: { authorization: `Bearer ${candidate}` } });
+}
+function openGate(message) {
+  $('app').hidden = true;
+  $('gate').hidden = false;
+  $('gateErr').textContent = message ?? '';
+  $('gateToken').focus();
+}
+$('gateForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const candidate = $('gateToken').value.trim();
+  if (!candidate) return;
+  $('gateGo').disabled = true;
+  $('gateErr').textContent = '';
+  try {
+    const res = await checkToken(candidate);
+    if (res.ok) {
+      token = candidate;
+      localStorage.setItem('panelToken', candidate);
+      $('gate').hidden = true;
+      $('app').hidden = false;
+      await boot();
+    } else if (res.status === 429) {
+      // Не «неверный токен», а временная блокировка за частые попытки: иначе
+      // человек с верным токеном решает, что тот перестал работать.
+      const wait = Number(res.headers.get('retry-after')) || 60;
+      $('gateErr').textContent = `Слишком много попыток. Подождите ${wait} с и попробуйте снова.`;
+    } else {
+      $('gateErr').textContent = 'Токен не подошёл';
+      $('gateToken').select();
+    }
+  } catch (err) {
+    $('gateErr').textContent = `Сервер недоступен: ${err.message}`;
+  }
+  $('gateGo').disabled = false;
+};
+
+/* ═══ размеры колонок ═══
+   Ширины двигаются мышью и запоминаются: на разных мониторах удобны
+   разные пропорции, а угадать за пользователя нельзя. */
+const LAYOUT = [
+  { grip:'gripSide', target:() => $('app'), probe:'.sidebar', varName:'--w-side', min:170, max:340, sign:1 },
+  { grip:'gripList', target:() => document.querySelector('.split'), probe:'.col.left', varName:'--w-list', min:240, max:620, sign:1 },
+  { grip:'gripCtx',  target:() => $('app'), probe:'.context', varName:'--w-ctx', min:240, max:560, sign:-1 },
+];
+function applyLayout() {
+  for (const item of LAYOUT) {
+    // Сохранённую ширину зажимаем в те же границы, что и при перетаскивании:
+    // значение, запомненное на узком мониторе, не должно применяться дословно
+    // на 2К и превращать колонку в неуместно тонкую полосу.
+    const saved = Number(localStorage.getItem(`layout:${item.varName}`));
+    if (Number.isFinite(saved) && saved > 0) {
+      const clamped = Math.min(item.max, Math.max(item.min, saved));
+      item.target()?.style.setProperty(item.varName, `${clamped}px`);
+    }
+  }
+}
+for (const item of LAYOUT) {
+  const grip = $(item.grip);
+  if (!grip) continue;
+  grip.onpointerdown = (e) => {
+    const el = item.target();
+    if (!el) return;
+    const startX = e.clientX;
+    // Значение по умолчанию задано через clamp() и как число не читается,
+    // поэтому берём фактическую ширину колонки на экране.
+    const probe = document.querySelector(item.probe);
+    const startW = probe ? probe.getBoundingClientRect().width : 240;
+    grip.setPointerCapture(e.pointerId);
+    grip.classList.add('dragging');
+    document.body.classList.add('resizing');
+    // Перерасчёт grid-раскладки всего приложения на каждый pointermove
+    // (а их десятки за кадр) и есть источник рывков при ресайзе. Коалесцируем
+    // в одну запись переменной на кадр через requestAnimationFrame.
+    let raf = 0;
+    let pendingX = startX;
+    const move = (ev) => {
+      pendingX = ev.clientX;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const next = Math.round(Math.min(item.max, Math.max(item.min, startW + (pendingX - startX) * item.sign)));
+        el.style.setProperty(item.varName, `${next}px`);
+      });
+    };
+    const up = () => {
+      if (raf) cancelAnimationFrame(raf);
+      grip.releasePointerCapture(e.pointerId);
+      grip.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      const finalWidth = document.querySelector(item.probe)?.getBoundingClientRect().width;
+      if (finalWidth) localStorage.setItem(`layout:${item.varName}`, String(Math.round(finalWidth)));
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+  };
+  // Двойной щелчок возвращает ширину по умолчанию.
+  grip.ondblclick = () => {
+    item.target()?.style.removeProperty(item.varName);
+    localStorage.removeItem(`layout:${item.varName}`);
+  };
+}
+applyLayout();
+
+/* ═══ навигация ═══ */
+const VIEWS = ['inbox','kb','lab','nodes','stats','settings'];
+function show(view) {
+  for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
+  for (const b of document.querySelectorAll('.nav')) b.setAttribute('aria-current', String(b.dataset.view === view));
+  $('app').dataset.context = view === 'inbox' ? 'on' : 'off';
+  closeInspector();
+  if (view === 'kb') loadDocs();
+  if (view === 'lab') $('labInput')?.focus();
+  if (view === 'nodes') loadNodes();
+  if (view === 'stats') loadStats();
+  if (view === 'settings') loadSettings();
+}
+for (const b of document.querySelectorAll('.nav')) b.onclick = () => show(b.dataset.view);
+
+function closeInspector() {
+  $('app').dataset.inspector = 'closed';
+  $('contextToggle').setAttribute('aria-expanded', 'false');
+}
+$('contextToggle').onclick = () => {
+  const open = $('app').dataset.inspector !== 'open';
+  $('app').dataset.inspector = open ? 'open' : 'closed';
+  $('contextToggle').setAttribute('aria-expanded', String(open));
+};
+$('contextClose').onclick = closeInspector;
+$('app').addEventListener('click', (e) => { if (e.target === $('app')) closeInspector(); });
+$('lockBtn').onclick = () => {
+  localStorage.removeItem('panelToken');
+  location.reload();
+};
+
+function toast(text) {
+  const el = $('toast'); el.textContent = text; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2600);
+}
+let sheetReturn = null;
+function sheet(title, body, foot) {
+  sheetReturn = document.activeElement;
+  $('sheet').innerHTML = `<header><b>${esc(title)}</b><button class="btn quiet" style="margin-left:auto" id="sheetX">Закрыть</button></header>
+    <div class="body">${body}</div><div class="foot">${foot ?? ''}</div>`;
+  $('backdrop').hidden = false;
+  $('sheetX').onclick = closeSheet;
+  requestAnimationFrame(() => $('sheetX').focus());
+}
+const closeSheet = () => {
+  if ($('backdrop').hidden) return;
+  $('backdrop').hidden = true;
+  sheetReturn?.focus?.();
+  sheetReturn = null;
+};
+$('backdrop').onclick = (e) => { if (e.target === $('backdrop')) closeSheet(); };
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { closeSheet(); closeInspector(); clearQuote(); }
+  if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName ?? '')) {
+    e.preventDefault();
+    show('inbox');
+    $('listSearch').focus();
+  }
+});
+
+/* ═══ свёрнутые разделы ═══
+   Что открыто — запоминаем: у каждого оператора свой порядок работы. */
+for (const fold of document.querySelectorAll('.fold')) {
+  const key = `fold:${fold.dataset.fold}`;
+  const saved = localStorage.getItem(key);
+  if (saved !== null) fold.open = saved === '1';
+  fold.addEventListener('toggle', () => {
+    localStorage.setItem(key, fold.open ? '1' : '0');
+    // Подписку тянем в тот момент, когда её решили посмотреть.
+    if (fold.dataset.fold === 'sub' && fold.open) void renderSubscription();
+  });
+}
+
+/* ═══ инбокс ═══ */
+const fmtLeft = (ms) => { const h = Math.floor(ms/36e5), m = Math.floor(ms%36e5/6e4); return h ? `${h} ч ${m} мин` : `${m} мин`; };
+const fmtTime = (ts) => new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+const fmtDate = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? fmtTime(t) : String(v); };
+const nameOf = (c) => c.display_name || (c.username ? '@'+c.username : (c.subject || `#${c.external_id}`));
+const gb = (b) => b == null ? '—' : `${(b / 1073741824).toFixed(1)} ГБ`;
+const initials = (value) => value.replace(/^@/, '').trim().split(/\s+/).slice(0, 2)
+  .map((part) => Array.from(part)[0] ?? '').join('').toUpperCase() || '•';
+const visible = () => {
+  const scoped = filter === 'waiting' ? conversations.filter(c => c.unread > 0 || !c.first_response_at)
+    : filter === 'hot' ? conversations.filter(c => c.escalated || c.suspicious || c.handoff_at || c.priority === 'high') : conversations;
+  if (!listQuery) return scoped;
+  const query = listQuery.toLocaleLowerCase('ru');
+  return scoped.filter((c) => [nameOf(c), c.subject, c.username, c.external_id]
+    .some((value) => String(value ?? '').toLocaleLowerCase('ru').includes(query)));
+};
+
+/** Переключение выделения не требует пересборки списка. */
+function markSelected(id) {
+  for (const row of $('list').children) {
+    if (row.dataset) row.setAttribute('aria-selected', String(Number(row.dataset.id) === id));
+  }
+}
+
+let listSignature = '';
+function renderList(force = false) {
+  const items = visible();
+  // Полная перерисовка списка на каждое событие ощутимо тормозит: при
+  // потоке сообщений кадр уходит на пересборку одинаковых строк. Выделение
+  // в подпись не входит — оно меняется атрибутом.
+  const signature = `${filter}:${listQuery}|` + items.map((c) =>
+    `${c.id}:${c.unread}:${c.last_message_at}:${c.status}:${c.priority}:${nameOf(c)}:${c.subject}:${c.escalated}${c.suspicious}${c.handoff_at ? 1 : 0}${c.ai_mode}:${c.window?.open}`).join(',');
+  if (!force && signature === listSignature) return;
+  listSignature = signature;
+
+  const box = $('list');
+  const frag = document.createDocumentFragment();
+  const waiting = conversations.filter(c => c.unread > 0).length;
+  $('cntInbox').textContent = waiting || conversations.length;
+  renderBoard();
+  if (!items.length) { box.replaceChildren(Object.assign(document.createElement('p'), { className:'empty', textContent:listQuery ? 'Ничего не найдено.' : 'Здесь пока пусто.' })); return; }
+  for (const c of items) {
+    const row = document.createElement('div');
+    row.className = 'row'; row.tabIndex = 0; row.dataset.id = String(c.id);
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', String(current?.id === c.id));
+    row.setAttribute('aria-label', `${nameOf(c)}, ${c.unread ? `${c.unread} непрочитанных` : 'прочитано'}`);
+    const closed = c.window.applies && !c.window.open;
+    row.innerHTML = `
+      <div class="row-avatar">${esc(initials(nameOf(c)))}${c.unread ? '<span class="dot"></span>' : ''}</div>
+      <div class="row-main">
+        <div class="who"><b>${esc(nameOf(c))}</b><small>${c.last_message_at ? fmtTime(c.last_message_at) : ''}</small></div>
+        <div class="snippet">${closed ? 'Окно ответа закрыто' : esc(c.subject || c.status)}</div>
+        <div class="chips"><span class="chip channel">${c.channel === 'tg_dm' ? 'Telegram' : 'Тикет'}</span>
+          ${closed ? '<span class="chip hot">24 ч закрыто</span>' : ''}
+          ${c.suspicious ? '<span class="chip hot">нет в базах</span>' : ''}
+          ${c.escalated ? '<span class="chip hot">важно</span>' : ''}
+          ${c.handoff_at ? '<span class="chip hot">у человека</span>' : ''}
+          ${c.ai_mode === 'auto' ? '<span class="chip ai">AI авто</span>' : ''}</div>
+      </div>`;
+    row.onclick = () => open(c.id);
+    row.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(c.id); }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const sibling = e.key === 'ArrowDown' ? row.nextElementSibling : row.previousElementSibling;
+        sibling?.focus();
+      }
+    };
+    frag.append(row);
+  }
+  box.replaceChildren(frag);
+}
+
+/** Живая сводка внизу навигации: клик ведёт к соответствующему фильтру. */
+function renderBoard() {
+  const board = $('pulseBoard');
+  if (!board) return;
+  const unread = conversations.filter(c => c.unread > 0).length;
+  const noAnswer = conversations.filter(c => !c.first_response_at && c.last_inbound_at).length;
+  const waitHuman = conversations.filter(c => c.handoff_at).length;
+  const unknown = conversations.filter(c => c.suspicious).length;
+
+  const rows = [
+    ['Непрочитанных', unread, unread ? 'hot' : '', 'waiting'],
+    ['Без ответа', noAnswer, noAnswer ? 'warn' : '', 'waiting'],
+    ['Ждут человека', waitHuman, waitHuman ? 'warn' : '', 'hot'],
+    ['Нет в базах', unknown, unknown ? 'hot' : '', 'hot'],
+  ];
+  board.innerHTML = rows.map(([label, value, tone, target]) =>
+    `<button data-filter="${target}"><span class="mark ${tone}"></span>${esc(label)}<b>${value}</b></button>`).join('');
+  board.onclick = (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    show('inbox');
+    filter = b.dataset.filter;
+    for (const o of $('filters').children) o.setAttribute('aria-pressed', String(o.dataset.filter === filter));
+    renderList(true);
+  };
+}
+
+function renderWindow() {
+  const box = $('composer');
+  if (!current) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!current.window.applies) {
+    box.dataset.window = 'open'; $('ring').style.setProperty('--p', 100);
+    $('wleft').textContent = 'без ограничения';
+    $('input').disabled = $('send').disabled = false;
+    $('send').innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/></svg>';
+    $('send').setAttribute('aria-label', 'Отправить сообщение'); return;
+  }
+  const left = Math.max(0, (current.last_inbound_at ?? 0) + WINDOW_MS - Date.now());
+  const state = left === 0 ? 'closed' : left < SOON_MS ? 'soon' : 'open';
+  box.dataset.window = state;
+  $('ring').style.setProperty('--p', Math.round(left / WINDOW_MS * 100));
+  $('wleft').textContent = state === 'closed' ? 'окно ответа закрыто' : `осталось ${fmtLeft(left)}`;
+  $('input').disabled = $('send').disabled = state === 'closed';
+  $('send').innerHTML = state === 'closed'
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/></svg>';
+  $('send').setAttribute('aria-label', state === 'closed' ? 'Окно ответа закрыто' : 'Отправить сообщение');
+  $('input').placeholder = state === 'closed'
+    ? 'Клиент не писал больше суток — Telegram не пропустит ответ'
+    : 'Ответ уйдёт от имени аккаунта поддержки';
+}
+
+/** Цитата: на что отвечает это сообщение. Без неё «Да» повисает в воздухе. */
+function quoteBlock(m) {
+  if (!m.reply_excerpt && !m.reply_to_external_id) return null;
+  const el = document.createElement('div');
+  el.className = 'reply-to';
+  el.innerHTML = `<span>${esc(m.reply_excerpt ?? 'сообщение выше')}</span>`;
+  if (m.reply_to_external_id) el.onclick = () => jumpTo(m.reply_to_external_id);
+  return el;
+}
+
+function bubble(m, attachments = {}) {
+  const wrap = document.createElement('div');
+  wrap.className = `msg ${m.direction === 'in' ? 'in' : m.direction === 'note' ? 'note' : 'out'}`;
+  if (m.external_msg_id) wrap.dataset.mid = m.external_msg_id;
+
+  const quote = quoteBlock(m);
+  if (quote) wrap.append(quote);
+
+  const el = document.createElement('div');
+  el.className = 'bubble';
+  if (m.text) el.append(document.createTextNode(m.text));
+
+  const files = attachments[m.id] ?? [];
+  for (const a of files) {
+    if (a.media_type === 'photo') {
+      // Пропорции знаем заранее — под картинку сразу отводится ровно
+      // столько места, сколько она займёт. Ничего не сдвинется при загрузке.
+      const box = document.createElement('div');
+      box.className = 'shot';
+      const ratio = a.width && a.height ? a.width / a.height : 4 / 3;
+      const width = Math.min(240, Math.round(280 * ratio));
+      box.style.width = `${width}px`;
+      box.style.aspectRatio = String(ratio);
+
+      const img = document.createElement('img');
+      img.src = `/api/attachments/${a.id}?token=${encodeURIComponent(ticket)}`;
+      img.alt = 'вложение'; img.loading = 'lazy'; img.decoding = 'async';
+      img.onload = () => img.classList.add('ready');
+      img.onerror = () => box.replaceWith(Object.assign(document.createElement('div'),
+        { className:'mono', textContent:'[файл ещё качается]' }));
+      box.onclick = () => openImage(img.src);
+      box.append(img);
+      el.append(box);
+    } else {
+      const link = document.createElement('a');
+      link.className = 'mono'; link.target = '_blank';
+      link.href = `/api/attachments/${a.id}?token=${encodeURIComponent(ticket)}`;
+      link.textContent = `[${a.media_type ?? 'файл'}]`;
+      el.append(document.createElement('br'), link);
+    }
+  }
+  // Запасная отрисовка: вложение могло ещё не скачаться или прийти без
+  // текста. Пустой пузырь выглядит как потерянное сообщение.
+  if (!m.text && !files.length) {
+    el.append(Object.assign(document.createElement('div'), {
+      className: 'mono',
+      textContent: m.media_type ? `[${m.media_type} — загружается]` : '[сообщение без текста]',
+    }));
+  }
+  wrap.append(el);
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+  meta.append(document.createTextNode(`${m.author} · ${fmtTime(m.created_at)}`));
+
+  // Ответить можно только на сообщение клиента из лички: тикеты бедолаги
+  // цитирование не поддерживают.
+  if (m.direction === 'in' && m.external_msg_id && current?.channel === 'tg_dm') {
+    const act = document.createElement('button');
+    act.className = 'act';
+    act.textContent = '↩ ответить';
+    act.onclick = () => setQuote(m);
+    meta.append(act);
+  }
+  wrap.append(meta);
+  return wrap;
+}
+
+/** Полный размер вложения: в переписке показываем только превью. */
+function openImage(src) {
+  const box = document.createElement('div');
+  box.className = 'lightbox';
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  box.setAttribute('aria-label', 'Просмотр вложения');
+  const full = document.createElement('img');
+  full.src = src;
+  box.append(full);
+  box.onclick = () => box.remove();
+  const onKey = (e) => { if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', onKey); } };
+  document.addEventListener('keydown', onKey);
+  document.body.append(box);
+}
+
+/** Переход к процитированному сообщению, если оно есть в открытом треде. */
+function jumpTo(externalId) {
+  const target = document.querySelector(`.msg[data-mid="${CSS.escape(String(externalId))}"]`);
+  if (!target) return toast('Исходное сообщение выше по переписке');
+  target.scrollIntoView({ behavior:'smooth', block:'center' });
+  target.classList.remove('flash');
+  void target.offsetWidth;
+  target.classList.add('flash');
+}
+
+function setQuote(m) {
+  quoting = { id: m.external_msg_id, excerpt: (m.text ?? `[${m.media_type ?? 'вложение'}]`).slice(0, 160) };
+  renderQuoting();
+  $('input').focus();
+}
+function clearQuote() { quoting = null; renderQuoting(); }
+function renderQuoting() {
+  const box = $('quotingBox');
+  if (!box) return;
+  if (!quoting) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="quoting"><span>В ответ: ${esc(quoting.excerpt)}</span>
+    <button class="btn quiet" id="dropQuote" style="margin-left:auto">Отменить</button></div>`;
+  $('dropQuote').onclick = clearQuote;
+}
+
+function renderSuggestion() {
+  const box = $('suggestBox');
+  if (!suggestion) { box.innerHTML = ''; return; }
+  const pct = suggestion.confidence == null ? 0 : Math.round(suggestion.confidence * 100);
+  let sources = []; try { sources = suggestion.sources ? JSON.parse(suggestion.sources) : []; } catch {}
+  box.innerHTML = `<div class="suggest">
+    <div class="head"><b><span class="ai-spark">✦</span> AI-помощник</b><span>уверенность ${pct}%${suggestion.needs_human ? ' · нужен человек' : ''}</span></div>
+    <div class="text">${esc(suggestion.text)}</div>
+    ${suggestion.reason ? `<div class="src">Модель: ${esc(suggestion.reason)}</div>` : ''}
+    ${sources.length ? `<div class="src">Источники: ${esc(sources.join(' · '))}</div>` : ''}
+    <div class="acts"><button class="btn primary" id="sgSend">Отправить</button>
+      <button class="btn" id="sgEdit">Править</button><button class="btn danger" id="sgNo">Отклонить</button></div>
+    <div class="gauge"><i style="width:${pct}%"></i></div></div>`;
+  $('sgSend').onclick = () => sendText(suggestion.text, { suggestionId: suggestion.id, edited: false });
+  $('sgEdit').onclick = () => { $('input').value = suggestion.text; $('input').focus(); };
+  $('sgNo').onclick = async () => {
+    await mutate(`/api/suggestions/${suggestion.id}/decide`,
+      { method:'POST', body: JSON.stringify({ status:'rejected' }) }, 'Предложка отклонена');
+    suggestion = null; renderSuggestion();
+  };
+}
+
+function renderCustomer(profile) {
+  const card = $('customerCard');
+  if (!current) { card.innerHTML = '<div class="item"><span class="hint">Выберите диалог.</span></div>'; return; }
+  const rows = [
+    ['Telegram ID', profile?.identity?.telegramId ?? current.tg_user_id ?? '—'],
+    ['Ник', (profile?.identity?.username ?? current.username) ? '@' + (profile?.identity?.username ?? current.username).replace(/^@/,'') : '—'],
+    ['Канал', current.channel === 'tg_dm' ? 'личка' : 'тикет'],
+  ];
+  const sub = profile?.subscription;
+  if (sub?.status) rows.push(['Подписка', sub.status]);
+  if (sub?.expiresAt) rows.push(['Действует до', fmtDate(sub.expiresAt)]);
+  if (sub?.trafficUsed !== undefined) rows.push(['Трафик', `${gb(sub.trafficUsed)}${sub.trafficLimit ? ` из ${gb(sub.trafficLimit)}` : ''}`]);
+  if (sub?.devices !== undefined) rows.push(['Устройств', `${sub.devices}${sub.deviceLimit ? ` из ${sub.deviceLimit}` : ''}`]);
+  const act = profile?.activity;
+  if (act?.dailyAverageBytes) rows.push(['В среднем в день', gb(act.dailyAverageBytes)]);
+  if (act?.firstSeen) rows.push(['Клиент с', fmtDate(act.firstSeen)]);
+  if (act?.lastNode) rows.push(['Последний сервер', act.lastNode]);
+  if (profile?.balance?.amount !== undefined) rows.push(['Баланс', `${profile.balance.amount} ${profile.balance.currency ?? ''}`]);
+
+  card.innerHTML =
+    rows.map(([k,v]) => `<div class="item"><span class="lbl">${esc(k)}</span><span class="val mono">${esc(v)}</span></div>`).join('')
+    + (act?.topNodes?.length
+        ? `<div class="item col-item"><span class="lbl">Чаще всего использует</span>`
+          + act.topNodes.map((n) => `<div class="device"><span class="grow">${esc(n.name)}</span><span class="mono">${gb(n.bytes)}</span></div>`).join('')
+          + `</div>` : '')
+    + (current.sub_link
+        ? `<div class="item col-item"><span class="lbl">Клиент прислал ключ</span>
+             <span class="mono" style="overflow-wrap:anywhere">${esc(current.sub_link.slice(0, 120))}</span></div>`
+        : '')
+    + `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>`
+    + (profile?.found
+        ? `<div class="item"><span class="hint">Источники: ${esc((profile.sources ?? []).join(', ') || '—')}</span></div>`
+        : `<div class="item"><span class="hint">Клиент не найден ни в бедолаге, ни в Remnawave.</span></div>`)
+    + ((profile?.trace ?? []).length
+        ? `<div class="item col-item"><span class="hint">${(profile.trace).map((t) => esc(t)).join('<br>')}</span></div>` : '');
+
+  $('refreshCust').onclick = async () => {
+    $('refreshCust').disabled = true;
+    const data = await mutate(`/api/conversations/${current.id}/customer/refresh`, { method:'POST' }, 'Карточка обновлена');
+    $('refreshCust').disabled = false;
+    if (data) renderCustomer(data.customer);
+  };
+}
+
+/** Перезапускает анимацию появления модуля: снимаем класс, форсируем reflow,
+ *  возвращаем. Без reflow повторное добавление того же класса анимацию не
+ *  перезапускает. */
+function reveal(el) {
+  el.classList.remove('reveal');
+  void el.offsetWidth;
+  el.classList.add('reveal');
+}
+
+async function renderSubscription() {
+  const wrap = $('subWrap');
+  if (!current || !settings?.remnawave) { wrap.hidden = true; $('devicesWrap').hidden = true; return; }
+  wrap.hidden = false;
+  // Диалог, для которого грузим подписку. Запрос в Remnawave небыстрый, и при
+  // быстром переключении ответ мог прийти, когда открыт уже другой диалог —
+  // тогда он затирал актуальную панель. После каждого await сверяемся: если
+  // диалог сменился, тихо выходим и правую колонку не трогаем.
+  const cid = current.id;
+  // Свёрнутый раздел не грузим: это запрос в Remnawave на каждый диалог.
+  if (!wrap.open) {
+    $('subBody').innerHTML = '<div class="item"><span class="hint">Разверните, чтобы загрузить.</span></div>';
+    $('devicesWrap').hidden = true;
+    return;
+  }
+  $('subBody').innerHTML = '<div class="item"><span class="hint">Загружаю…</span></div>';
+  const res = await api(`/api/conversations/${cid}/subscription`);
+  if (current?.id !== cid) return;
+  if (!res.ok) {
+    $('devicesWrap').hidden = true;
+    $('subBody').innerHTML = `<div class="item col-item"><span class="hint">${esc((await res.json()).error)}</span>
+      <button class="btn" id="explainBtn">Почему не нашёлся</button></div>`;
+    reveal($('subBody'));
+    $('explainBtn').onclick = async () => {
+      $('explainBtn').disabled = true;
+      const data = await json(`/api/conversations/${current.id}/subscription/explain`);
+      if (!data) return toast('Разбор не удался');
+      sheet('Связка с Remnawave',
+        `<div class="log">${esc(data.steps.join('\n'))}</div>
+         <div class="hint">Записей в индексе: ${data.indexSize}</div>
+         ${data.near?.length ? `<div class="cap">Похожие записи</div><div class="log">${esc(data.near.join('\n'))}</div>` : ''}`,
+        `<button class="btn" id="closeX">Понятно</button>`);
+      $('closeX').onclick = closeSheet;
+    };
+    return;
+  }
+  const { profile, devices } = await res.json();
+  if (current?.id !== cid) return;
+  $('foldSub').textContent = profile?.status ?? '—';
+  const rows = profile ? [['Статус', profile.status ?? '—'],
+    ['Действует до', profile.expiresAt ? fmtDate(profile.expiresAt) : '—'],
+    ['Трафик', `${gb(profile.trafficUsed)} из ${profile.trafficLimit ? gb(profile.trafficLimit) : '∞'}`],
+    ['Лимит устройств', profile.deviceLimit ?? '—'], ['Short ID', profile.shortId ?? '—']] : [];
+  $('subBody').innerHTML =
+    (rows.length ? rows.map(([k,v]) => `<div class="item"><span class="lbl">${esc(k)}</span><span class="val mono">${esc(v)}</span></div>`).join('')
+      : '<div class="item"><span class="hint">Профиль не найден.</span></div>')
+    + (profile?.subscriptionUrl ? `<div class="item"><button class="btn wide" id="copySub">Скопировать ссылку</button></div>` : '')
+    + `<div class="item"><button class="btn wide" id="resetDev">Сбросить все устройства</button></div>
+       <div class="item"><button class="btn wide danger" id="revoke">Перевыпустить подписку</button></div>`;
+  reveal($('subBody'));
+
+  // Устройств бывает полтора десятка — им отдельная прокручиваемая группа,
+  // иначе они выдавливают всё остальное из колонки.
+  $('devicesWrap').hidden = !devices?.length;
+  if (devices?.length) {
+    $('devicesCap').textContent = `${devices.length}`;
+    $('devicesBody').innerHTML = devices.map((d) => `<div class="device">
+      <span class="grow">${esc(d.platform ?? '?')} · ${esc(d.model ?? d.hwid.slice(0,10))}</span>
+      <button class="btn danger" data-hwid="${esc(d.hwid)}">Удалить</button></div>`).join('');
+    reveal($('devicesBody'));
+  }
+
+  if (profile?.subscriptionUrl) $('copySub').onclick = () => { navigator.clipboard.writeText(profile.subscriptionUrl); toast('Ссылка скопирована'); };
+  for (const b of document.querySelectorAll('#devicesBody [data-hwid]')) {
+    b.onclick = () => confirmAction('Удалить устройство?', 'Клиент потеряет доступ с него до повторного подключения.',
+      () => subAction('delete-device', b.dataset.hwid));
+  }
+  $('resetDev').onclick = () => confirmAction('Сбросить все устройства?',
+    'Все привязки снимутся. Клиенту придётся подключить приложения заново.', () => subAction('reset-devices'));
+  $('revoke').onclick = () => confirmAction('Перевыпустить подписку?',
+    'Старая ссылка перестанет работать сразу. Клиенту нужно будет добавить новую.', () => subAction('revoke'));
+}
+
+function confirmAction(title, text, run) {
+  sheet(title, `<p style="font-size:13px">${esc(text)}</p>`,
+    `<button class="btn" id="no">Отмена</button><button class="btn primary danger" id="yes">Подтвердить</button>`);
+  $('no').onclick = closeSheet;
+  $('yes').onclick = async () => { closeSheet(); await run(); };
+}
+async function subAction(action, hwid) {
+  const done = await mutate(`/api/conversations/${current.id}/subscription/action`,
+    { method:'POST', body: JSON.stringify({ action, hwid }) }, 'Готово');
+  if (done) { renderSubscription(); open(current.id); }
+}
+
+/**
+ * Режим диалога сильнее глобального — кроме «Выключен везде».
+ * Пишем это прямо в карточке: иначе непонятно, почему auto не сработал.
+ */
+function renderAiNote() {
+  const note = $('aiModeNote');
+  if (!note || !current) return;
+  const global = settings?.runtime?.aiMode;
+  const own = current.ai_mode;
+  note.textContent =
+    current.handoff_at ? 'Диалог у человека — AI по существу не отвечает'
+    : global === 'off' ? 'AI выключен в настройках — режим диалога не действует'
+    : own === 'inherit' ? `Сейчас действует режим из настроек: ${global === 'auto' ? 'отвечает сам' : 'предлагает'}`
+    : own === 'auto' ? 'Ответы уходят клиенту без подтверждения'
+    : own === 'off' ? 'В этом диалоге AI молчит'
+    : 'AI пишет предложку, отправляете вы';
+}
+
+/**
+ * Открытие диалога.
+ *
+ * Раньше здесь ждали четыре запроса подряд, и один из них на сервере ходил
+ * в бедолагу и Remnawave — переключение занимало под секунду. Теперь шапка
+ * и состояние рисуются мгновенно из уже загруженного списка, переписка
+ * приходит одним запросом, а карточка и подписка догружаются фоном.
+ */
+let openToken = 0;
+
+function paintHeader(c) {
+  $('title').textContent = nameOf(c);
+  $('titleAvatar').textContent = initials(nameOf(c));
+  $('subtitle').textContent = `${c.channel === 'tg_dm' ? 'Telegram' : 'Тикет'} · ${c.external_id}`;
+  $('statusSel').value = c.status;
+  $('aiSel').value = c.ai_mode;
+  $('escBtn').textContent = c.escalated ? 'Снять важность' : 'Пометить важным';
+  $('handoffBtn').textContent = c.handoff_at ? 'Вернуть диалог AI' : 'Передать человеку';
+  $('foldDialog').textContent = c.handoff_at ? 'у человека' : c.status;
+  $('foldClient').textContent = c.suspicious ? 'нет в базах' : '';
+  $('err').textContent = '';
+}
+
+function skeleton(rows = 5) {
+  const inner = document.createElement('div');
+  inner.className = 'thread-inner';
+  for (let i = 0; i < rows; i += 1) {
+    const line = document.createElement('div');
+    line.className = `msg ${i % 3 === 2 ? 'out' : 'in'}`;
+    line.innerHTML = `<div class="bubble skel" style="width:${120 + (i * 47) % 220}px; height:${i % 4 === 1 ? 42 : 26}px"></div>`;
+    inner.append(line);
+  }
+  return inner;
+}
+
+async function open(id) {
+  const ticket = ++openToken;
+  $('inboxSplit').dataset.pane = 'thread';
+  history.replaceState(null, '', `#c${id}`);
+
+  // Мгновенная отрисовка: данные диалога уже есть в списке, ждать сервер
+  // ради шапки незачем.
+  const known = conversations.find((c) => c.id === id);
+  if (known) {
+    current = known;
+    quoting = null;
+    paintHeader(known);
+    renderWindow(); renderAiNote(); renderQuoting();
+    markSelected(id);
+  }
+  $('suggestBox').innerHTML = '';
+  // Скелет показываем не сразу, а только если сервер задумался. На быстром
+  // ответе (локальная сеть — обычный случай) мгновенный скелет успевал лишь
+  // мигнуть. А из-за guard'а ниже при быстром переборе диалогов реально
+  // дорисовывается только последний, но скелет мелькал на КАЖДОМ клике —
+  // это и читалось как дёрганье. Порог гасит вспышку: прежняя переписка
+  // держится, пока не придут данные, и сразу сменяется плавным появлением.
+  const skelTimer = setTimeout(() => {
+    if (ticket === openToken) $('thread').replaceChildren(skeleton());
+  }, 140);
+
+  const data = await json(`/api/conversations/${id}`);
+  clearTimeout(skelTimer);
+  if (!data || ticket !== openToken) return;   // пока грузили, открыли другой
+
+  current = data.conversation;
+  suggestion = data.suggestion;
+  paintHeader(current);
+
+  const inner = document.createElement('div');
+  inner.className = 'thread-inner';
+  if (!data.messages.length) inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
+  // Пузыри по отдельности не анимируем: при открытии это читается как
+  // рябь. Появляется вся переписка целиком, одним движением.
+  for (const m of data.messages) inner.append(bubble(m, data.attachments));
+  inner.classList.add('enter');
+  $('thread').replaceChildren(inner);
+  // Прокрутку ставим тем же кадром, до отрисовки: перенос в rAF давал
+  // видимый прыжок от верха к низу.
+  $('thread').scrollTop = $('thread').scrollHeight;
+
+  renderWindow(); renderSuggestion(); renderAiNote();
+  renderCustomer(data.customer);
+
+  // Всё, что ходит в сеть, — после отрисовки и без ожидания.
+  void api(`/api/conversations/${id}/read`, { method: 'POST' }).then(refreshSoon);
+  if (data.customerStale) {
+    void json(`/api/conversations/${id}/customer`).then((res) => {
+      if (res && ticket === openToken) renderCustomer(res.customer);
+    });
+  }
+  void renderSubscription();
+}
+
+let refreshTimer = null;
+const refreshSoon = () => { if (!refreshTimer) refreshTimer = setTimeout(() => { refreshTimer = null; refresh(); }, 400); };
+async function refresh() {
+  const data = await json('/api/conversations');
+  if (!data) return;
+  conversations = data.conversations;
+  if (current) current = conversations.find(c => c.id === current.id) ?? current;
+  renderList();
+}
+
+async function sendText(text, extra = {}) {
+  if (!text.trim() || !current) return;
+  $('send').disabled = true;
+  const payload = { text, ...extra };
+  if (quoting) { payload.replyTo = quoting.id; payload.replyExcerpt = quoting.excerpt; }
+  let res;
+  try {
+    res = await api(`/api/conversations/${current.id}/reply`, { method:'POST', body: JSON.stringify(payload) });
+  } catch (err) {
+    $('err').textContent = `Нет связи с сервером: ${err.message}`;
+    renderWindow(); return;
+  }
+  if (res.ok) {
+    $('input').value = ''; $('input').style.height = 'auto'; $('err').textContent = '';
+    suggestion = null; renderSuggestion(); clearQuote();
+    void open(current.id);
+  }
+  else $('err').textContent = (await res.json().catch(() => ({}))).error ?? `Отправить не удалось (${res.status})`;
+  renderWindow();
+}
+
+$('send').onclick = () => {
+  const text = $('input').value;
+  const edited = suggestion && text.trim() && text.trim() !== suggestion.text.trim();
+  sendText(text, edited ? { suggestionId: suggestion.id, edited: true } : {});
+};
+$('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('send').click(); });
+$('input').addEventListener('input', (e) => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 148) + 'px'; });
+$('noteBtn').onclick = async () => {
+  const text = $('input').value.trim(); if (!text || !current) return;
+  if (await mutate(`/api/conversations/${current.id}/note`,
+    { method:'POST', body: JSON.stringify({ text }) }, 'Заметка добавлена')) {
+    $('input').value = ''; open(current.id);
+  }
+};
+
+async function setState(patch) {
+  if (!current) return;
+  const data = await mutate(`/api/conversations/${current.id}/state`, { method:'POST', body: JSON.stringify(patch) });
+  if (!data) return;
+  current = data.conversation;
+  paintHeader(current);
+  renderAiNote(); refresh();
+}
+$('statusSel').onchange = (e) => setState({ status: e.target.value });
+$('aiSel').onchange = (e) => setState({ aiMode: e.target.value });
+$('escBtn').onclick = () => setState({ escalated: !current?.escalated });
+$('handoffBtn').onclick = () => setState({ handoff: !current?.handoff_at });
+$('filters').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  filter = b.dataset.filter;
+  for (const o of $('filters').children) o.setAttribute('aria-pressed', String(o === b));
+  renderList();
+};
+$('listSearch').oninput = (e) => {
+  listQuery = e.target.value.trim();
+  renderList(true);
+};
+$('backToList').onclick = () => {
+  $('inboxSplit').dataset.pane = 'list';
+  history.replaceState(null, '', location.pathname + location.search);
+  $('list').querySelector(`[data-id="${current?.id ?? ''}"]`)?.focus();
+};
+$('templates').onchange = (e) => {
+  const found = templates.find(t => String(t.id) === e.target.value);
+  if (found) { $('input').value = found.body; $('input').focus(); }
+  e.target.value = '';
+};
+
+/* ═══ база знаний ═══ */
+$('kbTabs').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  kbTab = b.dataset.tab;
+  for (const o of $('kbTabs').children) o.setAttribute('aria-pressed', String(o === b));
+  renderDocs();
+};
+async function loadDocs() { const data = await json('/api/kb'); if (data) { docs = data; renderDocs(); } }
+function renderDocs() {
+  const list = kbTab === 'kb' ? docs.kb : docs.drafts;
+  $('cntKb').textContent = docs.kb.length;
+  $('kbHint').textContent = kbTab === 'draft'
+    ? 'Черновики в ответы не идут, пока не опубликуешь'
+    : 'Правки подхватываются в течение 15 минут';
+  const box = $('docs');
+  if (!list.length) {
+    box.innerHTML = `<p class="empty">${kbTab === 'kb' ? 'Статей пока нет.' : 'Черновиков нет. Соберите их из переписки.'}</p>`;
+    return;
+  }
+  box.innerHTML = list.map((d) => `<div class="doc">
+    <b>${esc(d.title)}</b><span class="hint mono">${esc(d.name)} · ${d.size} симв.</span>
+    <div class="acts"><button class="btn" data-edit="${esc(d.name)}">Открыть</button>
+      ${kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
+      <button class="btn danger" data-del="${esc(d.name)}">Удалить</button></div></div>`).join('');
+  for (const b of box.querySelectorAll('[data-edit]')) b.onclick = () => editDoc(b.dataset.edit);
+  for (const b of box.querySelectorAll('[data-pub]')) b.onclick = async () => {
+    b.disabled = true;
+    const done = await mutate(`/api/kb/publish/${encodeURIComponent(b.dataset.pub)}`, { method:'POST' }, 'Опубликовано');
+    b.disabled = false;
+    if (done) loadDocs();
+  };
+  for (const b of box.querySelectorAll('[data-del]')) b.onclick = () => confirmAction('Удалить статью?', b.dataset.del, async () => {
+    if (await mutate(`/api/kb/${kbTab}/${encodeURIComponent(b.dataset.del)}`, { method:'DELETE' }, 'Удалено')) loadDocs();
+  });
+}
+async function editDoc(name) {
+  const data = await json(`/api/kb/${kbTab}/${encodeURIComponent(name)}`);
+  if (!data) return;
+  sheet(name, `<textarea id="docText">${esc(data.text)}</textarea>`,
+    `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="save">Сохранить</button>`);
+  $('cancel').onclick = closeSheet;
+  $('save').onclick = async () => {
+    const saved = await mutate(`/api/kb/${kbTab}/${encodeURIComponent(name)}`,
+      { method:'PUT', body: JSON.stringify({ text: $('docText').value }) }, 'Сохранено');
+    if (saved) { closeSheet(); loadDocs(); }
+  };
+}
+$('newDoc').onclick = () => {
+  sheet('Новая статья',
+    `<div class="frow"><label>Заголовок</label><input type="text" id="nTitle" placeholder="Не работает на роутере"></div>
+     <div class="frow"><label>Текст</label><textarea id="nText" placeholder="Что отвечать оператору в этом случае"></textarea></div>`,
+    `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="create">Создать</button>`);
+  $('cancel').onclick = closeSheet;
+  $('create').onclick = async () => {
+    const created = await mutate('/api/kb',
+      { method:'POST', body: JSON.stringify({ title: $('nTitle').value, text: $('nText').value }) }, 'Статья создана');
+    if (created) { closeSheet(); loadDocs(); }
+  };
+};
+
+function mineStarted() {
+  $('mineLog').innerHTML = '<div class="cap" style="margin-top:var(--sp-6)">Сбор идёт</div><div class="log" id="logBox">Запускаю…</div>';
+}
+$('mineBtn').onclick = () => {
+  sheet('Собрать базу знаний из переписки',
+    `<p class="hint">Модель прочитает реальные обращения и напишет статьи. Они лягут в черновики — клиентам ничего не уйдёт, пока их не опубликуешь.</p>
+     <div class="frow"><label>Источник</label><select id="mSource">
+       <option value="archive">Закрытые тикеты бедолаги</option>
+       <option value="panel">Диалоги, где предложку отклонили</option>
+       <option value="export">Выгрузка Telegram Desktop</option></select></div>
+     <div class="frow" id="mLimitRow"><label>Сколько взять</label><input type="number" id="mLimit" value="200" min="10" max="1000"></div>
+     <div class="frow" id="mFileRow" hidden>
+       <label>Файл result.json</label>
+       <input type="file" id="mFile" accept=".json,application/json" style="height:auto;padding:var(--sp-2) var(--sp-3)">
+       <span class="hint">Telegram Desktop → Настройки → Экспорт данных → формат JSON.</span>
+     </div>
+     <div class="frow" id="mMeRow" hidden><label>Чьи сообщения — ваши</label><select id="mMe"></select></div>`,
+    `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="run">Запустить</button>`);
+  $('cancel').onclick = closeSheet;
+  $('mSource').onchange = () => {
+    const isExport = $('mSource').value === 'export';
+    $('mLimitRow').hidden = isExport;
+    $('mFileRow').hidden = !isExport;
+    $('mMeRow').hidden = true;
+  };
+  $('run').onclick = async () => {
+    if ($('mSource').value === 'export') return runExport();
+    const body = { source: $('mSource').value, limit: Number($('mLimit').value) };
+    const started = await mutate('/api/kb/mine', { method:'POST', body: JSON.stringify(body) });
+    if (started) { closeSheet(); mineStarted(); }
+  };
+};
+
+/**
+ * Выгрузка идёт сырым телом: экспорт бывает в десятки мегабайт, и оборачивать
+ * его в JSON-конверт незачем. Первый заход возвращает список участников —
+ * какие сообщения наши, из файла не видно.
+ */
+async function runExport() {
+  const file = $('mFile').files?.[0];
+  if (!file) return toast('Выберите файл');
+  const me = $('mMeRow').hidden ? '' : $('mMe').value;
+  $('run').disabled = true;
+  const res = await fetch(`/api/kb/mine/export${me ? `?me=${encodeURIComponent(me)}` : ''}`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream' },
+    body: file,
+  });
+  $('run').disabled = false;
+  if (!res.ok) return toast((await res.json()).error ?? 'Не разобралось');
+  const data = await res.json();
+  if (data.needsMe) {
+    $('mMeRow').hidden = false;
+    $('mMe').innerHTML = data.participants.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    toast('Выберите, чьи сообщения ваши, и запустите снова');
+    return;
+  }
+  closeSheet(); mineStarted();
+  toast(`Из «${data.chatName}»: ${data.pairs} пар`);
+}
+
+/* ═══ песочница ═══ */
+$('pingBtn').onclick = async () => {
+  $('pingBtn').disabled = true;
+  const res = await api('/api/ai/ping', { method:'POST' });
+  const body = await res.json().catch(() => ({}));
+  $('pingBtn').disabled = false;
+  toast(res.ok
+    ? `Связь есть: ${body.model}, ${body.ms} мс, ключей ${body.keys?.total ?? 1}`
+    : `Нет связи: ${body.error ?? res.status}`);
+};
+
+$('labRun').onclick = async () => {
+  const text = $('labInput').value.trim();
+  if (!text) return toast('Введите вопрос');
+  $('labRun').disabled = true;
+  $('labNote').textContent = 'Спрашиваю модель…';
+  const res = await api('/api/ai/try', { method:'POST', body: JSON.stringify({ text }) });
+  const body = await res.json().catch(() => ({}));
+  $('labRun').disabled = false;
+  $('labNote').textContent = '';
+
+  if (!res.ok) { $('labOut').innerHTML = `<div class="group"><div class="item"><span class="hint">${esc(body.error ?? 'Не получилось')}</span></div></div>`; return; }
+
+  const d = body.draft;
+  const pct = d.confidence == null ? 0 : Math.round(d.confidence * 100);
+  const verdict = body.verdict?.action === 'auto'
+    ? 'ушёл бы клиенту сам'
+    : body.verdict?.action === 'skip' ? 'не ушёл бы: окно закрыто' : 'лёг бы предложкой оператору';
+  $('labOut').innerHTML = `
+    <div class="cap">Ответ модели</div>
+    <div class="group">
+      <div class="item col-item"><div style="white-space:pre-wrap; font-size:13px">${esc(d.reply || '(пусто)')}</div></div>
+      <div class="item"><span class="lbl">Уверенность</span><span class="val mono">${pct}%</span></div>
+      <div class="item"><span class="lbl">Просит человека</span><span class="val mono">${d.needsHuman ? 'да' : 'нет'}</span></div>
+      <div class="item"><span class="lbl">Обращения нет</span><span class="val mono">${d.noRequest ? 'да' : 'нет'}</span></div>
+      <div class="item"><span class="lbl">В боевом режиме</span><span class="val">${esc(verdict)}${body.verdict?.reason ? ` · ${esc(body.verdict.reason)}` : ''}</span></div>
+      <div class="item"><span class="lbl">Модель · время</span><span class="val mono">${esc(body.model)} · ${body.ms} мс</span></div>
+      ${d.reason ? `<div class="item"><span class="lbl">Пояснение модели</span><span class="val">${esc(d.reason)}</span></div>` : ''}
+    </div>
+    <div class="cap" style="margin-top:var(--sp-5)">Что нашлось в базе знаний</div>
+    <div class="group">${body.sources?.length
+      ? body.sources.map((x) => `<div class="item"><span class="lbl">${esc(x)}</span></div>`).join('')
+      : '<div class="item"><span class="hint">Ничего — значит ответ построен вслепую.</span></div>'}</div>`;
+};
+
+/* ═══ серверы ═══
+   Тот же слепок, который видит модель: если здесь пусто, она тоже ничего
+   не знает и обязана так и сказать. */
+async function loadNodes() {
+  const box = $('nodesBody');
+  box.setAttribute('aria-busy', 'true');
+  box.innerHTML = `<div class="nodes-loading" aria-label="Загружаю состояние серверов">
+    <div class="nodes-summary">${Array.from({ length:4 }, () => '<span class="node-kpi skeleton-card"></span>').join('')}</div>
+    <div class="nodes-panel skeleton-panel"><i></i><i></i><i></i></div>
+  </div>`;
+  let res;
+  try { res = await api('/api/nodes'); }
+  catch (err) {
+    box.removeAttribute('aria-busy');
+    box.innerHTML = `<div class="nodes-state error-state"><span class="state-icon">!</span><h2>Не удалось связаться с мониторингом</h2><p>${esc(err.message)}</p><button class="btn" data-node-retry>Попробовать снова</button></div>`;
+    box.querySelector('[data-node-retry]').onclick = loadNodes;
+    $('nodesNote').textContent = 'нет связи';
+    return;
+  }
+  if (!res.ok) {
+    const error = (await res.json().catch(() => ({}))).error ?? `Ошибка ${res.status}`;
+    const disabled = res.status === 501;
+    box.removeAttribute('aria-busy');
+    box.innerHTML = `<div class="nodes-state ${disabled ? 'disabled-state' : 'error-state'}"><span class="state-icon">${disabled ? '—' : '!'}</span>
+      <h2>${disabled ? 'Мониторинг серверов выключен' : 'Данные серверов недоступны'}</h2><p>${esc(error)}</p>
+      ${disabled ? '' : '<button class="btn" data-node-retry>Попробовать снова</button>'}</div>`;
+    box.querySelector('[data-node-retry]')?.addEventListener('click', loadNodes);
+    $('nodesNote').textContent = '';
+    return;
+  }
+  const data = await res.json();
+  box.removeAttribute('aria-busy');
+  const online = data.nodes.filter((n) => n.online && !n.disabled).length;
+  const disabled = data.nodes.filter((n) => n.disabled).length;
+  const offline = data.nodes.filter((n) => !n.online && !n.disabled).length;
+  const users = data.nodes.reduce((sum, n) => sum + (n.usersOnline ?? 0), 0);
+  $('cntNodes').textContent = offline ? String(offline) : '';
+  $('nodesNote').textContent = data.at
+    ? `обновлено ${fmtTime(data.at)}`
+    : 'данных нет';
+
+  if (!data.nodes.length) {
+    box.innerHTML = '<div class="nodes-state"><span class="state-icon">0</span><h2>Список узлов пуст</h2><p>Модель тоже не получает сведений о состоянии серверов.</p></div>';
+    return;
+  }
+  box.innerHTML = `
+    <div class="nodes-shell">
+      ${data.error ? `<div class="nodes-alert" role="status"><span class="nodes-alert-icon">!</span><div><b>Не удалось обновить данные</b><span>Показан последний успешный слепок${data.at ? ` от ${fmtTime(data.at)}` : ''} · ${esc(data.error)}</span></div></div>` : ''}
+      <div class="nodes-summary" aria-label="Сводка по серверам">
+        <article class="node-kpi online"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg></span><strong>${online}</strong><span>Работают</span><small>из ${data.nodes.length} узлов</small></article>
+        <article class="node-kpi ${offline ? 'danger' : 'quiet'}"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 17h.01M4 20h16L12 4 4 20Z"/></svg></span><strong>${offline}</strong><span>Требуют внимания</span><small>${offline ? 'недоступны сейчас' : 'всё спокойно'}</small></article>
+        <article class="node-kpi quiet"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><path d="M7 12h10M12 7v10"/></svg></span><strong>${disabled}</strong><span>Отключены</span><small>администратором</small></article>
+        <article class="node-kpi accent"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c.6-3.3 2.6-5 6-5s5.4 1.7 6 5M15 15c3 0 4.6 1.5 5 4"/></svg></span><strong>${users}</strong><span>Подключений</span><small>прямо сейчас</small></article>
+      </div>
+      <section class="nodes-panel">
+        <header class="nodes-panel-head"><div><h2>Состояние узлов</h2><p>Псевдоним — имя, которое увидят AI и клиент.</p></div><span>${data.at ? `Слепок ${fmtTime(data.at)}` : 'Время неизвестно'}</span></header>
+        <div class="node-table" role="table" aria-label="Список серверов">
+          <div class="node-table-head" role="row"><span role="columnheader">Сервер и имя для AI</span><span role="columnheader">Состояние</span><span role="columnheader">Пользователи</span><span role="columnheader">Трафик</span></div>
+          ${data.nodes.map((n) => {
+            const state = n.disabled ? 'disabled' : n.online ? 'online' : 'offline';
+            const stateLabel = n.disabled ? 'Отключён' : n.online ? 'В сети' : 'Недоступен';
+            const country = (n.country ?? '').trim().toUpperCase().slice(0, 3) || '••';
+            const alias = n.alias ?? '';
+            return `<div class="node-row ${state}" role="row">
+              <div class="node-cell node-identity" role="cell">
+                <span class="node-country" title="Страна: ${esc(n.country ?? 'не указана')}">${esc(country)}</span>
+                <div class="node-name">
+                  <label class="node-alias-field"><span>Имя для AI</span><input class="node-alias" data-raw="${esc(n.rawName)}" data-original="${esc(alias)}" value="${esc(alias)}" placeholder="${esc(n.name)}" maxlength="40" title="Как этот сервер называет AI"></label>
+                  <span class="node-raw mono" title="${esc(n.rawName)}">Внутреннее: ${esc(n.rawName)}</span><span class="node-alias-feedback" aria-live="polite"></span>
+                </div>
+              </div>
+              <div class="node-cell node-state-cell" role="cell" data-label="Состояние"><span class="node-status ${state}"><i></i>${stateLabel}</span></div>
+              <div class="node-cell node-metric" role="cell" data-label="Пользователи"><strong>${n.usersOnline ?? '—'}</strong><span>онлайн</span></div>
+              <div class="node-cell node-metric" role="cell" data-label="Трафик"><strong>${gb(n.trafficUsedBytes)}</strong><span>использовано</span></div>
+            </div>`;
+          }).join('')}
+        </div>
+      </section>
+    </div>`;
+
+  for (const input of box.querySelectorAll('.node-alias')) {
+    const feedback = input.closest('.node-name').querySelector('.node-alias-feedback');
+    input.oninput = () => input.classList.toggle('is-dirty', input.value !== input.dataset.original);
+    input.onchange = async () => {
+      input.classList.add('is-saving'); feedback.textContent = 'Сохраняю…';
+      const saved = await mutate('/api/nodes/alias', { method:'POST', body: JSON.stringify({ name: input.dataset.raw, alias: input.value }) });
+      input.classList.remove('is-saving');
+      if (saved) {
+        input.dataset.original = input.value; input.classList.remove('is-dirty'); input.classList.add('is-saved'); feedback.textContent = 'Сохранено';
+        setTimeout(() => { input.classList.remove('is-saved'); feedback.textContent = ''; }, 1600);
+      } else { input.classList.add('is-error'); feedback.textContent = 'Не сохранено'; }
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter') input.blur();
+      if (e.key === 'Escape') { input.value = input.dataset.original; input.classList.remove('is-dirty','is-error'); feedback.textContent = ''; input.blur(); }
+    };
+  }
+}
+$('nodesRefresh').onclick = async () => {
+  $('nodesRefresh').disabled = true;
+  $('nodesRefresh').classList.add('is-loading');
+  try { await mutate('/api/nodes/refresh', { method:'POST' }, 'Обновлено'); await loadNodes(); }
+  finally { $('nodesRefresh').disabled = false; $('nodesRefresh').classList.remove('is-loading'); }
+};
+
+/* ═══ статистика ═══ */
+let statsDays = 14;
+$('statsRange').onclick = (e) => {
+  const b = e.target.closest('button'); if (!b) return;
+  statsDays = Number(b.dataset.days);
+  for (const o of $('statsRange').children) o.setAttribute('aria-pressed', String(o === b));
+  loadStats();
+};
+
+const fmtDur = (ms) => {
+  if (ms == null) return '—';
+  const m = Math.round(ms / 60000);
+  return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`;
+};
+
+/** Столбчатый график входящих и исходящих по дням. */
+function barChart(rows) {
+  if (!rows.length) return '<p class="empty">Пока нет данных.</p>';
+  const peak = Math.max(1, ...rows.map((r) => Math.max(r.incoming, r.outgoing)));
+  return `<div class="bars">${rows.map((r) => `
+    <div class="col2" title="${esc(r.day)}: входящих ${r.incoming}, исходящих ${r.outgoing}">
+      <i class="in" style="height:${Math.round(r.incoming / peak * 78)}%"></i>
+      <i class="out" style="height:${Math.round(r.outgoing / peak * 78)}%"></i>
+      <span>${esc(r.day.slice(5))}</span>
+    </div>`).join('')}</div>
+    <div class="legend"><span><i style="background:var(--accent)"></i>входящие</span>
+      <span><i style="background:var(--fg-3)"></i>исходящие</span></div>`;
+}
+
+/** Ряд «подпись — полоса — число»: нагляднее таблицы из двух колонок. */
+function meters(rows, unit = '') {
+  if (!rows.length) return '<div class="item"><span class="hint">Пока пусто.</span></div>';
+  const peak = Math.max(1, ...rows.map(([, n]) => n));
+  return rows.map(([label, n]) => `<div class="meter"><span style="min-width:118px">${esc(label)}</span>
+    <span class="track"><i style="width:${Math.round(n / peak * 100)}%"></i></span>
+    <b>${n}${unit}</b></div>`).join('');
+}
+
+async function loadStats() {
+  $('stats').innerHTML = '<p class="empty">Считаю…</p>';
+  const s = await json(`/api/stats?days=${statsDays}`); if (!s) return;
+
+  const acc = s.acceptanceRate == null ? '—' : Math.round(s.acceptanceRate * 100) + '%';
+  const share = s.aiShare == null ? '—' : Math.round(s.aiShare * 100) + '%';
+  const incoming = s.volume.reduce((a, v) => a + v.incoming, 0);
+  const outgoing = s.volume.reduce((a, v) => a + v.outgoing, 0);
+  const perDay = s.volume.length ? (incoming / s.volume.length).toFixed(1) : '0';
+
+  const hourRows = Array.from({ length: 24 }, (_, h) => {
+    const found = s.hours.find((x) => Number(x.hour) === h);
+    return [`${String(h).padStart(2,'0')}:00`, found ? found.n : 0];
+  }).filter(([, n]) => n > 0);
+
+  $('stats').innerHTML = `
+    <div class="kpis">
+      <div class="kpi"><b>${incoming}</b><span>сообщений от клиентов</span>
+        <span class="sub">${perDay} в день · ${outgoing} ответов</span></div>
+      <div class="kpi"><b>${fmtDur(s.medianFirstResponseMs)}</b><span>первый ответ, медиана</span>
+        <span class="sub">среднее ${fmtDur(s.avgFirstResponseMs)} · ${s.answered} диалогов</span></div>
+      <div class="kpi"><b>${share}</b><span>ответов написал AI</span>
+        <span class="sub">принято предложек ${acc}</span></div>
+      <div class="kpi"><b>${s.totals.waiting ?? 0}</b><span>ждут ответа сейчас</span>
+        <span class="sub">открыто ${s.totals.open ?? 0} из ${s.totals.total ?? 0}</span></div>
+    </div>
+
+    <div class="cap">Объём за ${s.days} дней</div>
+    ${barChart(s.volume)}
+
+    <div class="split2" style="margin-top:var(--sp-6)">
+      <div>
+        <div class="cap">Когда пишут</div>
+        <div class="group">${meters(hourRows)}</div>
+      </div>
+      <div>
+        <div class="cap">Предложки AI</div>
+        <div class="group">${meters(s.suggestions.map((x) => [({
+          sent:'Отправлены как есть', edited:'Отправлены с правкой',
+          rejected:'Отклонены', pending:'Ждут решения', superseded:'Устарели',
+        })[x.status] ?? x.status, x.n]))}</div>
+      </div>
+      <div>
+        <div class="cap">Требуют внимания</div>
+        <div class="group">${meters([
+          ['Эскалированы', s.totals.escalated ?? 0],
+          ['Нет в базах', s.totals.suspicious ?? 0],
+          ['Ждут человека', s.totals.handoff ?? 0],
+        ])}</div>
+      </div>
+      <div>
+        <div class="cap">Откуда приходят</div>
+        <div class="group">${meters(s.byChannel.map((c) => [c.channel === 'tg_dm' ? 'Личка Telegram' : 'Тикеты бедолаги', c.n]))}</div>
+      </div>
+      <div>
+        <div class="cap">Статьи, которые работают</div>
+        <div class="group">${meters(s.topSources.map((x) => [x.title, x.n]))}</div>
+      </div>
+      <div>
+        <div class="cap">События</div>
+        <div class="group">${meters(s.events.map((x) => [({
+          ai_draft:'Черновики AI', ai_error:'Сбои AI', ai_no_request:'Без обращения',
+          sla_breach:'Просрочки', sub_link:'Прислали ключ', business_connection:'Подключение',
+        })[x.kind] ?? x.kind, x.n]))}</div>
+      </div>
+    </div>`;
+}
+
+/* ═══ настройки ═══ */
+/**
+ * Настройки с пояснениями. Без описания половина параметров выглядит
+ * шумом: оператор менял значение, ничего не происходило, и настройка
+ * считалась сломанной — хотя просто не действовала в текущем режиме.
+ *
+ * active(runtime) отвечает, работает ли параметр сейчас. Неактивные не
+ * прячем — показываем с пометкой, иначе непонятно, куда они делись.
+ */
+const CONFIDENCE_LEVELS = [
+  [0.40, 'Очень низкий — отвечает почти всегда'],
+  [0.55, 'Низкий — отвечает, если ответ похож на верный'],
+  [0.70, 'Средний — нужна заметная опора на базу'],
+  [0.80, 'Высокий — ответ должен прямо следовать из статьи'],
+  [0.90, 'Очень высокий — только дословно из базы'],
+];
+
+const FIELDS = [
+  { key:'aiMode', label:'Режим AI по умолчанию', kind:'select',
+    options:[['off','Выключен везде'],['suggest','Предлагает'],['auto','Отвечает сам']],
+    hint:'«Выключен везде» — рубильник: гасит AI во всех диалогах. Остальное — значение по умолчанию для новых диалогов, в карточке каждого его можно переопределить.' },
+
+  { key:'requireKb', label:'Отвечать только по базе знаний', kind:'select',
+    options:[['true','Да, иначе зовём человека'],['false','Разрешить отвечать без опоры']],
+    hint:'Главная защита от выдумок. Если поиск по базе знаний не нашёл ничего, ответ клиенту сам не уйдёт ни при какой уверенности — диалог передаётся человеку.' },
+
+  { key:'minConfidence', label:'Порог уверенности', kind:'level',
+    options: CONFIDENCE_LEVELS.map(([v, t]) => [String(v), t]),
+    hint:'Модель сама оценивает от 0 до 1, насколько её ответ подтверждается выдержками из базы знаний, и возвращает эту оценку вместе с ответом. Ниже порога — ответ становится предложкой оператору. Оценка приблизительная, поэтому порог стоит поднимать, если видите неточные автоответы.',
+    active:(r) => r.aiMode === 'auto' },
+
+  { key:'autoPerHour', label:'Предел автоответов в диалоге за час', kind:'number',
+    attrs:{min:0,max:100,step:1},
+    hint:'Предохранитель от зацикливания в одном диалоге, а не общий лимит запросов. Если сработал, следующий ответ уходит оператору предложкой, а клиент получает «передал специалисту» — молча его не игнорируют. 0 — без предела.',
+    active:(r) => r.aiMode === 'auto' },
+
+  { key:'humanHoldMinutes', label:'Молчать после ответа оператора, мин', kind:'number',
+    attrs:{min:0,max:1440,step:5},
+    hint:'После того как в диалоге ответил живой человек, AI не вмешивается указанное время: разговор уже ведёт оператор. 0 — выключено. Действует только когда AI отвечает сам.',
+    active:(r) => r.aiMode === 'auto' },
+
+  { key:'maxAgeMinutes', label:'Не отвечать на сообщения старше, мин', kind:'number',
+    attrs:{min:1,max:10080,step:10},
+    hint:'Защита при перезапуске и разборе завала: если сообщение пролежало дольше этого срока, AI на него не отвечает. Иначе после простоя модель начинает отвечать на вчерашние вопросы, на которые уже ответили или которые потеряли смысл.' },
+
+  { key:'slaFirstResponseMinutes', label:'Срок первого ответа, мин', kind:'number',
+    attrs:{min:1,max:10080,step:5},
+    hint:'Через сколько минут ожидания прислать уведомление, что клиенту до сих пор никто не ответил. На сам ответ не влияет — это только напоминание вам. Тот же срок применяется к диалогам, переданным человеку.' },
+
+  { key:'handoffRepeatMinutes', label:'Повторять «ожидайте» не чаще, мин', kind:'number',
+    attrs:{min:0,max:10080,step:10},
+    hint:'Когда диалог передан человеку, а клиент продолжает писать, AI повторяет «вопрос у специалиста» не чаще этого срока. Срабатывает на новое сообщение клиента, а не по таймеру. 0 — не повторять вовсе.' },
+
+  { key:'notifyLevel', label:'Подробность уведомлений', kind:'select',
+    options:[['all','Каждое сообщение и действие AI'],['important','Только требующее вмешательства'],['minimal','Только передачи и просрочки']],
+    hint:'Что присылать в Telegram. Передача человеку приходит на любом уровне: клиенту в этот момент обещан специалист.' },
+
+  { key:'model', label:'Модель', kind:'text',
+    hint:'Имя модели у провайдера. Кнопка «Выбрать» подтянет список от него самого.' },
+
+  { key:'fallbackModel', label:'Запасная модель', kind:'text',
+    hint:'Когда основная упирается в суточный лимит, запрос уходит сюда. Лимиты считаются на каждую модель отдельно.' },
+
+  { key:'brand', label:'Название сервиса для AI', kind:'text',
+    hint:'Как модель называет ваш сервис в ответах клиентам.' },
+];
+
+/** Ближайший уровень: в базе может лежать значение, набранное руками. */
+function nearestLevel(value) {
+  let best = CONFIDENCE_LEVELS[0][0];
+  for (const [level] of CONFIDENCE_LEVELS) {
+    if (Math.abs(level - Number(value)) < Math.abs(best - Number(value))) best = level;
+  }
+  return String(best);
+}
+
+const SETTINGS_GROUPS = [
+  { id:'safety', title:'Режим и безопасность', note:'Когда AI может отвечать и на что он должен опираться',
+    fields:['aiMode','requireKb','minConfidence','maxAgeMinutes'] },
+  { id:'limits', title:'Лимиты и внимание оператора', note:'Паузы, SLA и защита от зацикливания',
+    fields:['autoPerHour','humanHoldMinutes','slaFirstResponseMinutes','handoffRepeatMinutes','notifyLevel'] },
+  { id:'models', title:'Модели и сервис', note:'Основная, запасная модель и имя бренда',
+    fields:['model','fallbackModel','brand'] },
+];
+let settingsSaveTimer = null;
+function showSettingsSaveState(state, text) {
+  const wrap = $('setHint').closest('.save-state');
+  wrap.dataset.state = state;
+  $('setHint').textContent = text;
+  clearTimeout(settingsSaveTimer);
+  if (state === 'saved') settingsSaveTimer = setTimeout(() => { wrap.dataset.state = 'idle'; $('setHint').textContent = ''; }, 1800);
+}
+
+async function loadSettings() {
+  settings = await json('/api/settings'); if (!settings) return;
+  $('ver').textContent = 'v' + settings.version;
+  const settingRows = new Map(FIELDS.map((f) => {
+    const value = settings.runtime[f.key];
+    const inactive = f.active && !f.active(settings.runtime);
+    // Сравниваем строками: в runtime булево true, в option — строка 'true',
+    // и строгое равенство ничего не подсвечивало.
+    const selected = f.kind === 'level' ? nearestLevel(value) : String(value);
+    const control = (f.kind === 'select' || f.kind === 'level')
+      ? `<select class="ctl" id="setting-${f.key}" data-key="${f.key}" aria-describedby="setting-hint-${f.key}">${f.options.map(([v,t]) =>
+          `<option value="${v}"${String(v)===selected?' selected':''}>${esc(t)}</option>`).join('')}</select>`
+      : `<input class="ctl" id="setting-${f.key}" type="${f.kind}" data-key="${f.key}" value="${esc(value)}" aria-describedby="setting-hint-${f.key}"${f.attrs
+          ? ` min="${f.attrs.min}" max="${f.attrs.max}" step="${f.attrs.step}"` : ''}>`;
+    return [f.key, `<div class="setting-row${inactive ? ' is-inactive' : ''}" data-setting="${f.key}">
+      <div class="setting-main"><label class="setting-label" for="setting-${f.key}">${esc(f.label)}</label><span class="setting-control">${control}</span></div>
+      <div class="setting-meta"><button class="why" data-why="${f.key}" aria-expanded="false">Зачем это?</button>${inactive ? '<span class="setting-badge">Только в авто</span>' : ''}</div>
+      <span class="hint why-text" id="setting-hint-${f.key}" data-whytext="${f.key}">${esc(f.hint)}${
+        inactive ? '<br><b>Сейчас не действует: включается в режиме «отвечает сам».</b>' : ''}</span>
+    </div>`];
+  }));
+  $('aiSettings').innerHTML = SETTINGS_GROUPS.map((group) => `<section class="settings-cluster" data-cluster="${group.id}">
+    <header class="settings-cluster-head"><span class="cluster-mark" aria-hidden="true"></span><div><h3>${esc(group.title)}</h3><p>${esc(group.note)}</p></div></header>
+    <div class="settings-panel">${group.fields.map((field) => settingRows.get(field)).join('')}</div>
+  </section>`).join('').replace(/&lt;b&gt;/g,'<b>').replace(/&lt;\/b&gt;/g,'</b>').replace(/&lt;br&gt;/g,'<br>') + `
+    <section class="settings-cluster" data-cluster="voice">
+      <header class="settings-cluster-head"><span class="cluster-mark" aria-hidden="true"></span><div><h3>Тон и передача</h3><p>Как звучит помощник и что видит клиент при передаче оператору</p></div></header>
+      <div class="settings-panel copy-settings">
+        <div class="copy-setting">
+          <div class="copy-setting-head"><label for="styleBox">Манера ответа</label><span>до 1200 символов</span></div>
+          <textarea id="styleBox" rows="4" maxlength="1200" placeholder="Как AI должен формулировать ответы">${esc(settings.runtime.replyStyle ?? '')}</textarea>
+          <span class="hint">Например: «пиши коротко», «обращайся на ты», «не используй нумерованные списки».</span>
+          <button class="btn" id="styleSave">Сохранить манеру</button>
+        </div>
+        <div class="copy-setting">
+          <div class="copy-setting-head"><label for="handoffBox">Сообщение при передаче человеку</label><span>до 600 символов</span></div>
+          <textarea id="handoffBox" rows="3" minlength="5" maxlength="600">${esc(settings.runtime.handoffMessage ?? '')}</textarea>
+          <span class="hint">После этого AI молчит по существу, пока оператор не ответит.</span>
+          <button class="btn" id="handoffSave">Сохранить текст</button>
+        </div>
+      </div>
+    </section>`;
+  for (const el of $('aiSettings').querySelectorAll('[data-key]')) {
+    el.onchange = async () => {
+      const row = el.closest('.setting-row');
+      row.classList.add('is-saving'); el.disabled = true; showSettingsSaveState('saving', 'Сохраняю…');
+      const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ [el.dataset.key]: el.value }) });
+      row.classList.remove('is-saving'); el.disabled = false;
+      if (saved?.runtime) {
+        settings.runtime = saved.runtime;
+        for (const f of FIELDS) {
+          const target = $('aiSettings').querySelector(`[data-setting="${f.key}"]`); if (!target) continue;
+          const inactive = f.active && !f.active(settings.runtime);
+          target.classList.toggle('is-inactive', Boolean(inactive));
+          let badge = target.querySelector('.setting-badge');
+          if (inactive && !badge) { badge = Object.assign(document.createElement('span'), { className:'setting-badge', textContent:'Только в авто' }); target.querySelector('.setting-meta').append(badge); }
+          if (!inactive) badge?.remove();
+          const hint = target.querySelector('.why-text');
+          hint.innerHTML = `${esc(f.hint)}${inactive ? '<br><b>Сейчас не действует: включается в режиме «отвечает сам».</b>' : ''}`;
+        }
+        showSettingsSaveState('saved', 'Сохранено');
+      } else showSettingsSaveState('error', 'Не сохранено');
+    };
+  }
+  for (const b of $('aiSettings').querySelectorAll('.why')) {
+    b.onclick = () => {
+      const text = $('aiSettings').querySelector(`[data-whytext="${b.dataset.why}"]`);
+      const open = text.classList.toggle('open');
+      b.setAttribute('aria-expanded', String(open));
+      b.textContent = open ? 'Скрыть описание' : 'Зачем это?';
+    };
+  }
+
+  // Список моделей провайдера: набирать вручную — верный способ опечататься.
+  // Выбор модели и ключа — для основной и запасной одинаково. Ключ важен:
+  // у провайдеров лимит бывает и на модель, и на аккаунт, и если запасная
+  // ходит тем же ключом, при аккаунтном лимите она не спасает.
+  for (const [field, keyField, title] of [
+    ['model', 'modelKey', 'Основная модель'],
+    ['fallbackModel', 'fallbackKey', 'Запасная модель'],
+  ]) {
+    const input = $('aiSettings').querySelector(`[data-key="${field}"]`);
+    if (!input) continue;
+    const pick = document.createElement('button');
+    pick.className = 'btn model-pick';
+    pick.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M4 10h8M4 14h10"/></svg><span>Выбрать</span>';
+    pick.onclick = async () => {
+      pick.disabled = true;
+      const [models, keys] = await Promise.all([json('/api/ai/models'), json('/api/ai/keys')]);
+      pick.disabled = false;
+      if (!models) return toast('Провайдер не отдал список моделей');
+      const current = settings.runtime[field];
+      const boundKey = settings.runtime[keyField] ?? -1;
+      sheet(title,
+        `<div class="frow"><label>Модель · найдено ${models.models.length}</label>
+           <select id="modelPick" size="10" style="height:auto">${
+             (field === 'fallbackModel' ? ['', ...models.models] : models.models).map((m) =>
+               `<option value="${esc(m)}"${m === current ? ' selected' : ''}>${m ? esc(m) : '— без запасной —'}</option>`).join('')}</select></div>
+         <div class="frow"><label>Каким ключом ходит</label>
+           <select id="keyPick">
+             <option value="-1"${boundKey === -1 ? ' selected' : ''}>Любой доступный</option>
+             ${(keys?.keys ?? []).map((k, i) =>
+               `<option value="${i}"${boundKey === i ? ' selected' : ''}>Ключ #${i + 1} · ${esc(k)}</option>`).join('')}
+           </select>
+           <span class="hint">Если у провайдера лимит считается на аккаунт, запасной модели нужен свой ключ — иначе она упрётся в тот же потолок.</span>
+         </div>`,
+        `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="useModel">Применить</button>`);
+      $('cancel').onclick = closeSheet;
+      $('useModel').onclick = async () => {
+        const patch = { [field]: $('modelPick').value, [keyField]: Number($('keyPick').value) };
+        if (await mutate('/api/settings', { method:'POST', body: JSON.stringify(patch) }, 'Сохранено')) {
+          closeSheet(); loadSettings();
+        }
+      };
+    };
+    input.after(pick);
+  }
+
+  $('styleSave').onclick = async () => {
+    showSettingsSaveState('saving', 'Сохраняю…'); $('styleSave').disabled = true;
+    const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ replyStyle: $('styleBox').value }) }, 'Манера сохранена');
+    $('styleSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
+  };
+  $('handoffSave').onclick = async () => {
+    showSettingsSaveState('saving', 'Сохраняю…'); $('handoffSave').disabled = true;
+    const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ handoffMessage: $('handoffBox').value }) }, 'Текст сохранён');
+    $('handoffSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
+  };
+
+  const caps = settings.remnawave;
+  const business = settings.businessConnectionLive;
+  const healthCards = [
+    { label:'Личка Telegram', value:settings.channels.tg_dm ? 'Подключена' : 'Не подключена', tone:settings.channels.tg_dm ? 'ok' : 'off' },
+    { label:'Тикеты', value:settings.channels.bedolaga ? 'Подключены' : 'Не подключены', tone:settings.channels.bedolaga ? 'ok' : 'off' },
+    { label:'Business Connection', value:business?.enabled ? (business.canReply ? 'Можно отвечать' : 'Нет права отвечать') : business ? 'Отключено в аккаунте' : 'Нет подключения', tone:business?.enabled && business.canReply ? 'ok' : business ? 'warn' : 'off' },
+    { label:'Remnawave', value:caps ? (caps.index?.size ? `${caps.index.size} клиентов в индексе` : 'Подключён') : 'Не подключён', tone:caps ? 'ok' : 'off' },
+    { label:'Уведомления', value:settings.alerts?.configured ? (settings.alerts.lastError ? `Ошибка: ${settings.alerts.lastError}` : `Работают · отправлено ${settings.alerts.sent}`) : 'ALERT_CHAT_ID не задан', tone:settings.alerts?.lastError ? 'error' : settings.alerts?.configured ? 'ok' : 'off' },
+    { label:'AI-модели', value:settings.ai ? `${settings.ai.model}${settings.ai.fallback ? ` → ${settings.ai.fallback}` : ''} · ключей ${settings.ai.keys}` : 'Не настроены', tone:settings.ai?.keys ? 'accent' : 'warn' },
+    { label:'Мониторинг узлов', value:settings.nodes ? `${settings.nodes.known} узлов${settings.nodes.at ? ` · ${fmtTime(settings.nodes.at)}` : ''}` : 'Выключен', tone:settings.nodes ? 'ok' : 'off' },
+    { label:'База знаний', value:`${settings.kb} статей`, tone:settings.kb ? 'accent' : 'warn' },
+    { label:'Доступ Remnawave', value:settings.readOnly ? 'Только чтение' : 'Действия разрешены', tone:settings.readOnly ? 'neutral' : 'warn' },
+    { label:'Последний опрос тикетов', value:settings.lastBedolagaPoll ? fmtTime(Number(settings.lastBedolagaPoll)) : 'Данных нет', tone:settings.lastBedolagaPoll ? 'ok' : 'off' },
+  ];
+  $('health').innerHTML = healthCards.map((card) => `<article class="health-card ${card.tone}"><span class="health-status"><i></i></span><div><b>${esc(card.label)}</b><span>${esc(card.value)}</span></div></article>`).join('')
+    + `<div class="health-action"><div><b>Проверка уведомлений</b><span>Отправим тестовое сообщение в служебный чат.</span></div><button class="btn" id="testAlert">Отправить тест</button></div>`;
+  $('testAlert').onclick = async () => {
+    $('testAlert').disabled = true;
+    await mutate('/api/settings/test-alert', { method:'POST' }, 'Отправлено — проверьте чат');
+    $('testAlert').disabled = false;
+    loadSettings();
+  };
+}
+
+/* ═══ живое обновление ═══ */
+function connect() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(ticket)}`);
+  ws.onopen = () => { $('pulse').classList.add('live'); $('pulse').title = 'Связь с сервером установлена'; };
+  ws.onclose = () => { $('pulse').classList.remove('live'); $('pulse').title = 'Переподключаемся…'; setTimeout(connect, 3000); };
+  ws.onmessage = (event) => {
+    const frame = JSON.parse(event.data);
+    if (frame.type === 'job') {
+      const box = $('logBox');
+      if (box) {
+        if (frame.status === 'running') box.textContent += `\n${frame.progress}`;
+        if (frame.status === 'done') { box.textContent += `\nГотово: ${frame.report.articles.length} статей`; loadDocs(); toast('Сбор закончен'); }
+        if (frame.status === 'failed') { box.textContent += `\nОшибка: ${frame.error}`; toast('Сбор не удался'); }
+        box.scrollTop = box.scrollHeight;
+      }
+      return;
+    }
+    if (frame.type === 'message' && current?.id === frame.conversation.id) {
+      const nearBottom = $('thread').scrollHeight - $('thread').scrollTop - $('thread').clientHeight < 140;
+      current = frame.conversation;
+      const inner = $('thread').querySelector('.thread-inner');
+      if (inner) {
+        if (inner.querySelector('.empty')) inner.innerHTML = '';
+        const el = bubble(frame.message, frame.attachments ?? {});
+        el.classList.add('fresh');
+        inner.append(el);
+      }
+      if (nearBottom || frame.message.direction === 'out') requestAnimationFrame(() => { $('thread').scrollTop = $('thread').scrollHeight; });
+      else toast('Новое сообщение ниже по переписке');
+      if (frame.message.direction === 'in') { suggestion = null; renderSuggestion(); }
+      renderWindow(); renderAiNote();
+    }
+    if (frame.type === 'suggestion' && current?.id === frame.conversation.id) { suggestion = frame.suggestion; renderSuggestion(); }
+    refreshSoon();
+  };
+}
+
+/** Ссылка из уведомления вида /#c12 открывает нужный диалог сразу. */
+async function openFromHash() {
+  const match = /^#c(\d+)$/.exec(location.hash);
+  if (!match) return;
+  show('inbox');
+  await open(Number(match[1]));
+}
+window.addEventListener('hashchange', openFromHash);
+
+async function boot() {
+  await refreshTicket();
+  // Билет живёт десять минут — обновляем заранее, чтобы картинки и события
+  // не отваливались посреди работы.
+  setInterval(refreshTicket, 8 * 60_000);
+  templates = (await json('/api/templates'))?.templates ?? [];
+  $('templates').innerHTML = '<option value="">Шаблон…</option>';
+  $('templates').append(...templates.map(t => Object.assign(document.createElement('option'), { value:String(t.id), textContent:t.title })));
+  settings = await json('/api/settings');
+  if (settings) $('ver').textContent = 'v' + settings.version;
+  await refresh();
+  await openFromHash();
+  connect();
+  setInterval(renderWindow, 30000);
+}
+
+let savedTokenCheck = null;
+if (token) {
+  try { savedTokenCheck = await checkToken(token); }
+  catch { openGate('Сервер сейчас недоступен. Проверьте соединение и попробуйте снова.'); }
+}
+if (savedTokenCheck?.ok) {
+  $('app').hidden = false;
+  await boot();
+} else if (!token) {
+  openGate('');
+} else if (savedTokenCheck) {
+  openGate(savedTokenCheck.status === 429 ? 'Слишком много попыток. Подождите минуту.' : 'Сохранённый токен больше не подходит');
+}
+</script>
+</body>
+</html>
