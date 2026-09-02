@@ -4,6 +4,20 @@
 [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии следуют
 [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [2.0.0] — 2026-09-02
+
+- Первый стабильный релиз единого центра поддержки: автономный запуск,
+  Telegram Business и боты, тикеты Bedolaga, несколько Remnawave-панелей,
+  пересекающиеся папки источников и отдельные профили сервисов.
+- Полноценное обновление по кнопке через ограниченный host-updater с backup,
+  health-check и автоматическим откатом.
+- Мультимодальный AI с базой знаний, безопасной передачей человеку,
+  capability-aware fallback и защитой от ответа поверх оператора.
+- Исправлены синхронизация статусов и вложений Bedolaga, ручные исходящие
+  Telegram Business, аватары, живое появление диалогов и расчёт статистики.
+- Усилена безопасность панели, файлов базы знаний, вложений, WebSocket,
+  ролей, аудита и релизного архива.
+
 ## [2.0.0-rc.7] — 2026-09-01
 
 - Снятая Groq-модель `Qwen3.6-27B` полностью удалена из штатной конфигурации:
@@ -131,6 +145,7 @@
 - Неудачная доставка не подавляет повтор важного уведомления.
 - Архив релиза собирается по allowlist и никогда не включает `.env` или `data/`.
 
+[2.0.0]: https://github.com/tagashi666/ai-support/releases/tag/v2.0.0
 [2.0.0-rc.7]: https://github.com/tagashi666/ai-support/releases/tag/v2.0.0-rc.7
 [2.0.0-rc.6]: https://github.com/tagashi666/ai-support/releases/tag/v2.0.0-rc.6
 [2.0.0-rc.5]: https://github.com/tagashi666/ai-support/releases/tag/v2.0.0-rc.5

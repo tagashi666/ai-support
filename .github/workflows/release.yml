@@ -28,4 +28,10 @@ jobs:
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/ai-support.tar.gz --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          release/ai-support.tar.gz
+          release/ai-support.tar.gz.sha256
+          --verify-tag
+          --generate-notes
+          --title "$GITHUB_REF_NAME"
