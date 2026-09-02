@@ -215,6 +215,7 @@ export class UpdateManager {
     const targetDir = dirname(config.update.requestFile);
     await mkdir(targetDir, { recursive: true, mode: 0o700 });
     const temporary = `${config.update.requestFile}.${process.pid}.tmp`;
+    const requestedAt = new Date().toISOString();
     const payload = `${JSON.stringify({
       schema: 2,
       action,
@@ -222,7 +223,7 @@ export class UpdateManager {
       current: version,
       force: action === 'update' && options.force === true,
       backupPath: action === 'rollback' ? state.progress?.backupPath : null,
-      requestedAt: new Date().toISOString(),
+      requestedAt,
       safety: {
         backupRequired: true,
         healthChecks: ['nginx', 'application', 'database', 'channels'],
@@ -237,6 +238,19 @@ export class UpdateManager {
       await unlink(temporary).catch(() => undefined);
       throw err;
     }
-    return { ...state, queued: true };
+    return {
+      ...state,
+      queued: true,
+      progress: {
+        action,
+        status: 'queued',
+        stage: 'Запрос принят и передан host-updater',
+        percent: 0,
+        ...(action === 'update' && state.latest ? { version: state.latest } : {}),
+        ...(state.progress?.backupPath ? { backupPath: state.progress.backupPath } : {}),
+        startedAt: requestedAt,
+        updatedAt: requestedAt,
+      },
+    };
   }
 }

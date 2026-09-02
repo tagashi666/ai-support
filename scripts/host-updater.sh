@@ -34,7 +34,7 @@ require_command() {
   }
 }
 
-for command in curl docker flock nginx node python3 readlink sha256sum tar; do
+for command in curl docker flock install nginx node python3 readlink sha256sum tar; do
   require_command "$command"
 done
 docker compose version >/dev/null 2>&1 || {
@@ -212,6 +212,28 @@ load_rollback_state() {
   [[ "${#ROLLBACK_STATE[@]}" == 3 ]]
 }
 
+build_image() {
+  local image="$1" source_dir="$2" progress_pid elapsed=0 percent=36 rc=0
+
+  # docker build может несколько минут не печатать ничего полезного для панели.
+  # Отдельный heartbeat показывает, что host-updater жив, и постепенно двигает
+  # индикатор, не выдавая оценку времени за реальный прогресс слоёв Docker.
+  (
+    while sleep 5; do
+      elapsed=$((elapsed + 5))
+      percent=$((36 + elapsed / 10))
+      (( percent > 54 )) && percent=54
+      write_status installing "Сборка изолированного образа · ${elapsed} с" "$percent"
+    done
+  ) &
+  progress_pid="$!"
+
+  docker build --tag "$image" "$source_dir" || rc="$?"
+  kill "$progress_pid" 2>/dev/null || true
+  wait "$progress_pid" 2>/dev/null || true
+  return "$rc"
+}
+
 do_update() {
   local current_version="$1" tag="$2" safe_tag archive checksum source_dir
   local current_image_id stamp backup_folder
@@ -257,7 +279,7 @@ PY
   [[ "$(node -p 'require(process.argv[1]).version' "$source_dir/package.json")" == "$TARGET_VERSION" ]]
 
   write_status installing "Сборка изолированного образа" 36
-  docker build --tag "$target_image" "$source_dir"
+  build_image "$target_image" "$source_dir"
 
   write_status backing_up "Резервная копия базы" 58
   current_image_id="$(docker inspect -f '{{.Image}}' "$CONTAINER")"

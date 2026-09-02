@@ -62,6 +62,18 @@ console.log('\n[ версии обновлений ]');
   check('произвольный тег отвергается', !isNewer('latest', '2.0.0-rc.1'));
   check('тот же RC можно безопасно переустановить', isSameVersion('v2.0.0-rc.1', '2.0.0-rc.1'));
   check('старый RC нельзя выдать за переустановку', !isSameVersion('v2.0.0-rc.1', '2.0.0-rc.2'));
+
+  const hostUpdater = readFileSync(join(process.cwd(), 'scripts', 'host-updater.sh'), 'utf8');
+  const panel = readFileSync(join(process.cwd(), 'public', 'index.html'), 'utf8');
+  check('долгая Docker-сборка обновляет статус каждые 5 секунд',
+    /while sleep 5; do[\s\S]*Сборка изолированного образа · \$\{elapsed\} с/u.test(hostUpdater));
+  check('панель опрашивает ход установки чаще пяти секунд',
+    /updatePoll = setInterval\(loadUpdateState, 2000\)/u.test(panel));
+  check('ручная проверка обновлений обходит серверный кеш',
+    panel.includes("$('updateRetry').onclick = () => loadUpdateState(true)")
+      && panel.includes("'?force=1'"));
+  check('переустановка текущего релиза отделена от обычного обновления',
+    panel.includes('<summary>Восстановление</summary>'));
 }
 
 console.log('\n[ только чтение ]');

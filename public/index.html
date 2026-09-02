@@ -2858,20 +2858,23 @@ function paintUpdate(state) {
     : state.available ? `Доступна версия ${esc(state.latest)}`
     : `Установлена актуальная версия v${esc(state.current)}`;
   const error = state.error ? `<div class="badge danger">Проверка релиза: ${esc(state.error)}</div>` : '';
-  const installLabel = state.available ? `Установить v${esc(state.latest)}` : `Переустановить v${esc(state.current)}`;
-  const install = state.tag && !state.queued && (state.available || state.reinstallable)
-    ? `<button class="btn primary" id="updateApply">${installLabel}</button>` : '';
+  const install = state.tag && !state.queued && state.available
+    ? `<button class="btn primary" id="updateApply">Установить v${esc(state.latest)}</button>` : '';
+  const reinstall = state.tag && !state.queued && !state.available && state.reinstallable
+    ? `<details><summary>Восстановление</summary><button class="btn" id="updateReinstall">Переустановить v${esc(state.current)}</button></details>` : '';
   panel.innerHTML = `<div class="ops-head"><div><b>${title}</b><span class="hint">Канал: ${state.prerelease ? 'предрелизы' : 'стабильные релизы'}${published}</span></div>
     <div class="ops-actions">${install}${rollback}<button class="btn" id="updateRetry">Проверить</button></div></div>
-    ${error}${safety}${progressHtml}${changelog}${historyHtml}`;
-  $('updateRetry').onclick = loadUpdateState;
-  if ($('updateApply')) $('updateApply').onclick = () => confirmAction(state.available ? 'Установить обновление?' : 'Переустановить текущую версию?',
-    'Система скачает подписанный релиз, проверит контрольную сумму, создаст резервную копию, установит его и автоматически откатится при неуспешной проверке.', () => requestUpdate('update', !state.available));
+    ${error}${safety}${progressHtml}${reinstall}${changelog}${historyHtml}`;
+  $('updateRetry').onclick = () => loadUpdateState(true);
+  if ($('updateApply')) $('updateApply').onclick = () => confirmAction('Установить обновление?',
+    'Система скачает подписанный релиз, проверит контрольную сумму, создаст резервную копию, установит его и автоматически откатится при неуспешной проверке.', () => requestUpdate('update'));
+  if ($('updateReinstall')) $('updateReinstall').onclick = () => confirmAction('Переустановить текущую версию?',
+    'Это аварийное восстановление: текущий подписанный релиз будет скачан и установлен заново с резервной копией и автоматическим откатом.', () => requestUpdate('update', true));
   if ($('updateRollback')) $('updateRollback').onclick = () => confirmAction('Откатить обновление?',
     'Будет использована только резервная копия, которую ранее подтвердил host-updater.', () => requestUpdate('rollback'));
   clearInterval(updatePoll);
   if (state.queued || progress && ['queued','backing_up','installing','checking'].includes(progress.status)) {
-    updatePoll = setInterval(loadUpdateState, 5000);
+    updatePoll = setInterval(loadUpdateState, 2000);
   }
 }
 
@@ -2880,14 +2883,14 @@ async function requestUpdate(action, force = false) {
   if (result?.update) { paintUpdate(result.update); toast(action === 'rollback' ? 'Откат поставлен в очередь' : 'Обновление поставлено в очередь'); }
 }
 
-async function loadUpdateState() {
+async function loadUpdateState(force = false) {
   const panel = $('updatePanel');
   if (currentActor && currentActor.role !== 'admin') {
     panel.innerHTML = '<div><b>Центр обновлений</b><span class="hint">Проверка, установка и откат доступны только администратору.</span></div>';
     return;
   }
-  if (panel) panel.innerHTML = '<span class="hint">Проверяю обновления…</span>';
-  const state = await json('/api/update');
+  if (panel && !panel.querySelector('.ops-head, .ops-card')) panel.innerHTML = '<span class="hint">Проверяю обновления…</span>';
+  const state = await json(`/api/update${force === true ? '?force=1' : ''}`);
   if (!state) { panel.innerHTML = '<span class="hint">Центр обновлений сейчас недоступен.</span>'; return; }
   paintUpdate(state);
 }

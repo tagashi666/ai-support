@@ -1054,8 +1054,8 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
   });
 
-  app.get('/api/update', async () => ({
-    ...await updates.state(),
+  app.get<{ Querystring: { force?: string } }>('/api/update', async (request) => ({
+    ...await updates.state(request.query?.force === '1'),
     history: operations.updateHistory(),
   }));
 
