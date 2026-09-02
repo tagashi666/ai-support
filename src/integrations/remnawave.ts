@@ -22,6 +22,11 @@ export interface NodeState {
   disabled: boolean;
   usersOnline?: number;
   trafficUsedBytes?: number;
+  /** Источник нужен только операторской панели при нескольких Remnawave. */
+  sourceId?: string;
+  sourceName?: string;
+  /** Уникальный ключ псевдонима: одинаковые rawName могут быть в разных панелях. */
+  aliasKey?: string;
 }
 
 /**
@@ -144,6 +149,7 @@ export class RemnawaveClient {
   constructor(
     private readonly baseUrl = config.remnawave.url,
     private readonly token = config.remnawave.token,
+    private readonly readOnly = config.remnawave.readOnly,
   ) {}
 
   capabilities(): Capabilities {
@@ -238,7 +244,7 @@ export class RemnawaveClient {
    * перевыпустить подписку: отказ происходит до сетевого вызова.
    */
   private assertWritable(action: string): void {
-    if (config.remnawave.readOnly) {
+    if (this.readOnly) {
       throw new Error(`Действие «${action}» запрещено: REMNAWAVE_READONLY=true`);
     }
   }

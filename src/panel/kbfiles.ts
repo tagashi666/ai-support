@@ -1,6 +1,10 @@
-import { readdir, readFile, stat, unlink, writeFile, mkdir } from 'node:fs/promises';
-import { basename, join, resolve } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { constants } from 'node:fs';
+import { readdir, open, unlink, writeFile, mkdir, rename } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
 import { config } from '../config.js';
+
+const MAX_DOC_BYTES = 1_048_576;
 
 /**
  * Работа с файлами базы знаний из панели.
@@ -39,6 +43,36 @@ function titleOf(text: string): string {
   return line ? line.replace(/^#\s+/, '').trim() : '';
 }
 
+async function readRegularFile(path: string): Promise<{ text: string; size: number; mtimeMs: number }> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const info = await handle.stat();
+    if (!info.isFile()) throw new Error('Документ должен быть обычным файлом');
+    if (info.size > MAX_DOC_BYTES) throw new Error('Документ слишком большой');
+    const body = await handle.readFile();
+    // Файл мог вырасти между stat() и readFile(). Повторно проверяем
+    // уже фактически считанный объём, чтобы гонка записи не
+    // превращала документ в неограниченное выделение памяти.
+    if (body.byteLength > MAX_DOC_BYTES) throw new Error('Документ слишком большой');
+    return { text: body.toString('utf8'), size: body.byteLength, mtimeMs: info.mtimeMs };
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
+async function atomicWrite(path: string, text: string): Promise<void> {
+  if (Buffer.byteLength(text, 'utf8') > MAX_DOC_BYTES) throw new Error('Документ слишком большой');
+  const dir = dirname(path);
+  const temporary = join(dir, `.kb-${process.pid}-${randomBytes(12).toString('hex')}.tmp`);
+  try {
+    await writeFile(temporary, text, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    await rename(temporary, path);
+  } catch (err) {
+    await unlink(temporary).catch(() => undefined);
+    throw err;
+  }
+}
+
 export async function listDocs(area: Area): Promise<Doc[]> {
   let names: string[];
   try {
@@ -55,12 +89,12 @@ export async function listDocs(area: Area): Promise<Doc[]> {
     names.map(async (name): Promise<Doc | null> => {
       try {
         const full = safePath(area, name);
-        const [text, info] = await Promise.all([readFile(full, 'utf8'), stat(full)]);
+        const { text, size, mtimeMs } = await readRegularFile(full);
         return {
           name,
           title: titleOf(text) || name.replace(/\.md$/i, ''),
-          size: text.length,
-          updatedAt: info.mtimeMs,
+          size,
+          updatedAt: mtimeMs,
         };
       } catch {
         return null;
@@ -70,13 +104,13 @@ export async function listDocs(area: Area): Promise<Doc[]> {
   return docs.filter((d): d is Doc => d !== null).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-export function readDoc(area: Area, name: string): Promise<string> {
-  return readFile(safePath(area, name), 'utf8');
+export async function readDoc(area: Area, name: string): Promise<string> {
+  return (await readRegularFile(safePath(area, name))).text;
 }
 
 export async function writeDoc(area: Area, name: string, text: string): Promise<void> {
   await mkdir(dirFor(area), { recursive: true });
-  await writeFile(safePath(area, name), text, 'utf8');
+  await atomicWrite(safePath(area, name), text);
 }
 
 export function removeDoc(area: Area, name: string): Promise<void> {
@@ -93,9 +127,9 @@ export function removeDoc(area: Area, name: string): Promise<void> {
 export async function publishDraft(name: string): Promise<void> {
   const from = safePath('draft', name);
   const to = safePath('kb', name);
-  const text = await readFile(from, 'utf8');
+  const text = (await readRegularFile(from)).text;
   await mkdir(config.kbDir, { recursive: true });
-  await writeFile(to, text, 'utf8');
+  await atomicWrite(to, text);
   await unlink(from);
 }
 
@@ -112,8 +146,8 @@ export async function checkWritable(): Promise<{ area: Area; dir: string; error:
     const dir = dirFor(area);
     try {
       await mkdir(dir, { recursive: true });
-      const probe = join(dir, `.write-test-${process.pid}`);
-      await writeFile(probe, 'ok', 'utf8');
+      const probe = join(dir, `.write-test-${process.pid}-${randomBytes(8).toString('hex')}`);
+      await writeFile(probe, 'ok', { encoding: 'utf8', flag: 'wx', mode: 0o600 });
       await unlink(probe);
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code;

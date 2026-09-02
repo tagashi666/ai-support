@@ -57,15 +57,56 @@ export function extractJson(raw: string): string | undefined {
   return undefined;
 }
 
-export class RateLimitedError extends Error {
+export class FallbackEligibleError extends Error {}
+
+export class RateLimitedError extends FallbackEligibleError {
   constructor(detail: string) {
     super(`Лимит провайдера исчерпан: ${detail}`);
     this.name = 'RateLimitedError';
   }
 }
 
+export class ModelUnavailableError extends FallbackEligibleError {
+  constructor(detail: string) {
+    super(`Модель недоступна: ${detail}`);
+    this.name = 'ModelUnavailableError';
+  }
+}
+
+export class ProviderUnavailableError extends FallbackEligibleError {
+  constructor(detail: string) {
+    super(`Провайдер временно недоступен: ${detail}`);
+    this.name = 'ProviderUnavailableError';
+  }
+}
+
+/** Groq возвращает снятую модель как 400 с кодом в JSON, не как 404. */
+function modelUnavailable(status: number, body: string): boolean {
+  if ([404, 410].includes(status)) return true;
+  if (![400, 422].includes(status)) return false;
+  return /model[_ -]?(?:decommissioned|not[_ -]?found|unavailable|retired)|(?:model|модел\S*)[^\n]{0,100}(?:decommission|does not exist|not found|unsupported|unavailable|retired|снят|недоступ)/i.test(body);
+}
+
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const backoffMs = (attempt: number): number => Math.min(2000 * 2 ** attempt, 30_000);
+
+export function hasImageInput(messages: ChatMessage[]): boolean {
+  return messages.some((message) => Array.isArray(message.content)
+    && message.content.some((part) => part.type === 'image_url'));
+}
+
+export function supportsVision(model: string): boolean {
+  return config.ai.visionModels.includes(model.trim());
+}
+
+/** Groq-модели принимают разные значения reasoning_effort. */
+export function reasoningEffortFor(model: string): string | undefined {
+  const configured = config.ai.reasoningEffort;
+  if (!configured) return undefined;
+  if (model === 'qwen/qwen3.8-27b') return configured;
+  if (model.startsWith('openai/gpt-oss-')) return configured === 'none' ? 'low' : configured;
+  return undefined;
+}
 
 export interface AiDraft {
   reply: string;
@@ -164,16 +205,36 @@ export class AiProvider {
    * поэтому ждём столько, сколько просит Retry-After, и пробуем снова.
    */
   async complete(messages: ChatMessage[], retries = 3, maxTokens = config.ai.maxTokens): Promise<string> {
+    const primary = this.model;
+    const backup = this.fallbackModel;
+    const needsVision = hasImageInput(messages);
+
+    // Позволяет безопасно сделать текстовую модель основной вручную:
+    // изображение сразу уйдёт на vision-резерв, если он настроен.
+    if (needsVision && !supportsVision(primary)) {
+      if (!backup || backup === primary || !supportsVision(backup)) {
+        throw new Error(`Ни одна настроенная модель не умеет обрабатывать изображения: ${primary}`);
+      }
+      const answer = await this.request(messages, backup, retries, maxTokens);
+      this.lastModel = backup;
+      return answer;
+    }
+
     try {
-      const answer = await this.request(messages, this.model, retries, maxTokens);
-      this.lastModel = this.model;
+      const answer = await this.request(messages, primary, retries, maxTokens);
+      this.lastModel = primary;
       return answer;
     } catch (err) {
-      // Дневной лимит модели исчерпан — у запасной он свой собственный.
-      if (!this.fallbackModel || !(err instanceof RateLimitedError)) throw err;
-      log.warn(`Модель ${this.model} упёрлась в лимит, пробую ${this.fallbackModel}`);
-      const answer = await this.request(messages, this.fallbackModel, 1, maxTokens);
-      this.lastModel = this.fallbackModel;
+      // Запасная страхует лимит, снятие модели и временный сбой провайдера.
+      // Ошибки ключа и некорректный запрос не маскируем второй попыткой.
+      if (!backup || backup === primary || !(err instanceof FallbackEligibleError)) throw err;
+      if (needsVision && !supportsVision(backup)) {
+        log.warn(`Не отправляю изображение в текстовую запасную модель ${backup}`);
+        throw err;
+      }
+      log.warn(`Основная модель ${primary} недоступна, пробую ${backup}: ${(err as Error).message}`);
+      const answer = await this.request(messages, backup, 1, maxTokens);
+      this.lastModel = backup;
       return answer;
     }
   }
@@ -193,6 +254,7 @@ export class AiProvider {
     for (let attempt = 0; attempt <= budget; attempt += 1) {
       let response: Response;
       try {
+        const reasoningEffort = reasoningEffortFor(model);
         response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
           method: 'POST',
           headers: { 'content-type': 'application/json', authorization: `Bearer ${this.keys[this.keyIndex]}` },
@@ -202,7 +264,7 @@ export class AiProvider {
             temperature: config.ai.temperature,
             max_tokens: maxTokens,
             response_format: { type: 'json_object' },
-            ...(config.ai.reasoningEffort ? { reasoning_effort: config.ai.reasoningEffort } : {}),
+            ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           }),
           signal: AbortSignal.timeout(config.ai.timeoutMs),
         });
@@ -216,7 +278,7 @@ export class AiProvider {
       if (response.ok) {
         const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
         const content = body.choices?.[0]?.message?.content;
-        if (!content) throw new Error('AI вернул пустой ответ');
+        if (!content) throw new ProviderUnavailableError('AI вернул пустой ответ');
         return content;
       }
 
@@ -234,6 +296,8 @@ export class AiProvider {
         rateLimited = true;
         // Пока есть живой запасной ключ, сменить его быстрее, чем ждать окна.
         if (this.keys.length > 1 && this.rotateKey('упёрся в лимит')) continue;
+      } else if (modelUnavailable(response.status, text)) {
+        throw new ModelUnavailableError(lastError);
       } else if (response.status < 500) {
         // Прочие 4xx повторять бессмысленно: неверная модель, лимит токенов.
         throw new Error(`AI ответил ${lastError}`);
@@ -250,7 +314,7 @@ export class AiProvider {
     }
 
     if (rateLimited) throw new RateLimitedError(lastError);
-    throw new Error(`AI ответил ${lastError}`);
+    throw new ProviderUnavailableError(lastError);
   }
 
   /** Расшифровка голосового. Совместимо с /audio/transcriptions у OpenAI и Groq. */

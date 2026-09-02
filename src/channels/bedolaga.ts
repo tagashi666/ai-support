@@ -13,8 +13,17 @@ import { readLimitedBody } from '../core/http.js';
 
 const PAGE_LIMIT = 200;
 const MAX_PAGES = 50;
-/** Ответ клиента возвращает тикет в open из бота и в pending из кабинета. */
-const ACTIVE_STATUSES = ['open', 'pending'] as const;
+/** Все состояния, в которых тикет ещё не закрыт. */
+const ACTIVE_STATUSES = ['open', 'answered', 'pending'] as const;
+const MEDIA_REPAIR_STATE = 'bedolaga:media_repair:rc6-outbound';
+export type BedolagaTicketStatus = 'open' | 'answered' | 'closed' | 'pending';
+
+export function localStatusForTicket(status: unknown): 'open' | 'pending' | 'resolved' | undefined {
+  if (status === 'open') return 'open';
+  if (status === 'answered' || status === 'pending') return 'pending';
+  if (status === 'closed') return 'resolved';
+  return undefined;
+}
 
 export interface BedolagaTicket {
   id: number;
@@ -34,7 +43,23 @@ export interface BedolagaMessage {
   user_id?: number;
   has_media?: boolean;
   media_type?: string;
+  media_file_id?: string | number;
   [key: string]: unknown;
+}
+
+function mediaFileId(value: unknown): string | undefined {
+  if (typeof value === 'string') return value.trim() || undefined;
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return undefined;
+}
+
+/** Локальный external_id включает источник, API Bedolaga ждёт только номер. */
+export function ticketIdOf(conversation: Conversation): number {
+  const ticketId = Number(conversation.remote_external_id ?? conversation.external_id);
+  if (!Number.isSafeInteger(ticketId) || ticketId <= 0) {
+    throw new Error('У диалога нет корректного ID тикета Bedolaga');
+  }
+  return ticketId;
 }
 
 /** Поля времени в разных ручках названы по-разному — берём первое похожее. */
@@ -95,7 +120,7 @@ export class BedolagaClient {
     return (await response.json()) as T;
   }
 
-  /** Тикеты, ждущие ответа. Листаем оба живых статуса до исчерпания. */
+  /** Все незакрытые тикеты. Листаем каждый живой статус до исчерпания. */
   async activeTickets(): Promise<BedolagaTicket[]> {
     const seen = new Map<number, BedolagaTicket>();
     for (const status of ACTIVE_STATUSES) {
@@ -162,6 +187,16 @@ export class BedolagaClient {
       body: JSON.stringify({ priority }),
     });
     if (!response.ok) throw new Error(`POST /tickets/${ticketId}/priority → HTTP ${response.status}`);
+  }
+
+  /** Меняет состояние исходного тикета, а не только локальной карточки. */
+  async setStatus(ticketId: number, status: BedolagaTicketStatus): Promise<void> {
+    const response = await this.request(`/tickets/${ticketId}/status`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) throw new Error(`POST /tickets/${ticketId}/status → HTTP ${response.status}`);
   }
 
   async messageMedia(ticketId: number, messageId: number): Promise<Record<string, unknown> | null> {
@@ -233,7 +268,7 @@ export class BedolagaSender implements ChannelSender {
   constructor(private readonly client: BedolagaClient) {}
 
   async send(conversation: Conversation, payload: SendPayload): Promise<SendResult> {
-    const externalMsgId = await this.client.reply(Number(conversation.external_id), payload.text);
+    const externalMsgId = await this.client.reply(ticketIdOf(conversation), payload.text);
     return { externalMsgId };
   }
 }
@@ -241,6 +276,7 @@ export class BedolagaSender implements ChannelSender {
 export class BedolagaPoller {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
+  private mediaRepairFinished = false;
 
   constructor(
     private readonly client: BedolagaClient,
@@ -271,6 +307,9 @@ export class BedolagaPoller {
           log.error(`Тикет ${summary.id}: не удалось обработать`, err);
         }
       }
+      const checkedIds = new Set(tickets.map((ticket) => ticket.id));
+      await this.syncMissingActiveTickets(checkedIds);
+      await this.repairKnownTickets(checkedIds);
       this.store.setState('bedolaga:last_poll', String(Date.now()));
     } catch (err) {
       log.error('Опрос бедолаги не удался', err);
@@ -280,15 +319,80 @@ export class BedolagaPoller {
     return ingested;
   }
 
-  private async ingestTicket(summary: BedolagaTicket): Promise<number> {
+  /**
+   * Закрытые тикеты не входят в activeTickets. Поэтому каждый локально ещё
+   * активный тикет, пропавший из живых списков, проверяем точечной ручкой.
+   * Если его закрыли в Bedolaga, карточка сразу станет resolved; если тикет
+   * снова откроют, он опять попадёт в обычный active poll.
+   */
+  private async syncMissingActiveTickets(checkedIds: Set<number>): Promise<void> {
+    for (const conversation of this.store.listConversationsByChannel('bedolaga')) {
+      if (conversation.status === 'closed' || conversation.status === 'resolved') continue;
+      let ticketId: number;
+      try {
+        ticketId = ticketIdOf(conversation);
+      } catch (err) {
+        log.warn(`Диалог ${conversation.id}: синхронизация статуса Bedolaga пропущена`, err);
+        continue;
+      }
+      if (checkedIds.has(ticketId)) continue;
+      try {
+        const ticket = await this.client.ticket(ticketId);
+        checkedIds.add(ticketId);
+        await this.ingestTicket(ticket, true);
+      } catch (err) {
+        log.warn(`Диалог ${conversation.id}: не удалось обновить статус Bedolaga`, err);
+      }
+    }
+  }
+
+  private async repairKnownTickets(activeIds: Set<number>): Promise<void> {
+    if (this.mediaRepairFinished) return;
+    if (this.store.getState(MEDIA_REPAIR_STATE)) {
+      this.mediaRepairFinished = true;
+      return;
+    }
+
+    let failed = 0;
+    let checked = 0;
+    for (const conversation of this.store.listConversationsByChannel('bedolaga')) {
+      let ticketId: number;
+      try {
+        ticketId = ticketIdOf(conversation);
+      } catch (err) {
+        failed += 1;
+        log.warn(`Диалог ${conversation.id}: repair Bedolaga пропущен`, err);
+        continue;
+      }
+      // Живые тикеты уже обработаны выше тем же проходом.
+      if (activeIds.has(ticketId)) continue;
+      try {
+        const ticket = await this.client.ticket(ticketId);
+        activeIds.add(ticketId);
+        await this.ingestTicket(ticket, true);
+        checked += 1;
+      } catch (err) {
+        failed += 1;
+        log.warn(`Диалог ${conversation.id}: не удалось восстановить медиа Bedolaga`, err);
+      }
+    }
+
+    if (failed === 0) {
+      this.store.setState(MEDIA_REPAIR_STATE, String(Date.now()));
+      this.mediaRepairFinished = true;
+      if (checked > 0) log.info(`Bedolaga: проверено архивных тикетов для восстановления медиа: ${checked}`);
+    }
+  }
+
+  private async ingestTicket(summary: BedolagaTicket, forceBackfill = false): Promise<number> {
     const ticket = summary.messages?.length ? summary : await this.client.ticket(summary.id);
     const externalId = String(ticket.id);
 
-    let conversation = this.store.findConversation('bedolaga', externalId);
+    let conversation = this.store.findConversation('bedolaga', externalId, 'bedolaga-default');
     // Первая встреча с тикетом — вся его переписка это история, а не новые
     // события. Без этой отметки AI ответил бы на каждое сообщение архива,
     // а SLA прислал бы уведомление по каждому старому тикету.
-    const backfill = !conversation;
+    const backfill = forceBackfill || !conversation;
     if (!conversation) {
       conversation = this.store.upsertConversation({
         channel: 'bedolaga',
@@ -315,17 +419,28 @@ export class BedolagaPoller {
     for (const message of ticket.messages ?? []) {
       const at = parseTimestamp(message);
       const text = message.message_text ?? '';
+      const fileId = await this.resolveMediaFileId(ticket.id, message);
 
       if (message.is_from_admin) {
         const recorded = this.store.recordOutbound({
           conversationId: conversation.id,
           author: 'agent',
           text,
+          mediaType: message.media_type,
+          mediaFileId: fileId,
           externalMsgId: String(message.id),
           sentAt: at,
           dedupe: true,
+          backfill,
         });
-        if (recorded) ingested += 1;
+        if (recorded) {
+          ingested += 1;
+        } else if (fileId) {
+          // Как и у входящих, старое сообщение могло быть записано до того,
+          // как импорт научился сохранять вложения исходящих сообщений.
+          const existing = this.store.findMessageByExternalId(conversation.id, String(message.id), 'out');
+          if (existing) this.store.addAttachment(existing.id, message.media_type, `bedolaga:${fileId}`);
+        }
         continue;
       }
 
@@ -335,23 +450,34 @@ export class BedolagaPoller {
         subject: ticket.title,
         text,
         mediaType: message.media_type,
+        mediaFileId: fileId,
         externalMsgId: String(message.id),
         sentAt: at,
         backfill,
       });
-      if (!recorded) continue;
-      ingested += 1;
-
-      // У бедолаги идентификатор файла лежит в отдельной ручке, поэтому
-      // вложение регистрируется здесь, а не внутри recordInbound.
-      if (message.has_media) {
-        const media = await this.client.messageMedia(ticket.id, message.id);
-        const fileId = media?.['file_id'] ?? media?.['id'];
-        if (typeof fileId === 'string') {
-          this.store.addAttachment(recorded.message.id, message.media_type, `bedolaga:${fileId}`);
+      if (!recorded) {
+        // Старые версии записывали сообщение до вложения. При повторном
+        // опросе INSERT уже дедуплицируется, поэтому отдельно ремонтируем
+        // ранее сохранённую картинку вместо того, чтобы терять её навсегда.
+        const existing = fileId
+          ? this.store.findMessageByExternalId(conversation.id, String(message.id), 'in')
+          : undefined;
+        if (existing && fileId) {
+          this.store.addAttachment(existing.id, message.media_type, `bedolaga:${fileId}`);
         }
+        continue;
       }
+      ingested += 1;
     }
+    const localStatus = localStatusForTicket(ticket.status);
+    if (localStatus) this.store.setStatus(conversation.id, localStatus);
     return ingested;
+  }
+
+  private async resolveMediaFileId(ticketId: number, message: BedolagaMessage): Promise<string | undefined> {
+    const direct = mediaFileId(message.media_file_id);
+    if (direct || !message.has_media) return direct;
+    const media = await this.client.messageMedia(ticketId, message.id);
+    return mediaFileId(media?.['media_file_id'] ?? media?.['file_id'] ?? media?.['id']);
   }
 }

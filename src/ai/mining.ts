@@ -55,6 +55,8 @@ export interface MiningOptions {
   all?: boolean;
   exchanges?: RawExchange[];
   dryRun?: boolean;
+  /** Точный набор диалогов — для обучения после закрытия одного обращения. */
+  conversationIds?: number[];
 }
 
 export interface MiningReport {
@@ -183,8 +185,10 @@ export async function fromArchive(status: string, limit: number, progress: Progr
   return exchanges;
 }
 
-export function fromPanel(store: Store, all: boolean, limit: number): RawExchange[] {
-  const ids = all ? store.answeredConversations(limit) : store.gapConversations(limit);
+export function fromPanel(store: Store, all: boolean, limit: number, conversationIds?: number[]): RawExchange[] {
+  const ids = conversationIds?.length
+    ? conversationIds.slice(0, limit)
+    : all ? store.answeredConversations(limit) : store.gapConversations(limit);
   return store.exchanges(ids).map((item) => ({
     source: 'panel',
     reference: `диалог ${item.conversationId}`,
@@ -207,7 +211,7 @@ export async function runMining(
       ? await fromArchive(options.status ?? 'closed', limit, progress)
       : options.source === 'export'
         ? (options.exchanges ?? [])
-        : fromPanel(store, options.all === true, limit);
+        : fromPanel(store, options.all === true, limit, options.conversationIds);
 
   if (!raw.length) {
     return { pairs: 0, topics: [], skipped: 0, requests: 0, estimatedTokens: 0, articles: [], dryRun: !!options.dryRun };

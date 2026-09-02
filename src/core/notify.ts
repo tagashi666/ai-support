@@ -122,7 +122,9 @@ export class Notifier {
       if (Date.now() - last < throttle) return false;
     }
 
-    const channel = conversation.channel === 'tg_dm' ? 'личка' : 'тикет';
+    const channel = conversation.channel === 'tg_dm'
+      ? 'личка Business'
+      : conversation.channel === 'tg_bot' ? 'личка бота' : 'тикет';
     const lines = [
       `<b>${TITLES[kind]}</b>`,
       `${escapeHtml(this.who(conversation))} · ${channel}${details.tone ? ` · ${details.tone}` : ''}`,

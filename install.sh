@@ -19,8 +19,7 @@ if [[ ! -f .env ]]; then
   # Только ASCII: заголовок Authorization — ByteString, кириллица его ломает.
   sed -i "s|^PANEL_TOKEN=.*|PANEL_TOKEN=${token}|" .env
   printf '\n\033[1;33mТокен панели:\033[0m %s\n' "$token"
-  printf 'Он уже записан в .env. Впиши туда BOT_TOKEN и AI_API_KEY, затем запусти скрипт снова.\n\n'
-  exit 0
+  printf 'Он уже записан в .env. Панель может стартовать без Telegram, Bedolaga и AI.\n\n'
 fi
 
 # В файле лежат токены всех интеграций. Даже при permissive umask он должен
@@ -65,10 +64,13 @@ if (( ${#missing[@]} > 0 )); then
 fi
 
 BOT_TOKEN_VALUE="$(env_value BOT_TOKEN)"
-[[ -n "$BOT_TOKEN_VALUE" ]] || die "В .env пусто значение BOT_TOKEN"
-[[ "$BOT_TOKEN_VALUE" == 123456:AA* ]] && die "BOT_TOKEN остался плейсхолдером из шаблона — вставь настоящий из @BotFather"
-[[ "$BOT_TOKEN_VALUE" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]] \
-  || die "BOT_TOKEN не похож на токен Telegram (найдено: $(mask "$BOT_TOKEN_VALUE")). Формат: 1234567890:AA..."
+if [[ -n "$BOT_TOKEN_VALUE" ]]; then
+  [[ "$BOT_TOKEN_VALUE" == 123456:AA* ]] && die "BOT_TOKEN остался плейсхолдером из шаблона — вставь настоящий из @BotFather"
+  [[ "$BOT_TOKEN_VALUE" =~ ^[0-9]+:[A-Za-z0-9_-]{30,}$ ]] \
+    || die "BOT_TOKEN не похож на токен Telegram (найдено: $(mask "$BOT_TOKEN_VALUE")). Формат: 1234567890:AA..."
+else
+  warn "BOT_TOKEN пуст — оба Telegram-канала отключены, панель продолжит работать"
+fi
 
 PANEL_TOKEN_VALUE="$(env_value PANEL_TOKEN)"
 [[ -n "$PANEL_TOKEN_VALUE" ]] || die "В .env пусто значение PANEL_TOKEN. Сгенерируй: openssl rand -hex 32"
@@ -93,7 +95,7 @@ if [[ "$(env_value BEDOLAGA_ENABLED)" == "true" ]]; then
 fi
 
 say "Конфигурация проверена"
-printf '    бот      %s\n' "$(mask "$BOT_TOKEN_VALUE")"
+printf '    бот      %s\n' "$([[ -n "$BOT_TOKEN_VALUE" ]] && mask "$BOT_TOKEN_VALUE" || printf 'отключён')"
 printf '    панель   %s\n' "$(mask "$PANEL_TOKEN_VALUE")"
 printf '    AI       %s\n' "${AI_MODE_VALUE:-suggest}"
 
@@ -134,6 +136,14 @@ docker compose run --rm ai-support node dist/cli/selfcheck.js || die "Прове
 
 say "Запускаю"
 docker compose up -d
+
+if [[ "${EUID:-$(id -u)}" == 0 ]]; then
+  say "Включаю безопасное обновление по кнопке"
+  bash scripts/install-host-updater.sh "$PWD" \
+    || die "Не удалось установить host-updater — обновление по кнопке не будет работать"
+else
+  warn "Для обновления по кнопке один раз выполни от root: sudo bash scripts/install-host-updater.sh '$PWD'"
+fi
 
 say "Готово"
 docker compose ps

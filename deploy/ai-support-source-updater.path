@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for AI Support source configuration requests
+
+[Path]
+PathExists=@PROJECT_ROOT@/data/source-request.json
+Unit=ai-support-source-updater.service
+
+[Install]
+WantedBy=multi-user.target

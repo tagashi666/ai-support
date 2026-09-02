@@ -1,6 +1,6 @@
 {
   "name": "ai-support",
-  "version": "1.16.0",
+  "version": "2.0.0-rc.7",
   "description": "Self-hosted Telegram support inbox with AI-assisted replies, knowledge base and operator dashboard",
   "private": true,
   "license": "MIT",
@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/smoke.ts",
     "selfcheck": "tsx src/cli/selfcheck.ts",
-    "test": "node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/sectest.ts",
+    "test": "node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/baretest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/sectest.ts",
     "kb:mine": "tsx src/cli/kbmine.ts",
     "rwprobe": "tsx src/cli/rwprobe.ts",
     "pack": "bash scripts/pack.sh",

@@ -32,6 +32,17 @@ export class NoSenderError extends Error {
 }
 
 /**
+ * Оператор уже открыл диалог или начал отвечать. Это штатная отмена AI,
+ * а не ошибка канала: модель не должна выигрывать гонку у человека.
+ */
+export class OperatorActiveError extends Error {
+  constructor() {
+    super('Диалог уже взят оператором — отправка AI отменена');
+    this.name = 'OperatorActiveError';
+  }
+}
+
+/**
  * Единственная точка выхода наружу. Панель, AI и автоматика ходят только сюда
  * и никогда не дёргают Telegram или API бедолаги напрямую — иначе появятся
  * пути отправки в обход окна 24 часов и без записи в историю.
@@ -61,6 +72,17 @@ export class Outbox {
 
     const sender = this.senders.get(conversation.channel);
     if (!sender) throw new NoSenderError(conversation.channel);
+
+    // Последний общий рубеж непосредственно перед внешним API. Responder
+    // тоже проверяет эту метку до и после генерации, но только Outbox может
+    // гарантировать правило для всех AI-путей: автоответа, handoff и reminder.
+    if (author === 'ai' && this.store.operatorIsActive(conversationId)) {
+      throw new OperatorActiveError();
+    }
+
+    // Захватываем диалог ДО сетевого запроса. Пока Telegram или Bedolaga
+    // отвечает, Responder уже видит человека и не отправит конкурентный ответ.
+    if (author === 'agent') this.store.markOperatorActive(conversationId);
 
     const result = await sender.send(conversation, {
       text,

@@ -4,7 +4,7 @@ import { replyWindow, type Conversation, type Store } from '../core/store.js';
 import type { AiDraft } from './provider.js';
 
 export interface GateDecision {
-  action: 'auto' | 'suggest' | 'skip';
+  action: 'auto' | 'shadow' | 'suggest' | 'skip';
   reason: string;
 }
 
@@ -28,7 +28,7 @@ export function isSensitive(text: string): boolean {
   return SENSITIVE.some((pattern) => pattern.test(text)) || WANTS_HUMAN.test(text);
 }
 
-export function resolveMode(conversation: Conversation): 'off' | 'suggest' | 'auto' {
+export function resolveMode(conversation: Conversation): 'off' | 'shadow' | 'suggest' | 'auto' {
   // 'off' в настройках — рубильник: гасит AI везде, что бы ни стояло в диалоге.
   // Это единственный способ остановить всё разом, и он должен быть надёжным.
   if (runtime.aiMode === 'off') return 'off';
@@ -37,7 +37,7 @@ export function resolveMode(conversation: Conversation): 'off' | 'suggest' | 'au
   // выставленный режим диалога сильнее: иначе переключатель в карточке
   // молча ничего не делает, а это хуже, чем его отсутствие.
   const own = conversation.ai_mode;
-  if (own === 'off' || own === 'suggest' || own === 'auto') return own;
+  if (own === 'off' || own === 'shadow' || own === 'suggest' || own === 'auto') return own;
   return runtime.aiMode;
 }
 
@@ -53,6 +53,7 @@ export function decide(
   kbHits = 1,
 ): GateDecision {
   const mode = resolveMode(conversation);
+  if (mode === 'shadow') return { action: 'shadow', reason: 'теневой режим: только внутренний черновик' };
   if (mode !== 'auto') return { action: 'suggest', reason: `режим ${mode}` };
 
   // Главный предохранитель против выдумок: если база знаний по вопросу

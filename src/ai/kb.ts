@@ -1,8 +1,29 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { open, readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { config, log } from '../config.js';
 import type { Store } from '../core/store.js';
 import type { BedolagaClient } from '../channels/bedolaga.js';
+
+const MAX_KB_FILE_BYTES = 1_048_576;
+
+/** Не индексирует устройства, каталоги, симлинки и чрезмерно большие файлы. */
+async function readKnowledgeFile(path: string): Promise<string> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size > MAX_KB_FILE_BYTES) {
+      throw new Error('Недопустимый файл базы знаний');
+    }
+    const bytes = await handle.readFile();
+    if (bytes.byteLength > MAX_KB_FILE_BYTES) {
+      throw new Error('Слишком большой файл базы знаний');
+    }
+    return bytes.toString('utf8');
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
 
 /** Первый заголовок markdown — название документа, остальное тело. */
 function splitMarkdown(name: string, raw: string): { title: string; body: string } {
@@ -41,9 +62,13 @@ export async function syncKbFromFiles(store: Store, dir = config.kbDir): Promise
 
   const docs = [];
   for (const name of names) {
-    const raw = await readFile(join(dir, name), 'utf8');
-    const { title, body } = splitMarkdown(name, raw);
-    if (body) docs.push({ extId: name, title, body });
+    try {
+      const raw = await readKnowledgeFile(join(dir, name));
+      const { title, body } = splitMarkdown(name, raw);
+      if (body) docs.push({ extId: name, title, body });
+    } catch {
+      log.warn(`Небезопасный файл базы знаний пропущен: ${name}`);
+    }
   }
   store.syncKb('files', docs);
   return docs.length;

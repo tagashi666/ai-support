@@ -520,6 +520,33 @@ tr:last-child td { border-bottom:0; }
 .log { font:400 11px/1.7 var(--mono); color:var(--fg-2); background:var(--bg-2);
   border:1px solid var(--line); border-radius:var(--r-ctl); padding:var(--sp-3);
   max-height:200px; overflow-y:auto; white-space:pre-wrap; }
+.ops-head { display:flex; align-items:center; justify-content:space-between; gap:var(--sp-3); margin:var(--sp-6) 0 var(--sp-3); }
+.ops-head:first-child { margin-top:0; }
+.ops-head h2 { margin:0; font-size:16px; }
+.ops-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:var(--sp-3); }
+.ops-card { background:var(--bg-1); border:1px solid var(--line); border-radius:var(--r-card); padding:var(--sp-4); display:grid; gap:var(--sp-2); }
+.ops-card.overdue { border-color:color-mix(in srgb,var(--danger) 50%,var(--line)); }
+.ops-card header { display:flex; align-items:start; gap:var(--sp-2); }
+.ops-card header b { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ops-card .meta { display:flex; flex-wrap:wrap; gap:var(--sp-2); color:var(--fg-3); font-size:11px; }
+.badge { display:inline-flex; align-items:center; width:max-content; padding:3px 7px; border-radius:var(--r-pill); background:var(--bg-3); color:var(--fg-2); font:510 10.5px/1 var(--sans); }
+.badge.danger { background:color-mix(in srgb,var(--danger) 14%,transparent); color:var(--danger); }
+.badge.ok { background:color-mix(in srgb,var(--success) 14%,transparent); color:var(--success); }
+.ops-table { width:100%; border-collapse:collapse; font-size:12px; }
+.ops-table th,.ops-table td { padding:10px 8px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+.ops-table th { color:var(--fg-3); font-weight:510; }
+.ops-table td:last-child { text-align:right; }
+.ops-actions { display:flex; justify-content:flex-end; gap:var(--sp-2); flex-wrap:wrap; }
+.search-box { width:100%; font-size:16px; padding:12px 14px; }
+.search-results { display:grid; gap:var(--sp-4); }
+.search-result { display:flex; align-items:start; gap:var(--sp-3); padding:var(--sp-3); border:1px solid var(--line); border-radius:var(--r-ctl); cursor:pointer; }
+.search-result:hover { background:var(--tint); }
+.search-result div { min-width:0; }
+.search-result p { margin:3px 0 0; color:var(--fg-3); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.progress { height:6px; border-radius:6px; background:var(--bg-3); overflow:hidden; }
+.progress i { display:block; height:100%; background:var(--accent); }
+.profile-tags { display:flex; gap:5px; flex-wrap:wrap; }
+.mini-note { padding:var(--sp-2); border-left:2px solid var(--line-2); color:var(--fg-2); font-size:11.5px; }
 
 /* ═══ Лист ═══ */
 .backdrop { position:fixed; inset:0; z-index:50; display:grid; place-items:center; padding:var(--sp-5);
@@ -610,10 +637,16 @@ tr:last-child td { border-bottom:0; }
     <button class="nav" data-view="inbox" aria-current="true" aria-label="Инбокс">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 14h4l2 2h4l2-2h4"/></svg></span><span class="nav-label">Инбокс</span><span class="count" id="cntInbox">0</span>
     </button>
+    <button class="nav" data-view="queue" aria-label="SLA-очередь">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span class="nav-label">Очередь и SLA</span><span class="count" id="cntOverdue"></span>
+    </button>
     <button class="nav" data-view="kb" aria-label="База знаний">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span><span class="nav-label">База знаний</span><span class="count" id="cntKb">0</span>
     </button>
     <div class="side-cap">Сервис</div>
+    <button class="nav" id="globalSearch" aria-label="Глобальный поиск">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></span><span class="nav-label">Поиск</span><span class="count" id="globalShortcut">Ctrl+K</span>
+    </button>
     <button class="nav" data-view="lab" aria-label="Песочница AI">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.4 4.1L17.5 8l-4.1 1.4L12 13.5l-1.4-4.1L6.5 8l4.1-.9L12 3ZM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg></span><span class="nav-label">Песочница AI</span>
     </button>
@@ -622,6 +655,12 @@ tr:last-child td { border-bottom:0; }
     </button>
     <button class="nav" data-view="stats" aria-label="Статистика">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span><span class="nav-label">Статистика</span>
+    </button>
+    <button class="nav" data-view="team" aria-label="Команда и аудит">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 19c.7-3.6 2.7-6 6-6s5.3 2.4 6 6M15 15c2.8 0 4.5 1.4 5 4"/></svg></span><span class="nav-label">Команда</span>
+    </button>
+    <button class="nav" data-view="diagnostics" aria-label="Диагностика">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-5 4 10 2-5h5M4 4h16v16H4z"/></svg></span><span class="nav-label">Диагностика</span>
     </button>
     <button class="nav" data-view="settings" aria-label="Настройки">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span><span class="nav-label">Настройки</span>
@@ -640,11 +679,6 @@ tr:last-child td { border-bottom:0; }
           <div class="queue-head">
             <div class="queue-top">
               <div><span class="bar-kicker">Рабочая очередь</span><h2>Диалоги</h2></div>
-              <div class="seg" id="filters">
-                <button data-filter="all" aria-pressed="true">Все</button>
-                <button data-filter="waiting" aria-pressed="false">Ждут</button>
-                <button data-filter="hot" aria-pressed="false">Важные</button>
-              </div>
             </div>
             <label class="queue-search" for="listSearch">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
@@ -652,6 +686,14 @@ tr:last-child td { border-bottom:0; }
               <input type="text" id="listSearch" placeholder="Найти клиента или диалог…" autocomplete="off">
               <kbd>/</kbd>
             </label>
+            <div class="folder-bar">
+              <div class="folder-tabs" id="filters" aria-label="Папки диалогов">
+                <button data-filter="all" aria-pressed="true">Все</button>
+                <button data-filter="waiting" aria-pressed="false">Ждут</button>
+                <button data-filter="hot" aria-pressed="false">Важные</button>
+              </div>
+              <button class="folder-manage" id="manageFolders" title="Настроить папки" aria-label="Настроить папки">+</button>
+            </div>
           </div>
           <div class="scroll-y" id="list" role="listbox" aria-label="Диалоги"></div>
           <div class="grip" id="gripList" style="right:-4px"></div>
@@ -690,7 +732,7 @@ tr:last-child td { border-bottom:0; }
               <div class="field">
                 <label class="sr-only" for="input">Ответ клиенту</label>
                 <textarea id="input" rows="1" placeholder="Ответ уйдёт от имени аккаунта поддержки"></textarea>
-                <span class="ring" id="ring"><button class="send" id="send" title="Отправить (⌘↵)" aria-label="Отправить сообщение">
+                <span class="ring" id="ring"><button class="send" id="send" title="Отправить (Ctrl+Enter)" aria-label="Отправить сообщение">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/></svg>
                 </button></span>
               </div>
@@ -712,12 +754,21 @@ tr:last-child td { border-bottom:0; }
           <div class="seg" id="kbTabs">
             <button data-tab="kb" aria-pressed="true">Рабочие</button>
             <button data-tab="draft" aria-pressed="false">Черновики</button>
+            <button data-tab="learning" aria-pressed="false">На проверке</button>
           </div>
           <button class="btn" id="newDoc"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>Статья</button>
           <button class="btn primary" id="mineBtn"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 3 1.1 3.4L14.5 7l-3.4 1.1L10 11.5 8.9 8.1 5.5 7l3.4-.6L10 3ZM15 12l.7 2.3L18 15l-2.3.7L15 18l-.7-2.3L12 15l2.3-.7L15 12Z"/></svg>Собрать из чатов</button>
         </div>
       </div>
       <div class="page"><div class="page-inner"><div class="grid" id="docs"></div><div id="mineLog"></div></div></div>
+    </section>
+
+    <section class="view" id="view-queue" hidden>
+      <div class="bar"><div class="bar-title">
+        <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span>
+        <div><span class="bar-kicker">Приоритеты и сроки</span><h1>Очередь и SLA</h1></div>
+      </div><div class="right"><button class="btn" id="saveFilterBtn">Сохранить фильтр</button><button class="btn" id="queueRefresh">Обновить</button></div></div>
+      <div class="page"><div class="page-inner"><div id="savedFilters"></div><div id="slaPolicies"></div><div id="queueBody"></div></div></div>
     </section>
 
     <section class="view" id="view-lab" hidden>
@@ -774,6 +825,22 @@ tr:last-child td { border-bottom:0; }
       <div class="page"><div class="page-inner" id="stats"></div></div>
     </section>
 
+    <section class="view" id="view-team" hidden>
+      <div class="bar"><div class="bar-title">
+        <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 19c.7-3.6 2.7-6 6-6s5.3 2.4 6 6M15 15c2.8 0 4.5 1.4 5 4"/></svg></span>
+        <div><span class="bar-kicker">Доступ и история действий</span><h1>Команда</h1></div>
+      </div><div class="right"><span class="note" id="meLabel"></span><button class="btn primary" id="newOperator">Добавить оператора</button></div></div>
+      <div class="page"><div class="page-inner"><div id="operatorsBody"></div><div id="auditBody"></div></div></div>
+    </section>
+
+    <section class="view" id="view-diagnostics" hidden>
+      <div class="bar"><div class="bar-title">
+        <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h3l2-5 4 10 2-5h5M4 4h16v16H4z"/></svg></span>
+        <div><span class="bar-kicker">Самопроверка без секретов</span><h1>Диагностика</h1></div>
+      </div><div class="right"><button class="btn" id="diagRefresh">Повторить проверку</button></div></div>
+      <div class="page"><div class="page-inner" id="diagnosticsBody"></div></div>
+    </section>
+
     <section class="view" id="view-settings" hidden>
       <div class="bar">
         <div class="bar-title">
@@ -785,7 +852,9 @@ tr:last-child td { border-bottom:0; }
       <div class="page"><div class="page-inner">
         <div class="narrow">
           <section class="settings-section"><div class="section-copy"><span class="cap">Оформление</span><h2>Рабочая среда</h2><p>Выберите спокойную тему и акцент под себя.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Пять палитр нового интерфейса</span></header><div class="themes" id="themePick"></div></div><div class="appearance-panel"><header><b>Акцент</b><span>Цвет действий и выделений</span></header><div class="swatches" id="accentPick"></div></div></div></section>
+          <section class="settings-section"><div class="section-copy"><span class="cap">Инбокс</span><h2>Источники и папки</h2><p>Несколько ботов, Business-аккаунтов и панелей можно объединять в пересекающиеся папки.</p></div><div class="source-folders" id="sourceFolders"><span class="hint">Загружаю источники…</span></div></section>
           <section class="settings-section"><div class="section-copy"><span class="cap">Поведение AI</span><h2>Помощник оператора</h2><p>Как AI предлагает и отправляет ответы.</p></div><div><div class="settings-content" id="aiSettings"></div><p class="hint settings-hint">Ключи, адреса и токены живут в <span class="mono">.env</span> на сервере — из панели они не меняются.</p></div></section>
+          <section class="settings-section"><div class="section-copy"><span class="cap">Версия</span><h2>Обновление</h2><p>Проверка релизов и безопасная заявка на установку.</p></div><div class="update-panel" id="updatePanel"><span class="hint">Проверяю обновления…</span></div></section>
           <section class="settings-section"><div class="section-copy"><span class="cap">Состояние</span><h2>Интеграции</h2><p>Подключения, база и системные проверки.</p></div><div class="health-grid" id="health"></div></section>
         </div>
       </div></div>
@@ -806,11 +875,19 @@ tr:last-child td { border-bottom:0; }
         <div class="item"><span class="lbl">Статус</span>
           <select class="ctl" id="statusSel"><option value="open">Открыт</option><option value="pending">Ждёт клиента</option><option value="resolved">Решён</option></select></div>
         <div class="item"><span class="lbl">Режим AI</span>
-          <select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></div>
+          <select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="shadow">Тень (только журнал)</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></div>
         <div class="item"><span class="hint" id="aiModeNote"></span></div>
         <div class="item context-action"><button class="btn wide" id="escBtn">Пометить важным</button></div>
         <div class="item context-action"><button class="btn primary wide" id="handoffBtn">Передать человеку</button></div>
       </div>
+    </details>
+    <details class="fold" open data-fold="team">
+      <summary>Совместная работа<span class="tag" id="foldOwner"></span></summary>
+      <div class="group" id="collabCard"><div class="item"><span class="hint">Выберите диалог.</span></div></div>
+    </details>
+    <details class="fold" open data-fold="profile">
+      <summary>Единый профиль<span class="tag" id="foldProfile"></span></summary>
+      <div class="group" id="profileCard"><div class="item"><span class="hint">Выберите диалог.</span></div></div>
     </details>
     <details class="fold" open data-fold="client">
       <summary>Клиент<span class="tag" id="foldClient"></span></summary>
@@ -834,6 +911,20 @@ tr:last-child td { border-bottom:0; }
 const WINDOW_MS = 864e5, SOON_MS = 108e5;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// Подсказки соответствуют системе пользователя, сами обработчики принимают
+// оба варианта. navigator.platform оставлен fallback для старых браузеров.
+const applePlatform = /Mac|iPhone|iPad|iPod/i.test(
+  navigator.userAgentData?.platform || navigator.platform || navigator.userAgent,
+);
+function applyPlatformShortcuts() {
+  const modifier = applePlatform ? '⌘' : 'Ctrl+';
+  $('globalShortcut').textContent = `${modifier}K`;
+  $('globalSearch').setAttribute('aria-keyshortcuts', applePlatform ? 'Meta+K' : 'Control+K');
+  $('send').title = `Отправить (${modifier}${applePlatform ? '↵' : 'Enter'})`;
+  $('send').setAttribute('aria-keyshortcuts', applePlatform ? 'Meta+Enter' : 'Control+Enter');
+}
+applyPlatformShortcuts();
 
 let token = localStorage.getItem('panelToken') || '';
 
@@ -875,7 +966,25 @@ async function refreshTicket() {
 }
 
 let conversations = [], current = null, suggestion = null, filter = 'all', listQuery = '', templates = [], settings = null;
-let kbTab = 'kb', docs = { kb: [], drafts: [] }, quoting = null;
+let inboxSources = [], inboxFolders = [];
+let kbTab = 'kb', docs = { kb: [], drafts: [], candidates: [] }, quoting = null, currentActor = null;
+const canWrite = () => Boolean(currentActor && currentActor.role !== 'viewer');
+const canReview = () => currentActor?.role === 'lead' || currentActor?.role === 'admin';
+const canAdmin = () => currentActor?.role === 'admin';
+
+function applyRoleUi() {
+  const writable = canWrite();
+  const reviewer = canReview();
+  $('templates').disabled = !writable;
+  $('noteBtn').disabled = !writable;
+  $('saveFilterBtn').hidden = !writable;
+  $('newDoc').hidden = !reviewer;
+  $('mineBtn').hidden = !reviewer;
+  $('manageFolders').hidden = !canAdmin();
+  const learningTab = $('kbTabs').querySelector('[data-tab="learning"]');
+  if (learningTab) learningTab.hidden = !reviewer;
+  if (!reviewer && kbTab === 'learning') kbTab = 'kb';
+}
 
 /* ═══ оформление ═══ */
 const THEMES = [
@@ -1031,19 +1140,22 @@ for (const item of LAYOUT) {
 applyLayout();
 
 /* ═══ навигация ═══ */
-const VIEWS = ['inbox','kb','lab','nodes','stats','settings'];
+const VIEWS = ['inbox','queue','kb','lab','nodes','stats','team','diagnostics','settings'];
 function show(view) {
   for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
   for (const b of document.querySelectorAll('.nav')) b.setAttribute('aria-current', String(b.dataset.view === view));
   $('app').dataset.context = view === 'inbox' ? 'on' : 'off';
   closeInspector();
   if (view === 'kb') loadDocs();
+  if (view === 'queue') loadQueue();
   if (view === 'lab') $('labInput')?.focus();
   if (view === 'nodes') loadNodes();
   if (view === 'stats') loadStats();
+  if (view === 'team') loadTeam();
+  if (view === 'diagnostics') loadDiagnostics();
   if (view === 'settings') loadSettings();
 }
-for (const b of document.querySelectorAll('.nav')) b.onclick = () => show(b.dataset.view);
+for (const b of document.querySelectorAll('.nav[data-view]')) b.onclick = () => show(b.dataset.view);
 
 function closeInspector() {
   $('app').dataset.inspector = 'closed';
@@ -1081,8 +1193,45 @@ const closeSheet = () => {
   sheetReturn = null;
 };
 $('backdrop').onclick = (e) => { if (e.target === $('backdrop')) closeSheet(); };
+
+function openGlobalSearch() {
+  sheet('Поиск по всей поддержке', `<input class="search-box" id="globalSearchInput" placeholder="Диалог, сообщение, клиент или статья…" autocomplete="off"><div class="search-results" id="globalSearchResults"><span class="hint">Введите хотя бы два символа.</span></div>`);
+  const input = $('globalSearchInput');
+  let timer = null;
+  input.oninput = () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { $('globalSearchResults').innerHTML = '<span class="hint">Введите хотя бы два символа.</span>'; return; }
+    timer = setTimeout(() => runGlobalSearch(q), 180);
+  };
+  requestAnimationFrame(() => input.focus());
+}
+
+async function runGlobalSearch(q) {
+  const box = $('globalSearchResults');
+  if (!box) return;
+  box.innerHTML = '<span class="hint">Ищу…</span>';
+  const data = await json(`/api/search?q=${encodeURIComponent(q)}`);
+  if (!data || !box) return;
+  const rows = [
+    ...data.conversations.map((r) => ({ kind:'Диалог', id:r.id, title:r.display_name || r.username || `#${r.id}`, text:`${r.channel} · ${r.status} · ${r.subject || ''}` })),
+    ...data.messages.map((r) => ({ kind:'Сообщение', id:r.conversation_id, title:r.author || `Диалог #${r.conversation_id}`, text:r.text })),
+    ...data.customers.map((r) => ({ kind:'Клиент', title:r.display_name || r.username || `Клиент #${r.id}`, text:[r.company,r.email,r.phone].filter(Boolean).join(' · ') })),
+    ...data.knowledge.map((r) => ({ kind:'База знаний', title:r.title, text:r.excerpt, knowledge:true })),
+  ];
+  if (!rows.length) { box.innerHTML = '<span class="hint">Совпадений нет.</span>'; return; }
+  box.innerHTML = rows.slice(0, 80).map((r, i) => `<article class="search-result" data-search-index="${i}"><span class="badge">${esc(r.kind)}</span><div><b>${esc(r.title)}</b><p>${esc(r.text || '')}</p></div></article>`).join('');
+  for (const el of box.querySelectorAll('[data-search-index]')) el.onclick = async () => {
+    const row = rows[Number(el.dataset.searchIndex)];
+    closeSheet();
+    if (row.id) { show('inbox'); await open(Number(row.id)); }
+    else if (row.knowledge) show('kb');
+  };
+}
+$('globalSearch').onclick = openGlobalSearch;
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closeSheet(); closeInspector(); clearQuote(); }
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openGlobalSearch(); }
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName ?? '')) {
     e.preventDefault();
     show('inbox');
@@ -1108,17 +1257,75 @@ const fmtLeft = (ms) => { const h = Math.floor(ms/36e5), m = Math.floor(ms%36e5/
 const fmtTime = (ts) => new Date(ts).toLocaleString('ru-RU',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
 const fmtDate = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? fmtTime(t) : String(v); };
 const nameOf = (c) => c.display_name || (c.username ? '@'+c.username : (c.subject || `#${c.external_id}`));
+const channelLabel = (c) => c.source?.name || (c.channel === 'tg_dm' ? 'Telegram · Business'
+  : c.channel === 'tg_bot' ? 'Telegram · Бот'
+  : 'Тикет Bedolaga');
 const gb = (b) => b == null ? '—' : `${(b / 1073741824).toFixed(1)} ГБ`;
 const initials = (value) => value.replace(/^@/, '').trim().split(/\s+/).slice(0, 2)
   .map((part) => Array.from(part)[0] ?? '').join('').toUpperCase() || '•';
+const avatarMarkup = (c, className, unread = false, id = '') => `<span class="${className}"${id ? ` id="${id}"` : ''} aria-hidden="true">
+  <span class="avatar-initials">${esc(initials(nameOf(c)))}</span>
+  ${c.avatar_file_id ? `<img class="avatar-photo" src="/api/conversations/${Number(c.id)}/avatar?token=${encodeURIComponent(ticket)}&v=${encodeURIComponent(c.updated_at ?? c.avatar_file_id)}" alt="" width="38" height="38" loading="lazy" decoding="async" draggable="false">` : ''}
+  ${unread ? '<span class="dot"></span>' : ''}</span>`;
+
+/** Краткий сетевой сбой не должен навсегда удалять аватар из интерфейса. */
+function armAvatars(root = document) {
+  const images = root.matches?.('img.avatar-photo') ? [root] : root.querySelectorAll?.('img.avatar-photo') ?? [];
+  for (const image of images) {
+    if (image.dataset.retryArmed) continue;
+    image.dataset.retryArmed = '1';
+    image.addEventListener('load', () => { image.hidden = false; image.dataset.retry = '0'; });
+    image.addEventListener('error', () => {
+      image.hidden = true;
+      const attempt = Number(image.dataset.retry ?? 0) + 1;
+      image.dataset.retry = String(attempt);
+      if (attempt > 6) return;
+      setTimeout(() => {
+        if (!image.isConnected) return;
+        const src = new URL(image.src, location.href);
+        src.searchParams.set('retry', String(Date.now()));
+        image.hidden = false;
+        image.src = src.toString();
+      }, Math.min(5000 * attempt, 30_000));
+    });
+  }
+}
 const visible = () => {
+  const folderId = filter.startsWith('folder:') ? Number(filter.slice(7)) : 0;
+  const folder = folderId ? inboxFolders.find((item) => item.id === folderId) : null;
   const scoped = filter === 'waiting' ? conversations.filter(c => c.unread > 0 || !c.first_response_at)
-    : filter === 'hot' ? conversations.filter(c => c.escalated || c.suspicious || c.handoff_at || c.priority === 'high') : conversations;
+    : filter === 'hot' ? conversations.filter(c => c.escalated || c.suspicious || c.handoff_at || c.priority === 'high')
+    : folder ? conversations.filter((c) => (c.source_ids ?? []).some((id) => folder.source_ids.includes(id)))
+    : conversations;
   if (!listQuery) return scoped;
   const query = listQuery.toLocaleLowerCase('ru');
   return scoped.filter((c) => [nameOf(c), c.subject, c.username, c.external_id]
     .some((value) => String(value ?? '').toLocaleLowerCase('ru').includes(query)));
 };
+
+const safeColor = (value) => /^#[0-9a-f]{6}$/i.test(String(value ?? '')) ? value : '#9298ff';
+const sourceKind = (kind) => ({ telegram_bot:'Бот', telegram_business:'Business', bedolaga:'Bedolaga', remnawave:'Remnawave' }[kind] ?? kind);
+
+function renderInboxTabs() {
+  const tabs = $('filters');
+  if (filter.startsWith('folder:') && !inboxFolders.some((folder) => `folder:${folder.id}` === filter)) filter = 'all';
+  const builtins = [
+    ['all', 'Все'],
+    ['waiting', 'Ждут'],
+    ['hot', 'Важные'],
+  ];
+  tabs.innerHTML = builtins.map(([id, label]) => `<button data-filter="${id}" aria-pressed="${filter === id}">${label}</button>`).join('')
+    + inboxFolders.map((folder) => `<button data-filter="folder:${folder.id}" aria-pressed="${filter === `folder:${folder.id}`}" title="${esc(folder.source_ids.length)} источников"><i style="--folder-color:${safeColor(folder.color)}"></i>${esc(folder.name)}</button>`).join('');
+}
+
+async function loadInboxMeta() {
+  const meta = await json('/api/inbox/meta');
+  if (!meta) return;
+  inboxSources = meta.sources ?? [];
+  inboxFolders = meta.folders ?? [];
+  renderInboxTabs();
+  renderList(true);
+}
 
 /** Переключение выделения не требует пересборки списка. */
 function markSelected(id) {
@@ -1134,7 +1341,7 @@ function renderList(force = false) {
   // потоке сообщений кадр уходит на пересборку одинаковых строк. Выделение
   // в подпись не входит — оно меняется атрибутом.
   const signature = `${filter}:${listQuery}|` + items.map((c) =>
-    `${c.id}:${c.unread}:${c.last_message_at}:${c.status}:${c.priority}:${nameOf(c)}:${c.subject}:${c.escalated}${c.suspicious}${c.handoff_at ? 1 : 0}${c.ai_mode}:${c.window?.open}`).join(',');
+    `${c.id}:${c.unread}:${c.last_message_at}:${c.status}:${c.priority}:${nameOf(c)}:${c.username}:${c.avatar_file_id}:${c.subject}:${c.source?.name}:${(c.source_ids ?? []).join('.')}:${c.escalated}${c.suspicious}${c.handoff_at ? 1 : 0}${c.ai_mode}:${c.window?.open}`).join(',');
   if (!force && signature === listSignature) return;
   listSignature = signature;
 
@@ -1152,16 +1359,17 @@ function renderList(force = false) {
     row.setAttribute('aria-label', `${nameOf(c)}, ${c.unread ? `${c.unread} непрочитанных` : 'прочитано'}`);
     const closed = c.window.applies && !c.window.open;
     row.innerHTML = `
-      <div class="row-avatar">${esc(initials(nameOf(c)))}${c.unread ? '<span class="dot"></span>' : ''}</div>
+      ${avatarMarkup(c, 'row-avatar', Boolean(c.unread))}
       <div class="row-main">
-        <div class="who"><b>${esc(nameOf(c))}</b><small>${c.last_message_at ? fmtTime(c.last_message_at) : ''}</small></div>
+        <div class="who"><span class="row-person"><b>${esc(nameOf(c))}</b>${c.username && nameOf(c) !== '@'+c.username ? `<em>@${esc(c.username)}</em>` : ''}</span><small>${c.last_message_at ? fmtTime(c.last_message_at) : ''}</small></div>
         <div class="snippet">${closed ? 'Окно ответа закрыто' : esc(c.subject || c.status)}</div>
-        <div class="chips"><span class="chip channel">${c.channel === 'tg_dm' ? 'Telegram' : 'Тикет'}</span>
+        <div class="chips"><span class="chip channel">${esc(channelLabel(c))}</span>
           ${closed ? '<span class="chip hot">24 ч закрыто</span>' : ''}
           ${c.suspicious ? '<span class="chip hot">нет в базах</span>' : ''}
           ${c.escalated ? '<span class="chip hot">важно</span>' : ''}
           ${c.handoff_at ? '<span class="chip hot">у человека</span>' : ''}
-          ${c.ai_mode === 'auto' ? '<span class="chip ai">AI авто</span>' : ''}</div>
+          ${c.ai_mode === 'auto' ? '<span class="chip ai">AI авто</span>' : ''}
+          ${c.ai_mode === 'shadow' ? '<span class="chip ai">AI тень</span>' : ''}</div>
       </div>`;
     row.onclick = () => open(c.id);
     row.onkeydown = (e) => {
@@ -1175,6 +1383,7 @@ function renderList(force = false) {
     frag.append(row);
   }
   box.replaceChildren(frag);
+  armAvatars(box);
 }
 
 /** Живая сводка внизу навигации: клик ведёт к соответствующему фильтру. */
@@ -1207,6 +1416,16 @@ function renderWindow() {
   const box = $('composer');
   if (!current) { box.hidden = true; return; }
   box.hidden = false;
+  if (!canWrite()) {
+    box.dataset.window = 'closed';
+    $('ring').style.setProperty('--p', 0);
+    $('wleft').textContent = 'режим просмотра';
+    $('input').disabled = $('send').disabled = true;
+    $('input').placeholder = 'Наблюдатель не может отвечать или оставлять заметки';
+    $('send').innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>';
+    $('send').setAttribute('aria-label', 'Ответы недоступны в режиме просмотра');
+    return;
+  }
   if (!current.window.applies) {
     box.dataset.window = 'open'; $('ring').style.setProperty('--p', 100);
     $('wleft').textContent = 'без ограничения';
@@ -1264,11 +1483,19 @@ function bubble(m, attachments = {}) {
       box.style.aspectRatio = String(ratio);
 
       const img = document.createElement('img');
-      img.src = `/api/attachments/${a.id}?token=${encodeURIComponent(ticket)}`;
+      const mediaUrl = `/api/attachments/${a.id}?token=${encodeURIComponent(ticket)}`;
+      img.src = mediaUrl;
       img.alt = 'вложение'; img.loading = 'lazy'; img.decoding = 'async';
       img.onload = () => img.classList.add('ready');
-      img.onerror = () => box.replaceWith(Object.assign(document.createElement('div'),
-        { className:'mono', textContent:'[файл ещё качается]' }));
+      let attempts = 0;
+      img.onerror = () => {
+        if (++attempts <= 8 && box.isConnected) {
+          setTimeout(() => { img.src = `${mediaUrl}&retry=${Date.now()}`; }, 1500);
+          return;
+        }
+        box.replaceWith(Object.assign(document.createElement('div'),
+          { className:'mono', textContent:'[файл не удалось загрузить]' }));
+      };
       box.onclick = () => openImage(img.src);
       box.append(img);
       el.append(box);
@@ -1296,7 +1523,7 @@ function bubble(m, attachments = {}) {
 
   // Ответить можно только на сообщение клиента из лички: тикеты бедолаги
   // цитирование не поддерживают.
-  if (m.direction === 'in' && m.external_msg_id && current?.channel === 'tg_dm') {
+  if (canWrite() && m.direction === 'in' && m.external_msg_id && current?.channel?.startsWith('tg_')) {
     const act = document.createElement('button');
     act.className = 'act';
     act.textContent = '↩ ответить';
@@ -1316,11 +1543,24 @@ function openImage(src) {
   box.setAttribute('aria-label', 'Просмотр вложения');
   const full = document.createElement('img');
   full.src = src;
-  box.append(full);
-  box.onclick = () => box.remove();
-  const onKey = (e) => { if (e.key === 'Escape') { box.remove(); document.removeEventListener('keydown', onKey); } };
+  full.onclick = (event) => event.stopPropagation();
+  const closeButton = document.createElement('button');
+  closeButton.className = 'lightbox-close';
+  closeButton.type = 'button';
+  closeButton.textContent = '×';
+  closeButton.setAttribute('aria-label', 'Закрыть изображение');
+  let onKey;
+  const close = () => {
+    document.removeEventListener('keydown', onKey);
+    box.remove();
+  };
+  closeButton.onclick = (event) => { event.stopPropagation(); close(); };
+  box.append(full, closeButton);
+  box.onclick = close;
+  onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   document.body.append(box);
+  closeButton.focus();
 }
 
 /** Переход к процитированному сообщению, если оно есть в открытом треде. */
@@ -1334,6 +1574,7 @@ function jumpTo(externalId) {
 }
 
 function setQuote(m) {
+  if (!canWrite()) return;
   quoting = { id: m.external_msg_id, excerpt: (m.text ?? `[${m.media_type ?? 'вложение'}]`).slice(0, 160) };
   renderQuoting();
   $('input').focus();
@@ -1358,9 +1599,10 @@ function renderSuggestion() {
     <div class="text">${esc(suggestion.text)}</div>
     ${suggestion.reason ? `<div class="src">Модель: ${esc(suggestion.reason)}</div>` : ''}
     ${sources.length ? `<div class="src">Источники: ${esc(sources.join(' · '))}</div>` : ''}
-    <div class="acts"><button class="btn primary" id="sgSend">Отправить</button>
-      <button class="btn" id="sgEdit">Править</button><button class="btn danger" id="sgNo">Отклонить</button></div>
+    ${canWrite() ? `<div class="acts"><button class="btn primary" id="sgSend">Отправить</button>
+      <button class="btn" id="sgEdit">Править</button><button class="btn danger" id="sgNo">Отклонить</button></div>` : '<div class="hint">Предложка доступна только для просмотра.</div>'}
     <div class="gauge"><i style="width:${pct}%"></i></div></div>`;
+  if (!canWrite()) return;
   $('sgSend').onclick = () => sendText(suggestion.text, { suggestionId: suggestion.id, edited: false });
   $('sgEdit').onclick = () => { $('input').value = suggestion.text; $('input').focus(); };
   $('sgNo').onclick = async () => {
@@ -1399,18 +1641,90 @@ function renderCustomer(profile) {
         ? `<div class="item col-item"><span class="lbl">Клиент прислал ключ</span>
              <span class="mono" style="overflow-wrap:anywhere">${esc(current.sub_link.slice(0, 120))}</span></div>`
         : '')
-    + `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>`
+    + (canWrite() ? `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>` : '')
     + (profile?.found
         ? `<div class="item"><span class="hint">Источники: ${esc((profile.sources ?? []).join(', ') || '—')}</span></div>`
         : `<div class="item"><span class="hint">Клиент не найден ни в бедолаге, ни в Remnawave.</span></div>`)
     + ((profile?.trace ?? []).length
         ? `<div class="item col-item"><span class="hint">${(profile.trace).map((t) => esc(t)).join('<br>')}</span></div>` : '');
 
+  if (!canWrite()) return;
   $('refreshCust').onclick = async () => {
     $('refreshCust').disabled = true;
     const data = await mutate(`/api/conversations/${current.id}/customer/refresh`, { method:'POST' }, 'Карточка обновлена');
     $('refreshCust').disabled = false;
     if (data) renderCustomer(data.customer);
+  };
+}
+
+function renderCollaboration(value = current?.collaboration) {
+  const card = $('collabCard');
+  if (!current) { card.innerHTML = '<div class="item"><span class="hint">Выберите диалог.</span></div>'; return; }
+  const owner = value?.owner;
+  const presence = value?.presences ?? [];
+  $('foldOwner').textContent = owner?.name ?? 'свободен';
+  card.innerHTML = `<div class="item"><span class="lbl">Ответственный</span><span class="val">${esc(owner?.name ?? 'не назначен')}</span></div>
+    ${owner?.until ? `<div class="item"><span class="lbl">Lease до</span><span class="val mono">${esc(fmtTime(owner.until))}</span></div>` : ''}
+    ${presence.length ? `<div class="item col-item"><span class="lbl">Сейчас в диалоге</span>${presence.map((p) => `<span class="mini-note">${esc(p.name)} · ${p.state === 'typing' ? 'печатает' : 'смотрит'}</span>`).join('')}</div>` : ''}
+    ${canWrite() ? `<div class="item context-action"><button class="btn wide" id="claimBtn">Взять диалог</button></div>
+    <div class="item context-action"><button class="btn quiet wide" id="releaseBtn">Освободить</button></div>` : '<div class="item"><span class="hint">Режим просмотра: закрепление недоступно.</span></div>'}`;
+  if (!canWrite()) return;
+  $('claimBtn').onclick = async () => {
+    const result = await mutate(`/api/conversations/${current.id}/engage`, { method:'POST' }, 'Диалог закреплён');
+    if (result?.collaboration) { current.collaboration = result.collaboration; renderCollaboration(result.collaboration); }
+  };
+  $('releaseBtn').onclick = async () => {
+    const result = await mutate(`/api/conversations/${current.id}/release`, { method:'POST' }, 'Диалог освобождён');
+    if (result) { current.collaboration = { owner:null, presences:[] }; renderCollaboration(current.collaboration); }
+  };
+}
+
+async function loadUnifiedProfile(conversationId = current?.id) {
+  if (!conversationId) return;
+  const data = await json(`/api/conversations/${conversationId}/profile`);
+  if (!data || current?.id !== conversationId) return;
+  renderUnifiedProfile(data.profile);
+}
+
+function renderUnifiedProfile(profile) {
+  const card = $('profileCard');
+  if (!current || !profile) { card.innerHTML = '<div class="item"><span class="hint">Профиль пока пуст.</span></div>'; return; }
+  $('foldProfile').textContent = profile.company || profile.display_name || '';
+  const tags = profile.tags ?? [];
+  const notes = profile.notes ?? [];
+  const related = profile.related ?? [];
+  const rows = [['Имя', profile.display_name || '—'], ['Компания', profile.company || '—'], ['Email', profile.email || '—'], ['Телефон', profile.phone || '—']];
+  card.innerHTML = rows.map(([k,v]) => `<div class="item"><span class="lbl">${esc(k)}</span><span class="val">${esc(v)}</span></div>`).join('')
+    + `<div class="item col-item"><span class="lbl">Теги</span><div class="profile-tags">${tags.length ? tags.map((t) => `<span class="badge">${esc(t)}</span>`).join('') : '<span class="hint">нет</span>'}</div></div>`
+    + (notes.length ? `<div class="item col-item"><span class="lbl">Последние заметки</span>${notes.slice(0,4).map((n) => `<span class="mini-note">${esc(n.text)}<br><span class="hint">${esc(n.actor_key)} · ${fmtTime(n.created_at)}</span></span>`).join('')}</div>` : '')
+    + (related.length > 1 ? `<div class="item col-item"><span class="lbl">Связанные диалоги</span>${related.slice(0,8).map((r) => `<button class="btn quiet" data-related="${r.id}">${esc(channelLabel(r))} · ${esc(r.status)}</button>`).join('')}</div>` : '')
+    + (canWrite() ? `<div class="item context-action"><button class="btn wide" id="editProfile">Изменить профиль</button></div>
+       <div class="item context-action"><button class="btn wide" id="addProfileNote">Добавить заметку</button></div>` : '');
+  for (const b of card.querySelectorAll('[data-related]')) b.onclick = () => open(Number(b.dataset.related));
+  if (!canWrite()) return;
+  $('editProfile').onclick = () => {
+    sheet('Единый профиль', `<div class="frow"><label>Имя</label><input id="pfName" value="${esc(profile.display_name || '')}"></div>
+      <div class="frow"><label>Компания</label><input id="pfCompany" value="${esc(profile.company || '')}"></div>
+      <div class="frow"><label>Email</label><input id="pfEmail" value="${esc(profile.email || '')}"></div>
+      <div class="frow"><label>Телефон</label><input id="pfPhone" value="${esc(profile.phone || '')}"></div>
+      <div class="frow"><label>Теги через запятую</label><input id="pfTags" value="${esc(tags.join(', '))}"></div>`,
+      '<button class="btn" id="pfCancel">Отмена</button><button class="btn primary" id="pfSave">Сохранить</button>');
+    $('pfCancel').onclick = closeSheet;
+    $('pfSave').onclick = async () => {
+      const result = await mutate(`/api/conversations/${current.id}/profile`, { method:'PATCH', body:JSON.stringify({
+        display_name:$('pfName').value, company:$('pfCompany').value, email:$('pfEmail').value, phone:$('pfPhone').value,
+        tags:$('pfTags').value.split(',').map((x) => x.trim()).filter(Boolean),
+      }) }, 'Профиль сохранён');
+      if (result?.profile) { closeSheet(); renderUnifiedProfile(result.profile); }
+    };
+  };
+  $('addProfileNote').onclick = () => {
+    sheet('Заметка о клиенте', '<textarea id="pfNote" rows="6" placeholder="Контекст для следующего оператора"></textarea>', '<button class="btn" id="pfCancel">Отмена</button><button class="btn primary" id="pfAdd">Добавить</button>');
+    $('pfCancel').onclick = closeSheet;
+    $('pfAdd').onclick = async () => {
+      const result = await mutate(`/api/conversations/${current.id}/profile/notes`, { method:'POST', body:JSON.stringify({ text:$('pfNote').value }) }, 'Заметка добавлена');
+      if (result) { closeSheet(); loadUnifiedProfile(); }
+    };
   };
 }
 
@@ -1425,7 +1739,7 @@ function reveal(el) {
 
 async function renderSubscription() {
   const wrap = $('subWrap');
-  if (!current || !settings?.remnawave) { wrap.hidden = true; $('devicesWrap').hidden = true; return; }
+  if (!current || !settings?.remnawave || !canWrite()) { wrap.hidden = true; $('devicesWrap').hidden = true; return; }
   wrap.hidden = false;
   // Диалог, для которого грузим подписку. Запрос в Remnawave небыстрый, и при
   // быстром переключении ответ мог прийти, когда открыт уже другой диалог —
@@ -1470,8 +1784,8 @@ async function renderSubscription() {
     (rows.length ? rows.map(([k,v]) => `<div class="item"><span class="lbl">${esc(k)}</span><span class="val mono">${esc(v)}</span></div>`).join('')
       : '<div class="item"><span class="hint">Профиль не найден.</span></div>')
     + (profile?.subscriptionUrl ? `<div class="item"><button class="btn wide" id="copySub">Скопировать ссылку</button></div>` : '')
-    + `<div class="item"><button class="btn wide" id="resetDev">Сбросить все устройства</button></div>
-       <div class="item"><button class="btn wide danger" id="revoke">Перевыпустить подписку</button></div>`;
+    + (canAdmin() ? `<div class="item"><button class="btn wide" id="resetDev">Сбросить все устройства</button></div>
+       <div class="item"><button class="btn wide danger" id="revoke">Перевыпустить подписку</button></div>` : '<div class="item"><span class="hint">Сброс устройств и перевыпуск доступны только администратору.</span></div>');
   reveal($('subBody'));
 
   // Устройств бывает полтора десятка — им отдельная прокручиваемая группа,
@@ -1481,11 +1795,12 @@ async function renderSubscription() {
     $('devicesCap').textContent = `${devices.length}`;
     $('devicesBody').innerHTML = devices.map((d) => `<div class="device">
       <span class="grow">${esc(d.platform ?? '?')} · ${esc(d.model ?? d.hwid.slice(0,10))}</span>
-      <button class="btn danger" data-hwid="${esc(d.hwid)}">Удалить</button></div>`).join('');
+      ${canAdmin() ? `<button class="btn danger" data-hwid="${esc(d.hwid)}">Удалить</button>` : ''}</div>`).join('');
     reveal($('devicesBody'));
   }
 
   if (profile?.subscriptionUrl) $('copySub').onclick = () => { navigator.clipboard.writeText(profile.subscriptionUrl); toast('Ссылка скопирована'); };
+  if (!canAdmin()) return;
   for (const b of document.querySelectorAll('#devicesBody [data-hwid]')) {
     b.onclick = () => confirmAction('Удалить устройство?', 'Клиент потеряет доступ с него до повторного подключения.',
       () => subAction('delete-device', b.dataset.hwid));
@@ -1520,8 +1835,9 @@ function renderAiNote() {
   note.textContent =
     current.handoff_at ? 'Диалог у человека — AI по существу не отвечает'
     : global === 'off' ? 'AI выключен в настройках — режим диалога не действует'
-    : own === 'inherit' ? `Сейчас действует режим из настроек: ${global === 'auto' ? 'отвечает сам' : 'предлагает'}`
+    : own === 'inherit' ? `Сейчас действует режим из настроек: ${global === 'auto' ? 'отвечает сам' : global === 'shadow' ? 'только анализирует' : 'предлагает'}`
     : own === 'auto' ? 'Ответы уходят клиенту без подтверждения'
+    : own === 'shadow' ? 'AI анализирует сообщения, но ничего не отправляет клиенту'
     : own === 'off' ? 'В этом диалоге AI молчит'
     : 'AI пишет предложку, отправляете вы';
 }
@@ -1536,14 +1852,54 @@ function renderAiNote() {
  */
 let openToken = 0;
 
+/** Видимость операторов не захватывает диалог и не мешает AI отвечать. */
+async function heartbeatCurrent() {
+  if (!current || !canWrite() || document.visibilityState !== 'visible') return;
+  const id = current.id;
+  try {
+    const response = await api(`/api/conversations/${id}/presence`, {
+      method:'POST', body:JSON.stringify({ state:'viewing' }),
+    });
+    const data = await response.json().catch(() => null);
+    if (current?.id === id && data?.collaboration) {
+      current.collaboration = data.collaboration;
+      renderCollaboration(data.collaboration);
+    }
+  } catch {}
+}
+
+/** Реальное намерение ответить: теперь AI должен уступить оператору. */
+async function engageCurrent() {
+  if (!current || !canWrite() || document.visibilityState !== 'visible') return;
+  const id = current.id;
+  try {
+    const response = await api(`/api/conversations/${id}/engage`, {
+      method:'POST', body:JSON.stringify({ state:'typing' }),
+    });
+    const data = await response.json().catch(() => null);
+    if (current?.id === id && data?.collaboration) {
+      current.collaboration = data.collaboration;
+      renderCollaboration(data.collaboration);
+    }
+  } catch {}
+}
+setInterval(heartbeatCurrent, 15_000);
+window.addEventListener('focus', heartbeatCurrent);
+document.addEventListener('visibilitychange', heartbeatCurrent);
+
 function paintHeader(c) {
   $('title').textContent = nameOf(c);
-  $('titleAvatar').textContent = initials(nameOf(c));
-  $('subtitle').textContent = `${c.channel === 'tg_dm' ? 'Telegram' : 'Тикет'} · ${c.external_id}`;
+  $('titleAvatar').outerHTML = avatarMarkup(c, 'title-avatar', false, 'titleAvatar');
+  armAvatars($('titleAvatar'));
+  $('subtitle').textContent = `${c.username ? '@' + c.username + ' · ' : ''}${channelLabel(c)} · ${c.external_id}`;
   $('statusSel').value = c.status;
   $('aiSel').value = c.ai_mode;
   $('escBtn').textContent = c.escalated ? 'Снять важность' : 'Пометить важным';
   $('handoffBtn').textContent = c.handoff_at ? 'Вернуть диалог AI' : 'Передать человеку';
+  for (const id of ['statusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
+    $(id).disabled = !canWrite();
+    $(id).title = canWrite() ? '' : 'Недоступно в режиме просмотра';
+  }
   $('foldDialog').textContent = c.handoff_at ? 'у человека' : c.status;
   $('foldClient').textContent = c.suspicious ? 'нет в базах' : '';
   $('err').textContent = '';
@@ -1571,9 +1927,10 @@ async function open(id) {
   const known = conversations.find((c) => c.id === id);
   if (known) {
     current = known;
+    heartbeatCurrent();
     quoting = null;
     paintHeader(known);
-    renderWindow(); renderAiNote(); renderQuoting();
+    renderWindow(); renderAiNote(); renderQuoting(); renderCollaboration(known.collaboration);
     markSelected(id);
   }
   $('suggestBox').innerHTML = '';
@@ -1592,6 +1949,7 @@ async function open(id) {
   if (!data || ticket !== openToken) return;   // пока грузили, открыли другой
 
   current = data.conversation;
+  heartbeatCurrent();
   suggestion = data.suggestion;
   paintHeader(current);
 
@@ -1609,9 +1967,11 @@ async function open(id) {
 
   renderWindow(); renderSuggestion(); renderAiNote();
   renderCustomer(data.customer);
+  renderCollaboration(current.collaboration);
+  void loadUnifiedProfile(id);
 
   // Всё, что ходит в сеть, — после отрисовки и без ожидания.
-  void api(`/api/conversations/${id}/read`, { method: 'POST' }).then(refreshSoon);
+  if (canWrite()) void api(`/api/conversations/${id}/read`, { method: 'POST' }).then(refreshSoon);
   if (data.customerStale) {
     void json(`/api/conversations/${id}/customer`).then((res) => {
       if (res && ticket === openToken) renderCustomer(res.customer);
@@ -1622,16 +1982,37 @@ async function open(id) {
 
 let refreshTimer = null;
 const refreshSoon = () => { if (!refreshTimer) refreshTimer = setTimeout(() => { refreshTimer = null; refresh(); }, 400); };
+let refreshPromise = null, refreshAgain = false;
 async function refresh() {
-  const data = await json('/api/conversations');
-  if (!data) return;
-  conversations = data.conversations;
-  if (current) current = conversations.find(c => c.id === current.id) ?? current;
+  if (refreshPromise) { refreshAgain = true; return refreshPromise; }
+  refreshPromise = (async () => {
+    const data = await json('/api/conversations');
+    if (!data) return;
+    conversations = data.conversations;
+    if (current) current = conversations.find(c => c.id === current.id) ?? current;
+    renderList();
+  })();
+  try { await refreshPromise; }
+  catch (error) { console.warn('Conversation refresh failed; the live connection or next poll will retry.', error); }
+  finally {
+    refreshPromise = null;
+    if (refreshAgain) { refreshAgain = false; void refresh(); }
+  }
+}
+
+/** Событие попадает в список сразу, не дожидаясь контрольного HTTP-запроса. */
+function mergeLiveConversation(conversation) {
+  if (!conversation?.id) return;
+  const index = conversations.findIndex((item) => item.id === conversation.id);
+  if (index >= 0) conversations[index] = { ...conversations[index], ...conversation };
+  else conversations.push(conversation);
+  conversations.sort((a, b) => Number(b.last_message_at ?? b.created_at ?? 0) - Number(a.last_message_at ?? a.created_at ?? 0));
+  if (current?.id === conversation.id) current = { ...current, ...conversation };
   renderList();
 }
 
 async function sendText(text, extra = {}) {
-  if (!text.trim() || !current) return;
+  if (!canWrite() || !text.trim() || !current) return;
   $('send').disabled = true;
   const payload = { text, ...extra };
   if (quoting) { payload.replyTo = quoting.id; payload.replyExcerpt = quoting.excerpt; }
@@ -1657,8 +2038,13 @@ $('send').onclick = () => {
   sendText(text, edited ? { suggestionId: suggestion.id, edited: true } : {});
 };
 $('input').addEventListener('keydown', (e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $('send').click(); });
-$('input').addEventListener('input', (e) => { e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 148) + 'px'; });
+$('input').addEventListener('focus', heartbeatCurrent);
+$('input').addEventListener('input', (e) => {
+  if (e.target.value.trim()) engageCurrent(); else heartbeatCurrent();
+  e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 148) + 'px';
+});
 $('noteBtn').onclick = async () => {
+  if (!canWrite()) return;
   const text = $('input').value.trim(); if (!text || !current) return;
   if (await mutate(`/api/conversations/${current.id}/note`,
     { method:'POST', body: JSON.stringify({ text }) }, 'Заметка добавлена')) {
@@ -1667,8 +2053,14 @@ $('noteBtn').onclick = async () => {
 };
 
 async function setState(patch) {
-  if (!current) return;
-  const data = await mutate(`/api/conversations/${current.id}/state`, { method:'POST', body: JSON.stringify(patch) });
+  if (!current || !canWrite()) return;
+  const bedolagaStatus = current.channel === 'bedolaga' && patch.status
+    ? patch.status === 'resolved' ? 'Тикет закрыт и в Bedolaga'
+      : patch.status === 'open' ? 'Тикет открыт и в Bedolaga'
+      : 'Статус тикета синхронизирован с Bedolaga'
+    : null;
+  const data = await mutate(`/api/conversations/${current.id}/state`,
+    { method:'POST', body: JSON.stringify(patch) }, bedolagaStatus);
   if (!data) return;
   current = data.conversation;
   paintHeader(current);
@@ -1702,27 +2094,52 @@ $('templates').onchange = (e) => {
 /* ═══ база знаний ═══ */
 $('kbTabs').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.tab === 'learning' && !canReview()) return;
   kbTab = b.dataset.tab;
   for (const o of $('kbTabs').children) o.setAttribute('aria-pressed', String(o === b));
   renderDocs();
 };
-async function loadDocs() { const data = await json('/api/kb'); if (data) { docs = data; renderDocs(); } }
+async function loadDocs() {
+  const [data, learning] = await Promise.all([
+    json('/api/kb'),
+    canReview() ? json('/api/learning/candidates?status=pending') : Promise.resolve(null),
+  ]);
+  if (data) { docs = { ...data, candidates: learning?.candidates ?? [] }; renderDocs(); }
+}
 function renderDocs() {
-  const list = kbTab === 'kb' ? docs.kb : docs.drafts;
+  const reviewer = canReview();
+  if (!reviewer && kbTab === 'learning') kbTab = 'kb';
+  const list = kbTab === 'kb' ? docs.kb : kbTab === 'draft' ? docs.drafts : docs.candidates;
   $('cntKb').textContent = docs.kb.length;
-  $('kbHint').textContent = kbTab === 'draft'
+  $('kbHint').textContent = kbTab === 'learning'
+    ? 'AI ничего не публикует без решения lead/admin'
+    : kbTab === 'draft'
     ? 'Черновики в ответы не идут, пока не опубликуешь'
     : 'Правки подхватываются в течение 15 минут';
   const box = $('docs');
   if (!list.length) {
-    box.innerHTML = `<p class="empty">${kbTab === 'kb' ? 'Статей пока нет.' : 'Черновиков нет. Соберите их из переписки.'}</p>`;
+    box.innerHTML = `<p class="empty">${kbTab === 'kb' ? 'Статей пока нет.' : kbTab === 'learning' ? 'Новых кандидатов на обучение нет.' : 'Черновиков нет. Соберите их из переписки.'}</p>`;
+    return;
+  }
+  if (kbTab === 'learning') {
+    box.innerHTML = list.map((d) => `<div class="doc">
+      <b>${esc(d.title)}</b><span class="hint mono">v${d.version} · ${esc(d.source)}${d.confidence == null ? '' : ` · уверенность ${Math.round(d.confidence * 100)}%`}</span>
+      <span class="hint mono">${esc(d.file_name)}</span><div class="acts">
+        <button class="btn primary" data-approve="${d.id}">Проверено — опубликовать</button>
+        <button class="btn danger" data-reject="${d.id}">Отклонить</button></div></div>`).join('');
+    for (const b of box.querySelectorAll('[data-approve]')) b.onclick = async () => {
+      if (await mutate(`/api/learning/candidates/${b.dataset.approve}`, { method:'POST', body:JSON.stringify({ decision:'approved' }) }, 'Материал опубликован')) loadDocs();
+    };
+    for (const b of box.querySelectorAll('[data-reject]')) b.onclick = async () => {
+      if (await mutate(`/api/learning/candidates/${b.dataset.reject}`, { method:'POST', body:JSON.stringify({ decision:'rejected' }) }, 'Кандидат отклонён')) loadDocs();
+    };
     return;
   }
   box.innerHTML = list.map((d) => `<div class="doc">
     <b>${esc(d.title)}</b><span class="hint mono">${esc(d.name)} · ${d.size} симв.</span>
     <div class="acts"><button class="btn" data-edit="${esc(d.name)}">Открыть</button>
-      ${kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
-      <button class="btn danger" data-del="${esc(d.name)}">Удалить</button></div></div>`).join('');
+      ${reviewer && kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
+      ${reviewer ? `<button class="btn danger" data-del="${esc(d.name)}">Удалить</button>` : ''}</div></div>`).join('');
   for (const b of box.querySelectorAll('[data-edit]')) b.onclick = () => editDoc(b.dataset.edit);
   for (const b of box.querySelectorAll('[data-pub]')) b.onclick = async () => {
     b.disabled = true;
@@ -1737,9 +2154,10 @@ function renderDocs() {
 async function editDoc(name) {
   const data = await json(`/api/kb/${kbTab}/${encodeURIComponent(name)}`);
   if (!data) return;
-  sheet(name, `<textarea id="docText">${esc(data.text)}</textarea>`,
-    `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="save">Сохранить</button>`);
+  sheet(name, `<textarea id="docText" ${canReview() ? '' : 'readonly'}>${esc(data.text)}</textarea>`,
+    canReview() ? `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="save">Сохранить</button>` : '<button class="btn primary" id="cancel">Закрыть</button>');
   $('cancel').onclick = closeSheet;
+  if (!canReview()) return;
   $('save').onclick = async () => {
     const saved = await mutate(`/api/kb/${kbTab}/${encodeURIComponent(name)}`,
       { method:'PUT', body: JSON.stringify({ text: $('docText').value }) }, 'Сохранено');
@@ -1747,6 +2165,7 @@ async function editDoc(name) {
   };
 }
 $('newDoc').onclick = () => {
+  if (!canReview()) return;
   sheet('Новая статья',
     `<div class="frow"><label>Заголовок</label><input type="text" id="nTitle" placeholder="Не работает на роутере"></div>
      <div class="frow"><label>Текст</label><textarea id="nText" placeholder="Что отвечать оператору в этом случае"></textarea></div>`,
@@ -1763,6 +2182,7 @@ function mineStarted() {
   $('mineLog').innerHTML = '<div class="cap" style="margin-top:var(--sp-6)">Сбор идёт</div><div class="log" id="logBox">Запускаю…</div>';
 }
 $('mineBtn').onclick = () => {
+  if (!canReview()) return;
   sheet('Собрать базу знаний из переписки',
     `<p class="hint">Модель прочитает реальные обращения и напишет статьи. Они лягут в черновики — клиентам ничего не уйдёт, пока их не опубликуешь.</p>
      <div class="frow"><label>Источник</label><select id="mSource">
@@ -1868,7 +2288,19 @@ $('labRun').onclick = async () => {
 /* ═══ серверы ═══
    Тот же слепок, который видит модель: если здесь пусто, она тоже ничего
    не знает и обязана так и сказать. */
+function countryFlag(raw) {
+  const aliases = { DEU:'DE', GER:'DE', USA:'US', GBR:'GB', UK:'GB', NLD:'NL', FRA:'FR',
+    FIN:'FI', SWE:'SE', NOR:'NO', POL:'PL', AUT:'AT', CHE:'CH', ESP:'ES', ITA:'IT',
+    CAN:'CA', JPN:'JP', SGP:'SG', TUR:'TR', KAZ:'KZ', RUS:'RU', UKR:'UA' };
+  const code = aliases[raw] ?? raw;
+  if (!/^[A-Z]{2}$/.test(code)) return '🌐';
+  return String.fromCodePoint(...Array.from(code, (letter) => 127397 + letter.charCodeAt(0)));
+}
+
 async function loadNodes() {
+  const nodesWritable = currentActor?.role === 'admin';
+  $('nodesRefresh').disabled = !nodesWritable;
+  $('nodesRefresh').title = nodesWritable ? '' : 'Обновление серверов доступно только администратору';
   const box = $('nodesBody');
   box.setAttribute('aria-busy', 'true');
   box.innerHTML = `<div class="nodes-loading" aria-label="Загружаю состояние серверов">
@@ -1926,14 +2358,16 @@ async function loadNodes() {
           ${data.nodes.map((n) => {
             const state = n.disabled ? 'disabled' : n.online ? 'online' : 'offline';
             const stateLabel = n.disabled ? 'Отключён' : n.online ? 'В сети' : 'Недоступен';
-            const country = (n.country ?? '').trim().toUpperCase().slice(0, 3) || '••';
+            const countryCode = (n.country ?? '').trim().toUpperCase().slice(0, 3);
+            const country = countryFlag(countryCode);
             const alias = n.alias ?? '';
+            const aliasKey = n.aliasKey ?? n.rawName;
             return `<div class="node-row ${state}" role="row">
               <div class="node-cell node-identity" role="cell">
-                <span class="node-country" title="Страна: ${esc(n.country ?? 'не указана')}">${esc(country)}</span>
+                <span class="node-country" title="Страна: ${esc(n.country ?? 'не указана')}">${country}</span>
                 <div class="node-name">
-                  <label class="node-alias-field"><span>Имя для AI</span><input class="node-alias" data-raw="${esc(n.rawName)}" data-original="${esc(alias)}" value="${esc(alias)}" placeholder="${esc(n.name)}" maxlength="40" title="Как этот сервер называет AI"></label>
-                  <span class="node-raw mono" title="${esc(n.rawName)}">Внутреннее: ${esc(n.rawName)}</span><span class="node-alias-feedback" aria-live="polite"></span>
+                  <label class="node-alias-field"><span>Имя для AI</span><input class="node-alias" data-raw="${esc(aliasKey)}" data-original="${esc(alias)}" value="${esc(alias)}" placeholder="${esc(n.name)}" maxlength="40" title="Как этот сервер называет AI"></label>
+                  <span class="node-raw mono" title="${esc(n.rawName)}">Внутреннее: ${esc(n.rawName)}${n.sourceName ? ` · Панель: ${esc(n.sourceName)}` : ''}</span><span class="node-alias-feedback" aria-live="polite"></span>
                 </div>
               </div>
               <div class="node-cell node-state-cell" role="cell" data-label="Состояние"><span class="node-status ${state}"><i></i>${stateLabel}</span></div>
@@ -1947,6 +2381,11 @@ async function loadNodes() {
 
   for (const input of box.querySelectorAll('.node-alias')) {
     const feedback = input.closest('.node-name').querySelector('.node-alias-feedback');
+    if (!nodesWritable) {
+      input.disabled = true;
+      input.title = 'Изменение псевдонимов доступно только администратору';
+      continue;
+    }
     input.oninput = () => input.classList.toggle('is-dirty', input.value !== input.dataset.original);
     input.onchange = async () => {
       input.classList.add('is-saving'); feedback.textContent = 'Сохраняю…';
@@ -1964,6 +2403,7 @@ async function loadNodes() {
   }
 }
 $('nodesRefresh').onclick = async () => {
+  if (currentActor?.role !== 'admin') return toast('Обновление серверов доступно только администратору');
   $('nodesRefresh').disabled = true;
   $('nodesRefresh').classList.add('is-loading');
   try { await mutate('/api/nodes/refresh', { method:'POST' }, 'Обновлено'); await loadNodes(); }
@@ -1982,7 +2422,10 @@ $('statsRange').onclick = (e) => {
 const fmtDur = (ms) => {
   if (ms == null) return '—';
   const m = Math.round(ms / 60000);
-  return m < 60 ? `${m} мин` : `${Math.floor(m / 60)} ч ${m % 60} мин`;
+  if (m < 60) return `${m} мин`;
+  const h = Math.floor(m / 60);
+  if (h < 48) return `${h} ч ${m % 60} мин`;
+  return `${Math.floor(h / 24)} д ${h % 24} ч`;
 };
 
 /** Столбчатый график входящих и исходящих по дням. */
@@ -2013,7 +2456,7 @@ async function loadStats() {
   const s = await json(`/api/stats?days=${statsDays}`); if (!s) return;
 
   const acc = s.acceptanceRate == null ? '—' : Math.round(s.acceptanceRate * 100) + '%';
-  const share = s.aiShare == null ? '—' : Math.round(s.aiShare * 100) + '%';
+  const share = s.automationRate == null ? '—' : Math.round(s.automationRate * 100) + '%';
   const incoming = s.volume.reduce((a, v) => a + v.incoming, 0);
   const outgoing = s.volume.reduce((a, v) => a + v.outgoing, 0);
   const perDay = s.volume.length ? (incoming / s.volume.length).toFixed(1) : '0';
@@ -2024,15 +2467,24 @@ async function loadStats() {
   }).filter(([, n]) => n > 0);
 
   $('stats').innerHTML = `
+    <div class="stats-tools"><div><b>Честный период</b><p class="hint">Импортированная история не входит в метрики.${s.resetAt ? ` Новый отсчёт начат ${fmtDate(s.resetAt)}.` : ' Можно начать новый отсчёт без удаления диалогов.'}</p></div>
+      ${currentActor?.role === 'admin' ? '<button class="btn danger" data-reset-stats>Начать отсчёт заново</button>' : ''}</div>
     <div class="kpis">
       <div class="kpi"><b>${incoming}</b><span>сообщений от клиентов</span>
         <span class="sub">${perDay} в день · ${outgoing} ответов</span></div>
       <div class="kpi"><b>${fmtDur(s.medianFirstResponseMs)}</b><span>первый ответ, медиана</span>
-        <span class="sub">среднее ${fmtDur(s.avgFirstResponseMs)} · ${s.answered} диалогов</span></div>
-      <div class="kpi"><b>${share}</b><span>ответов написал AI</span>
-        <span class="sub">принято предложек ${acc}</span></div>
+        <span class="sub">оператор · p90 ${fmtDur(s.p90FirstResponseMs)} · ${s.answered} диалогов</span></div>
+      <div class="kpi"><b>${share}</b><span>автоматизация ответов</span>
+        <span class="sub">AI ${s.aiReplies ?? 0} · оператор ${s.humanReplies ?? 0} · предложки ${acc}</span></div>
       <div class="kpi"><b>${s.totals.waiting ?? 0}</b><span>ждут ответа сейчас</span>
         <span class="sub">открыто ${s.totals.open ?? 0} из ${s.totals.total ?? 0}</span></div>
+    </div>
+
+    <div class="kpis compact-kpis">
+      <div class="kpi"><b>${s.period.conversations ?? 0}</b><span>новых диалогов</span><span class="sub">за выбранный период</span></div>
+      <div class="kpi"><b>${s.period.resolved ?? 0}</b><span>решено</span><span class="sub">решены после живого обращения</span></div>
+      <div class="kpi"><b>${fmtDur(s.medianResolutionMs)}</b><span>время решения, медиана</span><span class="sub">среднее ${fmtDur(s.avgResolutionMs)}</span></div>
+      <div class="kpi"><b>${s.kb ?? 0}</b><span>статей базы знаний</span><span class="sub">источники для AI</span></div>
     </div>
 
     <div class="cap">Объём за ${s.days} дней</div>
@@ -2060,7 +2512,7 @@ async function loadStats() {
       </div>
       <div>
         <div class="cap">Откуда приходят</div>
-        <div class="group">${meters(s.byChannel.map((c) => [c.channel === 'tg_dm' ? 'Личка Telegram' : 'Тикеты бедолаги', c.n]))}</div>
+        <div class="group">${meters(s.byChannel.map((c) => [channelLabel({ channel:c.channel }), c.n]))}</div>
       </div>
       <div>
         <div class="cap">Статьи, которые работают</div>
@@ -2074,7 +2526,209 @@ async function loadStats() {
         })[x.kind] ?? x.kind, x.n]))}</div>
       </div>
     </div>`;
+  $('stats').querySelector('[data-reset-stats]')?.addEventListener('click', () => confirmAction(
+    'Начать статистику заново?',
+    'Диалоги и сообщения сохранятся. Графики и временные метрики будут считать только новые обращения после этого момента.',
+    async () => {
+      const result = await mutate('/api/stats/reset', { method:'POST' }, 'Новый статистический период начат');
+      if (result) await loadStats();
+    },
+  ));
 }
+
+/* ═══ очередь, SLA и сохранённые фильтры ═══ */
+let queueRows = [], queuePolicies = [], savedQueueFilters = [];
+let queueMode = 'all', queuePriority = 'all';
+const PRIORITY_LABELS = { urgent:'Срочный', high:'Высокий', normal:'Обычный', low:'Низкий' };
+
+function parseFilter(value) {
+  try { return typeof value === 'string' ? JSON.parse(value) : (value ?? {}); }
+  catch { return {}; }
+}
+
+function renderSavedFilters() {
+  const box = $('savedFilters');
+  if (!box) return;
+  box.innerHTML = savedQueueFilters.length ? `<div class="ops-head"><div><b>Мои фильтры</b><span class="hint">Быстрые представления очереди</span></div></div>
+    <div class="ops-actions" style="justify-content:flex-start">${savedQueueFilters.map((f) => {
+      const query = parseFilter(f.query);
+      return `<span class="ops-card" style="display:inline-flex;align-items:center;gap:8px;padding:7px 9px">
+        <button class="btn quiet" data-filter-open="${Number(f.id)}">${esc(f.name)}</button>
+        ${canWrite() ? `<button class="btn quiet danger" data-filter-delete="${Number(f.id)}" aria-label="Удалить фильтр ${esc(f.name)}">×</button>` : ''}
+        <span class="sr-only">${esc(JSON.stringify(query))}</span></span>`;
+    }).join('')}</div>` : '';
+  for (const button of box.querySelectorAll('[data-filter-open]')) button.onclick = () => {
+    const row = savedQueueFilters.find((item) => Number(item.id) === Number(button.dataset.filterOpen));
+    const query = parseFilter(row?.query);
+    queueMode = ['all','overdue','unassigned'].includes(query.mode) ? query.mode : 'all';
+    queuePriority = ['all','urgent','high','normal','low'].includes(query.priority) ? query.priority : 'all';
+    renderQueue();
+  };
+  for (const button of box.querySelectorAll('[data-filter-delete]')) button.onclick = () => confirmAction(
+    'Удалить фильтр?', 'Это удалит только сохранённое представление, диалоги не изменятся.', async () => {
+      const result = await mutate(`/api/filters/${button.dataset.filterDelete}`, { method:'DELETE' }, 'Фильтр удалён');
+      if (result) { savedQueueFilters = savedQueueFilters.filter((item) => Number(item.id) !== Number(button.dataset.filterDelete)); renderSavedFilters(); }
+    });
+}
+
+function renderSlaPolicies() {
+  const box = $('slaPolicies');
+  if (!box) return;
+  const editable = currentActor?.role === 'admin' || currentActor?.role === 'lead';
+  box.innerHTML = `<details class="sla-panel"><summary><div><b>Сроки обслуживания</b><p>SLA — внутренние цели команды. Они подсвечивают просрочки в очереди и не меняют статусы в Telegram или Bedolaga.</p></div><span class="badge">Настроить</span></summary>
+    <div class="sla-panel-body"><div class="ops-grid">${queuePolicies.map((p) => `<article class="ops-card sla-card">
+      <header><b>${esc(PRIORITY_LABELS[p.priority] ?? p.priority)}</b><span class="badge ${p.priority === 'urgent' ? 'danger' : ''}">${esc(p.priority)}</span></header>
+      <div class="frow"><label for="sla-first-${p.priority}">До первого ответа <span class="sla-unit">мин</span></label><input id="sla-first-${p.priority}" type="number" min="1" max="10080" value="${Number(p.first_response_minutes)}" ${editable ? '' : 'disabled'}></div>
+      <div class="frow"><label for="sla-resolution-${p.priority}">До решения <span class="sla-unit">мин</span></label><input id="sla-resolution-${p.priority}" type="number" min="1" max="10080" value="${Number(p.resolution_minutes)}" ${editable ? '' : 'disabled'}></div>
+      ${editable ? `<button class="btn" data-sla-save="${esc(p.priority)}">Сохранить</button>` : '<span class="hint">Изменяют lead и admin.</span>'}
+    </article>`).join('')}</div></div></details>`;
+  for (const button of box.querySelectorAll('[data-sla-save]')) button.onclick = async () => {
+    const priority = button.dataset.slaSave;
+    const result = await mutate(`/api/sla/${priority}`, { method:'PUT', body:JSON.stringify({
+      firstResponseMinutes:Number($(`sla-first-${priority}`).value), resolutionMinutes:Number($(`sla-resolution-${priority}`).value),
+    }) }, 'SLA сохранён');
+    if (result?.policies) { queuePolicies = result.policies; renderSlaPolicies(); await loadQueue(); }
+  };
+}
+
+function renderQueue() {
+  const box = $('queueBody');
+  if (!box) return;
+  const filtered = queueRows.filter((row) => (queueMode === 'overdue' ? row.overdue : queueMode === 'unassigned' ? !row.assignee : true)
+    && (queuePriority === 'all' || row.priority === queuePriority));
+  const overdue = queueRows.filter((row) => row.overdue).length;
+  $('cntOverdue').textContent = overdue || '';
+  box.innerHTML = `<div class="ops-head"><div><b>Рабочая очередь</b><span class="hint">${filtered.length} из ${queueRows.length} · просрочено ${overdue}</span></div>
+    <div class="ops-actions"><select class="ctl" id="queueMode"><option value="all">Все</option><option value="overdue">Просроченные</option><option value="unassigned">Без ответственного</option></select>
+    <select class="ctl" id="queuePriority"><option value="all">Любой приоритет</option>${Object.entries(PRIORITY_LABELS).map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></div></div>
+    ${filtered.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Диалог</th><th>Канал</th><th>Приоритет</th><th>Ответственный</th><th>SLA</th><th></th></tr></thead><tbody>${filtered.map((row) => {
+      const left = Number(row.due_at) - Date.now();
+      return `<tr><td><b>${esc(row.display_name || (row.username ? '@'+row.username : '#'+row.id))}</b><div class="hint">${esc(row.status)}</div></td>
+        <td>${esc(channelLabel(row))}</td><td><span class="badge ${row.priority === 'urgent' ? 'danger' : ''}">${esc(PRIORITY_LABELS[row.priority] ?? row.priority)}</span></td>
+        <td>${esc(row.owner_name || 'Не назначен')}</td><td><span class="badge ${row.overdue ? 'danger' : 'ok'}">${row.overdue ? `Просрочено на ${fmtLeft(Math.abs(left))}` : `Осталось ${fmtLeft(Math.max(0,left))}`}</span></td>
+        <td><button class="btn" data-queue-open="${Number(row.id)}">Открыть</button></td></tr>`;
+    }).join('')}</tbody></table></div>` : '<p class="empty">В этом представлении диалогов нет.</p>'}`;
+  $('queueMode').value = queueMode;
+  $('queuePriority').value = queuePriority;
+  $('queueMode').onchange = (event) => { queueMode = event.target.value; renderQueue(); };
+  $('queuePriority').onchange = (event) => { queuePriority = event.target.value; renderQueue(); };
+  for (const button of box.querySelectorAll('[data-queue-open]')) button.onclick = async () => { show('inbox'); await open(Number(button.dataset.queueOpen)); };
+}
+
+async function loadQueue() {
+  $('queueBody').innerHTML = '<p class="empty">Загружаю очередь…</p>';
+  const [queue, filtersData] = await Promise.all([json('/api/queue'), json('/api/filters')]);
+  if (!queue) { $('queueBody').innerHTML = '<p class="empty">Очередь недоступна.</p>'; return; }
+  queueRows = queue.conversations ?? [];
+  queuePolicies = queue.policies ?? [];
+  savedQueueFilters = filtersData?.filters ?? [];
+  renderSavedFilters(); renderSlaPolicies(); renderQueue();
+}
+$('queueRefresh').onclick = loadQueue;
+$('saveFilterBtn').onclick = () => {
+  if (!canWrite()) return;
+  sheet('Сохранить фильтр', `<div class="frow"><label for="filterName">Название</label><input id="filterName" maxlength="60" placeholder="Например, срочные без ответственного"></div>
+    <div class="hint">Сохранится текущее представление: ${esc(queueMode)}, ${esc(queuePriority)}.</div>`,
+    '<button class="btn" id="filterCancel">Отмена</button><button class="btn primary" id="filterSave">Сохранить</button>');
+  $('filterCancel').onclick = closeSheet;
+  $('filterSave').onclick = async () => {
+    const result = await mutate('/api/filters', { method:'POST', body:JSON.stringify({ name:$('filterName').value, query:{ mode:queueMode, priority:queuePriority } }) }, 'Фильтр сохранён');
+    if (result?.filters) { savedQueueFilters = result.filters; closeSheet(); renderSavedFilters(); }
+  };
+};
+
+/* ═══ команда, роли и аудит ═══ */
+const ROLE_LABELS = { admin:'Администратор', lead:'Руководитель', agent:'Оператор', viewer:'Наблюдатель' };
+function showOperatorToken(name, value) {
+  sheet(`Токен: ${name}`, `<p class="hint">Показывается один раз. Передайте его оператору защищённым каналом.</p>
+    <input id="operatorToken" class="mono" readonly value="${esc(value)}">`,
+    '<button class="btn" id="copyOperatorToken">Скопировать</button><button class="btn primary" id="tokenDone">Готово</button>');
+  $('copyOperatorToken').onclick = async () => { await navigator.clipboard.writeText($('operatorToken').value); toast('Токен скопирован'); };
+  $('tokenDone').onclick = closeSheet;
+}
+
+function renderOperators(rows) {
+  const box = $('operatorsBody');
+  const admin = currentActor?.role === 'admin';
+  if (!admin) {
+    box.innerHTML = `<article class="ops-card"><header><b>${esc(currentActor?.name || 'Оператор')}</b><span class="badge">${esc(ROLE_LABELS[currentActor?.role] ?? currentActor?.role ?? '')}</span></header>
+      <p class="hint">Управление учётными записями доступно только администратору.</p></article>`;
+    return;
+  }
+  box.innerHTML = `<article class="ops-card team-intro"><div><b>Доступ для команды</b><p>Владелец создаёт отдельную учётную запись, назначает роль и один раз передаёт сотруднику его токен.</p></div><button class="btn primary" data-create-operator>Добавить сотрудника</button></article>
+    <div class="ops-head"><div><b>Операторы и роли</b><span class="hint">Токены хранятся только в виде хеша и повторно не показываются</span></div></div>
+    ${rows.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Имя</th><th>Роль</th><th>Состояние</th><th>Создан</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr>
+      <td><b>${esc(row.name)}</b></td><td>${esc(ROLE_LABELS[row.role] ?? row.role)}</td><td><span class="badge ${row.active ? 'ok' : 'danger'}">${row.active ? 'Активен' : 'Отключён'}</span></td>
+      <td>${fmtTime(Number(row.created_at))}</td><td><div class="ops-actions"><button class="btn" data-op-rotate="${Number(row.id)}" data-op-name="${esc(row.name)}">Новый токен</button>
+      <button class="btn ${row.active ? 'danger' : ''}" data-op-active="${Number(row.id)}" data-op-next="${row.active ? '0' : '1'}">${row.active ? 'Отключить' : 'Включить'}</button></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Отдельных операторов пока нет — используется токен владельца.</p>'}`;
+  for (const button of box.querySelectorAll('[data-op-rotate]')) button.onclick = () => confirmAction('Перевыпустить токен?', 'Старый токен сразу перестанет работать.', async () => {
+    const result = await mutate(`/api/operators/${button.dataset.opRotate}`, { method:'POST', body:JSON.stringify({ rotate:true }) });
+    if (result?.token) showOperatorToken(button.dataset.opName, result.token);
+  });
+  for (const button of box.querySelectorAll('[data-op-active]')) button.onclick = () => confirmAction(
+    button.dataset.opNext === '1' ? 'Включить оператора?' : 'Отключить оператора?',
+    button.dataset.opNext === '1' ? 'Оператор снова сможет войти со своим токеном.' : 'Его текущий доступ будет закрыт.', async () => {
+      const result = await mutate(`/api/operators/${button.dataset.opActive}`, { method:'POST', body:JSON.stringify({ active:button.dataset.opNext === '1' }) }, 'Доступ изменён');
+      if (result) loadTeam();
+    });
+  box.querySelector('[data-create-operator]')?.addEventListener('click', openOperatorSheet);
+}
+
+function renderAudit(events) {
+  const box = $('auditBody');
+  if (!box) return;
+  if (!(currentActor?.role === 'admin' || currentActor?.role === 'lead')) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="ops-head"><div><b>Журнал действий</b><span class="hint">Последние ${events.length} событий без секретов</span></div></div>
+    ${events.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Объект</th><th>Детали</th></tr></thead><tbody>${events.map((event) => `<tr>
+      <td>${fmtTime(Number(event.created_at))}</td><td>${esc(event.actor_name)}<div class="hint">${esc(ROLE_LABELS[event.actor_role] ?? event.actor_role)}</div></td>
+      <td><span class="mono">${esc(event.action)}</span></td><td>${esc(event.resource)} ${event.resource_id ? '#'+esc(event.resource_id) : ''}</td>
+      <td><span class="hint">${esc(event.payload ? String(event.payload).slice(0,180) : '—')}</span></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Действий пока нет.</p>'}`;
+}
+
+async function loadTeam() {
+  const me = currentActor ? { actor:currentActor } : await json('/api/me');
+  currentActor = me?.actor ?? currentActor;
+  $('meLabel').textContent = currentActor ? `${currentActor.name} · ${ROLE_LABELS[currentActor.role] ?? currentActor.role}` : '';
+  $('newOperator').hidden = currentActor?.role !== 'admin';
+  const [operatorsData, auditData] = await Promise.all([
+    currentActor?.role === 'admin' ? json('/api/operators') : Promise.resolve(null),
+    currentActor?.role === 'admin' || currentActor?.role === 'lead' ? json('/api/audit?limit=200') : Promise.resolve(null),
+  ]);
+  renderOperators(operatorsData?.operators ?? []);
+  renderAudit(auditData?.events ?? []);
+}
+function openOperatorSheet() {
+  sheet('Новый оператор', `<div class="frow"><label for="operatorName">Имя</label><input id="operatorName" maxlength="80" placeholder="Имя в журнале и интерфейсе"></div>
+    <div class="frow"><label for="operatorRole">Роль</label><select id="operatorRole"><option value="agent">Оператор</option><option value="lead">Руководитель</option><option value="viewer">Наблюдатель</option><option value="admin">Администратор</option></select></div>`,
+    '<button class="btn" id="operatorCancel">Отмена</button><button class="btn primary" id="operatorCreate">Создать</button>');
+  $('operatorCancel').onclick = closeSheet;
+  $('operatorCreate').onclick = async () => {
+    const result = await mutate('/api/operators', { method:'POST', body:JSON.stringify({ name:$('operatorName').value, role:$('operatorRole').value }) }, 'Оператор создан');
+    if (result?.token) { closeSheet(); showOperatorToken(result.operator.name, result.token); loadTeam(); }
+  };
+}
+$('newOperator').onclick = openOperatorSheet;
+
+/* ═══ диагностика ═══ */
+const mb = (bytes) => `${(Number(bytes ?? 0) / 1048576).toFixed(1)} МБ`;
+async function loadDiagnostics() {
+  const box = $('diagnosticsBody');
+  box.innerHTML = '<p class="empty">Проверяю компоненты…</p>';
+  const data = await json('/api/diagnostics');
+  if (!data) { box.innerHTML = '<p class="empty">Диагностика недоступна.</p>'; return; }
+  const channelRows = Object.entries(data.channels).map(([key,on]) => `<div class="item"><span>${esc(channelLabel({channel:key}))}</span><span class="badge ${on ? 'ok' : ''}">${on ? 'Подключён' : 'Не подключён'}</span></div>`).join('');
+  const integrationRows = Object.entries(data.integrations).map(([key,on]) => `<div class="item"><span>${esc(key)}</span><span class="badge ${on ? 'ok' : ''}">${on ? 'Готов' : 'Не настроен'}</span></div>`).join('');
+  const jobs = data.database.jobs ?? [];
+  box.innerHTML = `<div class="ops-grid">
+    <article class="ops-card"><header><b>Приложение v${esc(data.application.version)}</b><span class="badge ok">Работает</span></header><div class="meta"><span>Аптайм ${fmtLeft(data.application.uptime*1000)}</span><span>RSS ${mb(data.application.memory.rss)}</span><span>Heap ${mb(data.application.memory.heapUsed)}</span></div></article>
+    <article class="ops-card"><header><b>База данных</b><span class="badge ${data.database.integrity === 'ok' ? 'ok' : 'danger'}">${esc(data.database.integrity)}</span></header><div class="meta"><span>Схема ${Number(data.database.schema)}</span>${Object.entries(data.database.counts).map(([key,n]) => `<span>${esc(key)}: ${Number(n)}</span>`).join('')}</div></article>
+    <article class="ops-card"><header><b>Каналы</b><span class="badge ok">Голый режим допустим</span></header><div class="group">${channelRows}</div><p class="hint">Отсутствие каналов не мешает запустить и настроить панель.</p></article>
+    <article class="ops-card"><header><b>Интеграции</b><span class="badge">Опциональны</span></header><div class="group">${integrationRows}</div></article>
+  </div>
+  <div class="ops-head"><div><b>Фоновые задания</b><span class="hint">Последние ${jobs.length}; ошибки видны явно</span></div></div>
+  ${jobs.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Тип</th><th>Статус</th><th>Прогресс</th><th>Завершено</th></tr></thead><tbody>${jobs.map((job) => `<tr><td>${esc(job.kind)}</td><td><span class="badge ${job.status === 'failed' ? 'danger' : job.status === 'done' ? 'ok' : ''}">${esc(job.status)}</span></td><td>${esc(job.error || job.progress || '—')}</td><td>${job.ended_at ? fmtTime(Number(job.ended_at)) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Фоновых заданий пока не было.</p>'}`;
+}
+$('diagRefresh').onclick = loadDiagnostics;
 
 /* ═══ настройки ═══ */
 /**
@@ -2095,12 +2749,16 @@ const CONFIDENCE_LEVELS = [
 
 const FIELDS = [
   { key:'aiMode', label:'Режим AI по умолчанию', kind:'select',
-    options:[['off','Выключен везде'],['suggest','Предлагает'],['auto','Отвечает сам']],
-    hint:'«Выключен везде» — рубильник: гасит AI во всех диалогах. Остальное — значение по умолчанию для новых диалогов, в карточке каждого его можно переопределить.' },
+    options:[['off','Выключен везде'],['shadow','Тень: анализирует, но не пишет'],['suggest','Предлагает'],['auto','Отвечает сам']],
+    hint:'«Тень» запускает тот же анализ и сохраняет причины решения, но ничего не отправляет клиенту. Это безопасный режим для проверки новой базы знаний и промпта.' },
 
   { key:'requireKb', label:'Отвечать только по базе знаний', kind:'select',
     options:[['true','Да, иначе зовём человека'],['false','Разрешить отвечать без опоры']],
     hint:'Главная защита от выдумок. Если поиск по базе знаний не нашёл ничего, ответ клиенту сам не уйдёт ни при какой уверенности — диалог передаётся человеку.' },
+
+  { key:'autoLearn', label:'Учиться на закрытых диалогах', kind:'select',
+    options:[['false','Выключено'],['true','Создавать черновики статей']],
+    hint:'После закрытия диалога AI выделяет повторно полезные решения и кладёт их в черновики базы знаний. Самостоятельной публикации нет: оператор проверяет и публикует статью вручную.' },
 
   { key:'minConfidence', label:'Порог уверенности', kind:'level',
     options: CONFIDENCE_LEVELS.map(([v, t]) => [String(v), t]),
@@ -2137,7 +2795,7 @@ const FIELDS = [
     hint:'Имя модели у провайдера. Кнопка «Выбрать» подтянет список от него самого.' },
 
   { key:'fallbackModel', label:'Запасная модель', kind:'text',
-    hint:'Когда основная упирается в суточный лимит, запрос уходит сюда. Лимиты считаются на каждую модель отдельно.' },
+    hint:'Запрос без фото уходит сюда при лимите, временном сбое или снятии основной модели. Фото никогда не передаётся модели без vision: при недоступности основной диалог безопасно останется оператору.' },
 
   { key:'brand', label:'Название сервиса для AI', kind:'text',
     hint:'Как модель называет ваш сервис в ответах клиентам.' },
@@ -2154,7 +2812,7 @@ function nearestLevel(value) {
 
 const SETTINGS_GROUPS = [
   { id:'safety', title:'Режим и безопасность', note:'Когда AI может отвечать и на что он должен опираться',
-    fields:['aiMode','requireKb','minConfidence','maxAgeMinutes'] },
+    fields:['aiMode','requireKb','autoLearn','minConfidence','maxAgeMinutes'] },
   { id:'limits', title:'Лимиты и внимание оператора', note:'Паузы, SLA и защита от зацикливания',
     fields:['autoPerHour','humanHoldMinutes','slaFirstResponseMinutes','handoffRepeatMinutes','notifyLevel'] },
   { id:'models', title:'Модели и сервис', note:'Основная, запасная модель и имя бренда',
@@ -2169,8 +2827,283 @@ function showSettingsSaveState(state, text) {
   if (state === 'saved') settingsSaveTimer = setTimeout(() => { wrap.dataset.state = 'idle'; $('setHint').textContent = ''; }, 1800);
 }
 
+let updatePoll = null;
+const UPDATE_STATUS = {
+  queued:'В очереди', backing_up:'Резервная копия', installing:'Установка', checking:'Проверка',
+  completed:'Установлено', rolled_back:'Откат выполнен', failed:'Ошибка',
+};
+
+function paintUpdate(state) {
+  const panel = $('updatePanel');
+  if (!panel || !state) return;
+  const published = state.publishedAt ? ` · ${fmtTime(new Date(state.publishedAt).getTime())}` : '';
+  const progress = state.progress;
+  const history = state.history ?? [];
+  const historyHtml = history.length ? `<details><summary>История операций · ${history.length}</summary><div class="group">${history.slice(0,20).map((row) => `<div class="item">
+    <span><b>${row.action === 'rollback' ? 'Откат' : 'Обновление'}${row.version ? ` · ${esc(row.version)}` : ''}</b><span class="hint">${fmtTime(Number(row.created_at))} · ${esc(row.actor_key)}</span></span>
+    <span class="badge ${row.status === 'failed' ? 'danger' : row.status === 'completed' || row.status === 'rolled_back' ? 'ok' : ''}">${esc(UPDATE_STATUS[row.status] ?? row.status)}</span></div>`).join('')}</div></details>` : '';
+  const progressHtml = progress ? `<div class="ops-card"><header><b>${esc(UPDATE_STATUS[progress.status] ?? progress.status)}</b><span class="badge ${progress.status === 'failed' ? 'danger' : progress.status === 'completed' || progress.status === 'rolled_back' ? 'ok' : ''}">${Number(progress.percent ?? 0)}%</span></header>
+    <div class="progress"><i style="width:${Math.max(0,Math.min(100,Number(progress.percent ?? 0)))}%"></i></div>
+    <div class="meta"><span>${esc(progress.stage || progress.detail || 'Ожидает ограниченный host-updater')}</span>${progress.backupPath ? '<span>Резервная копия подтверждена</span>' : ''}</div></div>` : '';
+  const safety = `<div class="meta"><span>Кнопка запускает полную установку</span><span>Изолированный host-updater скачивает и проверяет релиз</span><span>Перед заменой: backup · health-check · автоматический откат</span></div>`;
+  const changelog = state.changelog ? `<details><summary>Что изменилось в ${esc(state.tag ?? state.latest ?? '')}</summary><pre class="log" style="white-space:pre-wrap;max-height:260px">${esc(state.changelog)}</pre></details>` : '';
+  const rollback = state.compatibility?.rollbackAvailable ? '<button class="btn danger" id="updateRollback">Откатить</button>' : '';
+
+  if (!state.enabled) {
+    panel.innerHTML = `<div><b>Обновления отключены</b><span class="hint">Включаются через UPDATE_ENABLED на сервере. Текущая версия v${esc(state.current)}.</span></div>${progressHtml}${historyHtml}`;
+    return;
+  }
+  const title = progress && ['queued','backing_up','installing','checking'].includes(progress.status)
+    ? `Обновление выполняется: ${UPDATE_STATUS[progress.status]}`
+    : state.available ? `Доступна версия ${esc(state.latest)}`
+    : `Установлена актуальная версия v${esc(state.current)}`;
+  const error = state.error ? `<div class="badge danger">Проверка релиза: ${esc(state.error)}</div>` : '';
+  const installLabel = state.available ? `Установить v${esc(state.latest)}` : `Переустановить v${esc(state.current)}`;
+  const install = state.tag && !state.queued && (state.available || state.reinstallable)
+    ? `<button class="btn primary" id="updateApply">${installLabel}</button>` : '';
+  panel.innerHTML = `<div class="ops-head"><div><b>${title}</b><span class="hint">Канал: ${state.prerelease ? 'предрелизы' : 'стабильные релизы'}${published}</span></div>
+    <div class="ops-actions">${install}${rollback}<button class="btn" id="updateRetry">Проверить</button></div></div>
+    ${error}${safety}${progressHtml}${changelog}${historyHtml}`;
+  $('updateRetry').onclick = loadUpdateState;
+  if ($('updateApply')) $('updateApply').onclick = () => confirmAction(state.available ? 'Установить обновление?' : 'Переустановить текущую версию?',
+    'Система скачает подписанный релиз, проверит контрольную сумму, создаст резервную копию, установит его и автоматически откатится при неуспешной проверке.', () => requestUpdate('update', !state.available));
+  if ($('updateRollback')) $('updateRollback').onclick = () => confirmAction('Откатить обновление?',
+    'Будет использована только резервная копия, которую ранее подтвердил host-updater.', () => requestUpdate('rollback'));
+  clearInterval(updatePoll);
+  if (state.queued || progress && ['queued','backing_up','installing','checking'].includes(progress.status)) {
+    updatePoll = setInterval(loadUpdateState, 5000);
+  }
+}
+
+async function requestUpdate(action, force = false) {
+  const result = await mutate('/api/update/request', { method:'POST', body:JSON.stringify({ action, force }) });
+  if (result?.update) { paintUpdate(result.update); toast(action === 'rollback' ? 'Откат поставлен в очередь' : 'Обновление поставлено в очередь'); }
+}
+
+async function loadUpdateState() {
+  const panel = $('updatePanel');
+  if (currentActor && currentActor.role !== 'admin') {
+    panel.innerHTML = '<div><b>Центр обновлений</b><span class="hint">Проверка, установка и откат доступны только администратору.</span></div>';
+    return;
+  }
+  if (panel) panel.innerHTML = '<span class="hint">Проверяю обновления…</span>';
+  const state = await json('/api/update');
+  if (!state) { panel.innerHTML = '<span class="hint">Центр обновлений сейчас недоступен.</span>'; return; }
+  paintUpdate(state);
+}
+
+const SOURCE_APPLY_STATUS = {
+  queued:'Ожидает безопасного исполнителя', backing_up:'Создаётся резервная копия',
+  applying:'Применяется конфигурация', checking:'Проверяется здоровье приложения',
+  completed:'Источник подключён', rolled_back:'Изменения отменены', failed:'Подключить не удалось',
+};
+let sourceApplyPoll = null;
+
+function sourceProgressMarkup(state = settings?.sourceManagement) {
+  const progress = state?.progress;
+  if (!state?.queued && !progress) return '';
+  const status = progress?.status ?? 'queued';
+  const tone = status === 'completed' ? 'ok' : ['failed','rolled_back'].includes(status) ? 'danger' : 'warn';
+  return `<div class="source-progress ${tone}"><div><b>${esc(SOURCE_APPLY_STATUS[status] ?? 'Добавление источника')}</b>
+    <span>${esc(progress?.name || progress?.id || 'Запрос принят')}${progress?.stage ? ` · ${esc(progress.stage)}` : ''}</span></div>
+    ${progress?.detail ? `<p>${esc(progress.detail)}</p>` : ''}</div>`;
+}
+
+function watchSourceApply() {
+  clearInterval(sourceApplyPoll);
+  const active = settings?.sourceManagement?.queued
+    || ['queued','backing_up','applying','checking'].includes(settings?.sourceManagement?.progress?.status);
+  if (!active) return;
+  sourceApplyPoll = setInterval(async () => {
+    let response;
+    try { response = await api('/api/sources/status'); } catch { return; }
+    if (!response.ok) return;
+    const state = await response.json();
+    if (!settings) return;
+    settings.sourceManagement = state;
+    renderSourceFoldersPanel();
+    const finished = ['completed','failed','rolled_back'].includes(state?.progress?.status);
+    if (finished) {
+      clearInterval(sourceApplyPoll);
+      sourceApplyPoll = null;
+      toast(state.progress.status === 'completed' ? 'Источник подключён' : (state.progress.detail || 'Источник не подключён'));
+      if (state.progress.status === 'completed') setTimeout(loadSettings, 1200);
+    }
+  }, 2200);
+}
+
+function openSourceWizard() {
+  if (!canAdmin()) return;
+  const botSources = inboxSources.filter((source) => source.kind === 'telegram_bot');
+  sheet('Добавить источник',
+    `<div class="source-wizard-intro"><b>Новый канал в едином инбоксе</b><span>Секреты передаются только ограниченному host-исполнителю и не возвращаются в браузер.</span></div>
+     <div class="frow"><label for="sourceType">Что подключаем</label><select id="sourceType">
+       <option value="telegram_bot">Telegram-бот</option><option value="telegram_business">Telegram Business-аккаунт</option><option value="remnawave">Панель Remnawave</option>
+     </select></div><div id="sourceWizardFields"></div>`,
+    '<button class="btn" id="sourceCancel">Отмена</button><button class="btn primary" id="sourceContinue">Подключить</button>');
+  $('sourceCancel').onclick = closeSheet;
+
+  const renderFields = () => {
+    const kind = $('sourceType').value;
+    const box = $('sourceWizardFields');
+    if (kind === 'telegram_bot') {
+      box.innerHTML = `<div class="frow"><label for="sourceName">Название бота</label><input id="sourceName" maxlength="120" placeholder="Например, VPN Support"></div>
+        <div class="frow"><label for="sourceToken">Токен из @BotFather</label><input id="sourceToken" type="password" autocomplete="new-password" placeholder="123456789:AA…"><span class="hint">После применения токен исчезнет из запроса и не будет показан снова.</span></div>
+        <div class="frow"><label for="sourceId">Технический ID · необязательно</label><input id="sourceId" maxlength="80" placeholder="support-bot-eu"><span class="hint">Если оставить пустым, будет создан безопасный уникальный ID.</span></div>`;
+      $('sourceContinue').textContent = 'Подключить бота';
+    } else if (kind === 'remnawave') {
+      box.innerHTML = `<div class="frow"><label for="sourceName">Название панели</label><input id="sourceName" maxlength="120" placeholder="Например, Remnawave Europe"></div>
+        <div class="frow"><label for="sourceUrl">URL панели</label><input id="sourceUrl" type="url" maxlength="1000" placeholder="https://panel.example.com"></div>
+        <div class="frow"><label for="sourceToken">API-токен</label><input id="sourceToken" type="password" autocomplete="new-password" placeholder="Токен Remnawave"></div>
+        <div class="frow"><label for="sourceId">Технический ID · необязательно</label><input id="sourceId" maxlength="80" placeholder="remnawave-eu"></div>
+        <label class="source-readonly"><input id="sourceReadOnly" type="checkbox" checked><span><b>Только чтение</b><small>Не разрешать сброс устройств и перевыпуск подписок из этой панели.</small></span></label>`;
+      $('sourceContinue').textContent = 'Подключить панель';
+    } else {
+      const choices = botSources.length
+        ? botSources.map((source) => `<li><b>${esc(source.name)}</b><span>${esc(source.id)}</span></li>`).join('')
+        : '<li><b>Сначала добавьте Telegram-бота</b><span>Именно ему Telegram передаёт события Business.</span></li>';
+      box.innerHTML = `<div class="business-guide"><b>Подключение выполняется в самом Telegram</b>
+        <ol><li>Откройте нужный аккаунт Telegram: Настройки → Telegram Business → Чат-боты.</li>
+        <li>Выберите одного из ботов ниже и выдайте права читать сообщения и отвечать.</li>
+        <li>Вернитесь сюда: аккаунт появится отдельным источником автоматически. Повторите для остальных аккаунтов.</li></ol>
+        <ul>${choices}</ul><p>Один бот может обслуживать несколько Business-аккаунтов; папки и профиль сервиса настраиваются отдельно после подключения.</p></div>`;
+      $('sourceContinue').textContent = botSources.length ? 'Понятно' : 'Добавить бота';
+    }
+  };
+  $('sourceType').onchange = renderFields;
+  renderFields();
+  $('sourceContinue').onclick = async () => {
+    const kind = $('sourceType').value;
+    if (kind === 'telegram_business') {
+      if (!botSources.length) { $('sourceType').value = 'telegram_bot'; renderFields(); $('sourceName').focus(); }
+      else closeSheet();
+      return;
+    }
+    const payload = { kind, name:$('sourceName').value.trim(), token:$('sourceToken').value.trim(), id:$('sourceId').value.trim() };
+    if (kind === 'remnawave') Object.assign(payload, { url:$('sourceUrl').value.trim(), readOnly:$('sourceReadOnly').checked });
+    if (!payload.name || !payload.token || (kind === 'remnawave' && !payload.url)) return toast('Заполните обязательные поля');
+    $('sourceContinue').disabled = true;
+    const result = await mutate('/api/sources/request', { method:'POST', body:JSON.stringify(payload) });
+    if (!result) { $('sourceContinue').disabled = false; return; }
+    // Секрет сразу убираем из DOM ещё до закрытия окна.
+    $('sourceToken').value = '';
+    settings.sourceManagement = result.sourceManagement;
+    closeSheet();
+    renderSourceFoldersPanel();
+    watchSourceApply();
+    toast('Источник поставлен в очередь');
+  };
+}
+
+function renderSourceFoldersPanel() {
+  const box = $('sourceFolders');
+  if (!box) return;
+  const writable = canAdmin();
+  const profiles = settings?.serviceProfiles ?? {};
+  const sourceRows = inboxSources.length ? inboxSources.map((source) => `<div class="source-row">
+    <span class="source-kind">${esc(sourceKind(source.kind).slice(0, 3).toUpperCase())}</span>
+    <div><b>${esc(profiles[source.id]?.serviceName || source.name)}</b><span>${esc(sourceKind(source.kind))} · ${esc(source.name)} · ${esc(source.id)}</span></div>
+    <div class="source-actions"><span class="badge ok">${profiles[source.id] ? 'свой профиль' : 'общий профиль'}</span>
+      ${writable ? `<button class="btn" data-edit-service="${esc(source.id)}">Настроить</button>` : ''}</div>
+  </div>`).join('') : '<div class="source-row"><div><b>Входящие источники не подключены</b><span>Панель продолжает работать в голом режиме.</span></div></div>';
+  const folderRows = inboxFolders.length ? inboxFolders.map((folder) => {
+    const names = folder.source_ids.map((id) => inboxSources.find((source) => source.id === id)?.name ?? id);
+    return `<div class="folder-row">
+      <span class="folder-dot" style="--folder-color:${safeColor(folder.color)}"></span>
+      <div><b>${esc(folder.name)}</b><span>${esc(names.join(' · ') || 'Источники пока не выбраны')}</span></div>
+      ${writable ? `<button class="btn" data-edit-folder="${folder.id}">Изменить</button>` : ''}
+    </div>`;
+  }).join('') : '<div class="folder-row"><div><b>Своих папок пока нет</b><span>Один источник можно включить в несколько папок.</span></div></div>';
+  box.innerHTML = `${sourceProgressMarkup()}<div class="source-folders-head"><div><b>Подключённые источники</b><span>${inboxSources.length} активных подключений</span></div>${writable ? '<button class="btn primary" id="newSource">Добавить источник</button>' : ''}</div>
+    <div class="source-list">${sourceRows}</div>
+    <div class="source-folders-head"><div><b>Папки инбокса</b><span>Состав может пересекаться</span></div>${writable ? '<button class="btn primary" id="newInboxFolder">Новая папка</button>' : ''}</div>
+    <div class="folder-list">${folderRows}</div>`;
+  if (!writable) return;
+  $('newSource').onclick = openSourceWizard;
+  $('newInboxFolder').onclick = () => openFolderEditor();
+  for (const button of box.querySelectorAll('[data-edit-service]')) {
+    button.onclick = () => openServiceEditor(inboxSources.find((source) => source.id === button.dataset.editService));
+  }
+  for (const button of box.querySelectorAll('[data-edit-folder]')) {
+    button.onclick = () => openFolderEditor(inboxFolders.find((folder) => folder.id === Number(button.dataset.editFolder)) ?? null);
+  }
+}
+
+function openServiceEditor(source) {
+  if (!canAdmin() || !source) return;
+  const profile = settings?.serviceProfiles?.[source.id] ?? {};
+  const serviceName = profile.serviceName || (source.kind === 'remnawave' ? source.name : settings.runtime.brand);
+  const greetingMessage = profile.greetingMessage || '';
+  const handoffMessage = profile.handoffMessage || settings.runtime.handoffMessage || '';
+  sheet('Профиль сервиса',
+    `<div class="service-profile-copy"><b>${esc(source.name)}</b><span>${esc(sourceKind(source.kind))} · ${esc(source.id)}</span></div>
+     <div class="frow"><label for="serviceName">Название для клиента и AI</label><input id="serviceName" type="text" maxlength="80" value="${esc(serviceName)}" placeholder="Название сервиса"></div>
+     <div class="frow"><label for="serviceGreeting">Приветствие первого ответа</label><textarea id="serviceGreeting" rows="3" maxlength="600" placeholder="Можно оставить пустым">${esc(greetingMessage)}</textarea><span class="hint">Добавляется один раз — перед первым содержательным ответом.</span></div>
+     <div class="frow"><label for="serviceHandoff">Фраза передачи человеку</label><textarea id="serviceHandoff" rows="3" maxlength="600">${esc(handoffMessage)}</textarea><span class="hint">Используется и для напоминания, пока диалог ждёт оператора.</span></div>
+     <p class="hint">Связанная панель Remnawave имеет приоритет над общим ботом или Telegram Business. Управление остаётся в одном инбоксе.</p>`,
+    '<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="saveService">Сохранить профиль</button>');
+  $('cancel').onclick = closeSheet;
+  $('saveService').onclick = async () => {
+    const payload = {
+      serviceName: $('serviceName').value.trim(),
+      greetingMessage: $('serviceGreeting').value.trim(),
+      handoffMessage: $('serviceHandoff').value.trim(),
+    };
+    if (!payload.serviceName) return toast('Введите название сервиса');
+    $('saveService').disabled = true;
+    const result = await mutate(`/api/settings/services/${encodeURIComponent(source.id)}`, {
+      method:'POST', body:JSON.stringify(payload),
+    }, 'Профиль сервиса сохранён');
+    if (!result) { $('saveService').disabled = false; return; }
+    settings.serviceProfiles = result.serviceProfiles ?? settings.serviceProfiles;
+    closeSheet();
+    renderSourceFoldersPanel();
+  };
+}
+
+function openFolderEditor(folder = null) {
+  if (!canAdmin()) return;
+  const selected = new Set(folder?.source_ids ?? []);
+  const checks = inboxSources.length ? inboxSources.map((source) => `<label class="folder-check">
+    <input type="checkbox" value="${esc(source.id)}"${selected.has(source.id) ? ' checked' : ''}>
+    <span><b>${esc(source.name)}</b><small>${esc(sourceKind(source.kind))}</small></span>
+  </label>`).join('') : '<span class="hint">Сначала подключите источник на сервере. Пустую папку всё равно можно создать.</span>';
+  sheet(folder ? 'Изменить папку' : 'Новая папка',
+    `<div class="frow"><label for="folderName">Название</label><input id="folderName" type="text" maxlength="80" value="${esc(folder?.name ?? '')}" placeholder="Например, VPN техподдержка"></div>
+     <div class="frow"><label for="folderColor">Цвет метки</label><input id="folderColor" type="color" value="${safeColor(folder?.color)}"></div>
+     <div class="frow"><label>Источники · можно повторять в других папках</label><div class="folder-checks">${checks}</div></div>`,
+    `${folder ? '<button class="btn danger" id="deleteFolder">Удалить</button>' : ''}<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="saveFolder">Сохранить</button>`);
+  $('cancel').onclick = closeSheet;
+  $('saveFolder').onclick = async () => {
+    const name = $('folderName').value.trim();
+    if (!name) return toast('Введите название папки');
+    const sourceIds = [...$('sheet').querySelectorAll('.folder-check input:checked')].map((input) => input.value);
+    $('saveFolder').disabled = true;
+    const result = await mutate('/api/inbox/folders', { method:'POST', body:JSON.stringify({ id:folder?.id, name, color:$('folderColor').value, sourceIds }) }, 'Папка сохранена');
+    if (!result) { $('saveFolder').disabled = false; return; }
+    inboxFolders = result.folders ?? inboxFolders;
+    closeSheet(); renderInboxTabs(); renderSourceFoldersPanel(); renderList(true);
+  };
+  if ($('deleteFolder')) $('deleteFolder').onclick = () => confirmAction('Удалить папку?',
+    'Диалоги и источники останутся на месте — исчезнет только эта группировка.', async () => {
+      const result = await mutate(`/api/inbox/folders/${folder.id}`, { method:'DELETE' }, 'Папка удалена');
+      if (!result) return;
+      inboxFolders = result.folders ?? inboxFolders;
+      if (filter === `folder:${folder.id}`) filter = 'all';
+      closeSheet(); renderInboxTabs(); renderSourceFoldersPanel(); renderList(true);
+    });
+}
+
+$('manageFolders').onclick = () => openFolderEditor();
+
 async function loadSettings() {
   settings = await json('/api/settings'); if (!settings) return;
+  inboxSources = settings.sources ?? inboxSources;
+  inboxFolders = settings.folders ?? inboxFolders;
+  renderInboxTabs();
+  renderSourceFoldersPanel();
+  watchSourceApply();
+  const settingsWritable = currentActor?.role === 'admin';
   $('ver').textContent = 'v' + settings.version;
   const settingRows = new Map(FIELDS.map((f) => {
     const value = settings.runtime[f.key];
@@ -2211,7 +3144,15 @@ async function loadSettings() {
         </div>
       </div>
     </section>`;
+  if (!settingsWritable) {
+    $('aiSettings').insertAdjacentHTML('afterbegin', '<div class="ops-note"><b>Режим просмотра</b><span class="hint">Изменять настройки может только администратор.</span></div>');
+  }
   for (const el of $('aiSettings').querySelectorAll('[data-key]')) {
+    if (!settingsWritable) {
+      el.disabled = true;
+      el.title = 'Изменение настроек доступно только администратору';
+      continue;
+    }
     el.onchange = async () => {
       const row = el.closest('.setting-row');
       row.classList.add('is-saving'); el.disabled = true; showSettingsSaveState('saving', 'Сохраняю…');
@@ -2251,7 +3192,7 @@ async function loadSettings() {
     ['fallbackModel', 'fallbackKey', 'Запасная модель'],
   ]) {
     const input = $('aiSettings').querySelector(`[data-key="${field}"]`);
-    if (!input) continue;
+    if (!input || !settingsWritable) continue;
     const pick = document.createElement('button');
     pick.className = 'btn model-pick';
     pick.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M4 10h8M4 14h10"/></svg><span>Выбрать</span>';
@@ -2287,21 +3228,26 @@ async function loadSettings() {
     input.after(pick);
   }
 
-  $('styleSave').onclick = async () => {
-    showSettingsSaveState('saving', 'Сохраняю…'); $('styleSave').disabled = true;
-    const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ replyStyle: $('styleBox').value }) }, 'Манера сохранена');
-    $('styleSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
-  };
-  $('handoffSave').onclick = async () => {
-    showSettingsSaveState('saving', 'Сохраняю…'); $('handoffSave').disabled = true;
-    const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ handoffMessage: $('handoffBox').value }) }, 'Текст сохранён');
-    $('handoffSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
-  };
+  if (settingsWritable) {
+    $('styleSave').onclick = async () => {
+      showSettingsSaveState('saving', 'Сохраняю…'); $('styleSave').disabled = true;
+      const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ replyStyle: $('styleBox').value }) }, 'Манера сохранена');
+      $('styleSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
+    };
+    $('handoffSave').onclick = async () => {
+      showSettingsSaveState('saving', 'Сохраняю…'); $('handoffSave').disabled = true;
+      const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ handoffMessage: $('handoffBox').value }) }, 'Текст сохранён');
+      $('handoffSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
+    };
+  } else {
+    for (const id of ['styleBox', 'handoffBox', 'styleSave', 'handoffSave']) $(id).disabled = true;
+  }
 
   const caps = settings.remnawave;
   const business = settings.businessConnectionLive;
   const healthCards = [
-    { label:'Личка Telegram', value:settings.channels.tg_dm ? 'Подключена' : 'Не подключена', tone:settings.channels.tg_dm ? 'ok' : 'off' },
+    { label:'Telegram Business', value:settings.channels.tg_dm ? 'Подключён' : 'Не подключён', tone:settings.channels.tg_dm ? 'ok' : 'off' },
+    { label:'Telegram-бот', value:settings.channels.tg_bot ? 'Принимает личные сообщения' : 'Не подключён', tone:settings.channels.tg_bot ? 'ok' : 'off' },
     { label:'Тикеты', value:settings.channels.bedolaga ? 'Подключены' : 'Не подключены', tone:settings.channels.bedolaga ? 'ok' : 'off' },
     { label:'Business Connection', value:business?.enabled ? (business.canReply ? 'Можно отвечать' : 'Нет права отвечать') : business ? 'Отключено в аккаунте' : 'Нет подключения', tone:business?.enabled && business.canReply ? 'ok' : business ? 'warn' : 'off' },
     { label:'Remnawave', value:caps ? (caps.index?.size ? `${caps.index.size} клиентов в индексе` : 'Подключён') : 'Не подключён', tone:caps ? 'ok' : 'off' },
@@ -2314,12 +3260,18 @@ async function loadSettings() {
   ];
   $('health').innerHTML = healthCards.map((card) => `<article class="health-card ${card.tone}"><span class="health-status"><i></i></span><div><b>${esc(card.label)}</b><span>${esc(card.value)}</span></div></article>`).join('')
     + `<div class="health-action"><div><b>Проверка уведомлений</b><span>Отправим тестовое сообщение в служебный чат.</span></div><button class="btn" id="testAlert">Отправить тест</button></div>`;
-  $('testAlert').onclick = async () => {
+  if (settingsWritable) {
+    $('testAlert').onclick = async () => {
+      $('testAlert').disabled = true;
+      await mutate('/api/settings/test-alert', { method:'POST' }, 'Отправлено — проверьте чат');
+      $('testAlert').disabled = false;
+      loadSettings();
+    };
+  } else {
     $('testAlert').disabled = true;
-    await mutate('/api/settings/test-alert', { method:'POST' }, 'Отправлено — проверьте чат');
-    $('testAlert').disabled = false;
-    loadSettings();
-  };
+    $('testAlert').title = 'Проверка доступна только администратору';
+  }
+  void loadUpdateState();
 }
 
 /* ═══ живое обновление ═══ */
@@ -2340,6 +3292,7 @@ function connect() {
       }
       return;
     }
+    if (frame.conversation) mergeLiveConversation(frame.conversation);
     if (frame.type === 'message' && current?.id === frame.conversation.id) {
       const nearBottom = $('thread').scrollHeight - $('thread').scrollTop - $('thread').clientHeight < 140;
       current = frame.conversation;
@@ -2374,14 +3327,21 @@ async function boot() {
   // Билет живёт десять минут — обновляем заранее, чтобы картинки и события
   // не отваливались посреди работы.
   setInterval(refreshTicket, 8 * 60_000);
+  currentActor = (await json('/api/me'))?.actor ?? null;
+  applyRoleUi();
   templates = (await json('/api/templates'))?.templates ?? [];
   $('templates').innerHTML = '<option value="">Шаблон…</option>';
   $('templates').append(...templates.map(t => Object.assign(document.createElement('option'), { value:String(t.id), textContent:t.title })));
   settings = await json('/api/settings');
   if (settings) $('ver').textContent = 'v' + settings.version;
+  await loadInboxMeta();
   await refresh();
   await openFromHash();
   connect();
+  // WebSocket даёт обновление почти мгновенно. Контрольный опрос раз в пять
+  // секунд закрывает редкий разрыв мобильной сети и гарантирует, что новый
+  // чат появится без перезагрузки даже при потерянном push-событии.
+  setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 5000);
   setInterval(renderWindow, 30000);
 }
 

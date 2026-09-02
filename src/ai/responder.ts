@@ -1,9 +1,9 @@
-import { readFile } from 'node:fs/promises';
 import { config, log } from '../config.js';
 import type { Conversation, KbHit, Message, Store } from '../core/store.js';
-import type { Outbox } from '../core/outbox.js';
+import { readMediaFile } from '../core/media.js';
+import { OperatorActiveError, type Outbox } from '../core/outbox.js';
 import type { CustomerDirectory, Profile } from '../integrations/customers.js';
-import { runtime } from '../core/settings.js';
+import { resolveService, runtime, withServiceGreeting } from '../core/settings.js';
 import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
 import { decide, resolveMode } from './gate.js';
@@ -35,6 +35,10 @@ const SYSTEM_PROMPT = `Ты — оператор техподдержки сер
    пишет «ок», ругается без сути или предлагает поболтать — поставь no_request=true
    и оставь reply пустым. Не выдумывай за клиента вопрос и не зови человека:
    отвечать здесь просто не на что.
+11. Приложенные изображения — часть обращения клиента. Внимательно прочитай
+   видимый текст ошибки и элементы интерфейса, но не додумывай то, чего на
+   изображении нет. Если по изображению и базе нельзя дать точный ответ —
+   needs_human=true.
 
 Манера ответа:
 {style}
@@ -84,6 +88,58 @@ function renderHistory(messages: Message[]): string {
       return `${who}: ${body}`;
     })
     .join('\n');
+}
+
+const visionDelay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** MIME определяем по байтам: Telegram часто сохраняет фото без расширения. */
+export function imageMime(bytes: Buffer): string | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+      && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (bytes.length >= 6 && ['GIF87a', 'GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))) return 'image/gif';
+  return null;
+}
+
+/**
+ * Собирает фото из всей текущей серии сообщений, а не только из последнего.
+ * Это покрывает обычный сценарий «скриншот», затем отдельным сообщением текст.
+ */
+export async function visionImages(
+  store: Store,
+  messageIds: number[],
+  maxImages = config.ai.visionMaxImages,
+  waitMs = config.ai.visionWaitMs,
+): Promise<string[]> {
+  const grouped = store.attachmentsFor(messageIds);
+  const candidates = messageIds
+    .flatMap((messageId) => grouped[messageId] ?? [])
+    .filter((item) => item.media_type === 'photo')
+    .slice(-maxImages);
+  if (!candidates.length) return [];
+
+  const deadline = Date.now() + waitMs;
+  for (;;) {
+    const images: string[] = [];
+    let totalBytes = 0;
+    let waiting = false;
+    for (const candidate of candidates) {
+      const record = store.getAttachment(candidate.id);
+      if (!record?.local_path) { waiting = true; continue; }
+      try {
+        const bytes = await readMediaFile(record.file_ref);
+        const mime = imageMime(bytes);
+        if (!mime || bytes.byteLength > 6_000_000 || totalBytes + bytes.byteLength > 12_000_000) continue;
+        totalBytes += bytes.byteLength;
+        images.push(`data:${mime};base64,${bytes.toString('base64')}`);
+      } catch {
+        waiting = true;
+      }
+    }
+    if (!waiting || Date.now() >= deadline) return images;
+    await visionDelay(Math.min(250, Math.max(1, deadline - Date.now())));
+  }
 }
 
 /**
@@ -146,6 +202,20 @@ export class Responder {
     this.timers.clear();
   }
 
+  /**
+   * Проверяется до и после медленного запроса к модели. Печать, явный захват
+   * диалога и попытка отправки ставят метку до внешнего API — так человек
+   * всегда выигрывает гонку у AI. Один лишь просмотр AI не блокирует.
+   */
+  private claimedByOperator(conversationId: number, inboundAt: number): boolean {
+    const fresh = this.store.getConversation(conversationId);
+    if (!fresh) return true;
+    if (this.store.operatorIsActive(conversationId)) return true;
+    if (fresh.operator_active_at && fresh.operator_active_at >= inboundAt) return true;
+    const humanReply = this.store.lastHumanReplyAt(conversationId);
+    return humanReply !== null && humanReply >= inboundAt;
+  }
+
   /** Разбирает накопившиеся сообщения клиента. Ошибки наружу не идут. */
   async handleInbound(conversation: Conversation): Promise<void> {
     const pending = this.store.pendingInbound(conversation.id);
@@ -154,7 +224,13 @@ export class Responder {
 
     // Тон считаем всегда, даже когда AI молчит: оператор должен узнать,
     // что клиент на взводе, независимо от режима.
-    const clientText = pending.map((item) => item.text?.trim()).filter(Boolean).join('\n');
+    const plainText = pending.map((item) => item.text?.trim()).filter(Boolean).join('\n');
+    const pendingIds = pending.map((item) => item.id);
+    const pendingAttachments = this.store.attachmentsFor(pendingIds);
+    const hasImage = config.ai.vision && pending.some((item) =>
+      item.media_type === 'photo'
+      || pendingAttachments[item.id]?.some((attachment) => attachment.media_type === 'photo'));
+    const clientText = plainText || (hasImage ? '[Клиент приложил изображение без подписи]' : '');
     const tone = toneOf(clientText);
     if (tone === 'агрессивный') {
       this.store.setEscalated(conversation.id, true, 'high');
@@ -162,6 +238,11 @@ export class Responder {
     }
 
     if (resolveMode(conversation) === 'off') return;
+
+    if (this.claimedByOperator(conversation.id, message.created_at)) {
+      log.debug(`Диалог ${conversation.id}: оператор уже работает — AI пропускает`);
+      return;
+    }
 
     // Диалог у человека: модель не отвечает по существу, что бы клиент ни
     // писал дальше. Единственное разрешённое действие — напомнить, что
@@ -185,9 +266,14 @@ export class Responder {
     }
 
     try {
-      const hits = this.store.searchKb(clientText, config.ai.kbLimit);
+      const searchText = plainText || 'ошибка на скриншоте не подключается приложение';
+      const hits = this.store.searchKb(searchText, config.ai.kbLimit);
       const history = this.store.listMessages(conversation.id, config.ai.historyLimit);
       const snapshot = await this.customers.get(conversation).catch(() => null);
+      // CustomerDirectory мог только что связать диалог с одной из панелей
+      // Remnawave. Перечитываем карточку и выбираем её отдельный профиль.
+      const liveConversation = this.store.getConversation(conversation.id) ?? conversation;
+      const service = resolveService(this.store, liveConversation);
 
       // Выдержки режем: на бесплатных тарифах вход считается в тот же
       // дневной лимит, что и ответ, и длинная база съедает его за полдня.
@@ -210,13 +296,13 @@ export class Responder {
         `# Последнее сообщение клиента\n${clientText}`,
       ].join('\n\n');
 
-      const image = config.ai.vision ? await this.screenshot(message.id) : null;
-      const content: string | ContentPart[] = image
-        ? [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: image } }]
+      const images = config.ai.vision ? await visionImages(this.store, pendingIds) : [];
+      const content: string | ContentPart[] = images.length
+        ? [{ type: 'text', text: prompt }, ...images.map((url): ContentPart => ({ type: 'image_url', image_url: { url } }))]
         : prompt;
 
       const messages: ChatMessage[] = [
-        { role: 'system', content: SYSTEM_PROMPT.replace('{brand}', runtime.brand).replace('{style}', runtime.replyStyle) },
+        { role: 'system', content: SYSTEM_PROMPT.replace('{brand}', service.serviceName).replace('{style}', runtime.replyStyle) },
         { role: 'user', content },
       ];
 
@@ -228,6 +314,14 @@ export class Responder {
         return;
       }
 
+      // Пока модель думала, оператор мог открыть диалог или начать ответ.
+      // Не создаём даже предложку: она уже относится к устаревшему состоянию.
+      if (this.claimedByOperator(conversation.id, message.created_at)) {
+        log.info(`Диалог ${conversation.id}: оператор перехватил его во время генерации — AI отменён`);
+        this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id });
+        return;
+      }
+
       // Обращения нет — молчим совсем: ни ответа, ни предложки, ни передачи.
       // Иначе «мне поболтать охота» уезжает специалисту как заявка.
       if (draft.noRequest) {
@@ -236,16 +330,22 @@ export class Responder {
         return;
       }
 
+      const effectiveDraft = {
+        ...draft,
+        needsHuman: draft.needsHuman || hits.length === 0,
+        reply: withServiceGreeting(draft.reply, service.greetingMessage, !liveConversation.first_response_at),
+      };
+
       const suggestion = this.store.createSuggestion({
         conversationId: conversation.id,
         messageId: message.id,
-        text: draft.reply,
-        confidence: draft.confidence,
-        needsHuman: draft.needsHuman || hits.length === 0,
-        reason: draft.reason,
+        text: effectiveDraft.reply,
+        confidence: effectiveDraft.confidence,
+        needsHuman: effectiveDraft.needsHuman,
+        reason: effectiveDraft.reason,
         model: this.provider.lastModel,
-        sources: draft.used.length
-          ? draft.used.filter((n) => n >= 1 && n <= hits.length).map((n) => hits[n - 1]!.title)
+        sources: effectiveDraft.used.length
+          ? effectiveDraft.used.filter((n) => n >= 1 && n <= hits.length).map((n) => hits[n - 1]!.title)
           : [],
       });
 
@@ -253,29 +353,39 @@ export class Responder {
       // Раньше хватало любого совпадения по словам: на вопрос «всё ли в
       // порядке с сервером Германии» поиск цеплялся за статью про скорость,
       // проверка пропускала, и модель дописывала правдоподобное от себя.
-      const grounded = draft.used.filter((n) => n >= 1 && n <= hits.length).length;
-      const verdict = decide(this.store, conversation, clientText, draft, grounded);
+      const grounded = effectiveDraft.used.filter((n) => n >= 1 && n <= hits.length).length;
+      const verdict = decide(this.store, liveConversation, clientText, effectiveDraft, grounded);
       this.store.logEvent('ai_draft', conversation.id, {
         suggestion: suggestion.id,
         action: verdict.action,
         reason: verdict.reason,
-        confidence: draft.confidence,
+        confidence: effectiveDraft.confidence,
       });
 
       // Замок перед отправкой: в тексте не должно быть внутреннего —
       // адресов, ключей, идентификаторов. Промпт об этом просит, а здесь
       // проверяется по факту.
-      const outbound = checkOutbound(draft.reply, config.ai.allowedDomains);
+      const outbound = checkOutbound(effectiveDraft.reply, config.ai.allowedDomains);
       if (!outbound.ok) {
         log.warn(`Диалог ${conversation.id}: ответ задержан, в нём ${outbound.found.join(', ')}`);
         this.store.logEvent('ai_blocked', conversation.id, { found: outbound.found });
         void this.notifier?.notify('needs_human', conversation, {
           excerpt: clientText,
           reason: `в ответе AI ${outbound.found.join(', ')} — отправка остановлена`,
-          draft: draft.reply,
+          draft: effectiveDraft.reply,
           tone,
         });
-        await this.handOff(conversation, { excerpt: clientText, reason: 'ответ содержал внутренние данные', tone });
+        if (!this.claimedByOperator(conversation.id, message.created_at)) {
+          await this.handOff(conversation, { excerpt: clientText, reason: 'ответ содержал внутренние данные', tone });
+        }
+        return;
+      }
+
+      if (verdict.action === 'shadow') {
+        // Shadow mode нужен для безопасной калибровки: черновик, источники и
+        // уверенность видны оператору, но клиент не получает ни ответ, ни
+        // сообщение о передаче, а диалог не меняет состояние.
+        log.info(`Диалог ${conversation.id}: теневая предложка ${suggestion.id}`);
         return;
       }
 
@@ -283,14 +393,41 @@ export class Responder {
         log.info(`Диалог ${conversation.id}: предложка ${suggestion.id} (${verdict.reason})`);
         // Клиент должен узнать, что его вопрос ушёл человеку: молчание он
         // читает как «меня проигнорировали».
-        await this.handOff(conversation, { excerpt: clientText, reason: verdict.reason, draft: draft.reply, tone });
+        if (!this.claimedByOperator(conversation.id, message.created_at)) {
+          await this.handOff(liveConversation, { excerpt: clientText, reason: verdict.reason, draft: effectiveDraft.reply, tone });
+        }
         return;
       }
 
-      await this.outbox.send(conversation.id, { text: draft.reply }, 'ai', suggestion.id);
+
+      if (this.claimedByOperator(conversation.id, message.created_at)) {
+        this.store.decideSuggestion(suggestion.id, 'superseded');
+        this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id, suggestion: suggestion.id });
+        return;
+      }
+
+      try {
+        await this.outbox.send(conversation.id, { text: effectiveDraft.reply }, 'ai', suggestion.id);
+      } catch (err) {
+        if (err instanceof OperatorActiveError) {
+          this.store.decideSuggestion(suggestion.id, 'superseded');
+          this.store.logEvent('ai_cancelled_operator', conversation.id, {
+            message: message.id,
+            suggestion: suggestion.id,
+          });
+          log.info(`Диалог ${conversation.id}: оператор перехватил отправку — AI отменён`);
+          return;
+        }
+        throw err;
+      }
       this.store.decideSuggestion(suggestion.id, 'sent');
       log.info(`Диалог ${conversation.id}: автоответ отправлен (${verdict.reason})`);
     } catch (err) {
+      if (err instanceof OperatorActiveError) {
+        log.info(`Диалог ${conversation.id}: оператор перехватил AI — отправка отменена`);
+        this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id });
+        return;
+      }
       log.error(`Диалог ${conversation.id}: AI не смог ответить`, err);
       this.store.logEvent('ai_error', conversation.id, { error: String(err) });
       void this.notifier?.notify('ai_error', conversation, {
@@ -322,7 +459,8 @@ export class Responder {
     }
 
     try {
-      await this.outbox.send(conversation.id, { text: runtime.handoffMessage }, 'ai');
+      const service = resolveService(this.store, this.store.getConversation(conversation.id) ?? conversation);
+      await this.outbox.send(conversation.id, { text: service.handoffMessage }, 'ai');
       this.store.markHandoffNotified(conversation.id);
     } catch (err) {
       log.debug(`Диалог ${conversation.id}: не удалось предупредить о передаче`, err);
@@ -338,32 +476,12 @@ export class Responder {
       return;
     }
     try {
-      await this.outbox.send(conversation.id, { text: runtime.handoffMessage }, 'ai');
+      const service = resolveService(this.store, this.store.getConversation(conversation.id) ?? conversation);
+      await this.outbox.send(conversation.id, { text: service.handoffMessage }, 'ai');
       this.store.markHandoffNotified(conversation.id);
     } catch (err) {
       log.debug(`Диалог ${conversation.id}: напоминание не ушло`, err);
     }
   }
 
-  /**
-   * Скриншот из сообщения как data URL. Включается AI_VISION и требует
-   * мультимодальной модели: картинка стоит заметного числа токенов,
-   * поэтому по умолчанию выключено.
-   */
-  private async screenshot(messageId: number): Promise<string | null> {
-    const photo = this.store
-      .attachmentsFor([messageId])[messageId]
-      ?.find((item) => item.media_type === 'photo');
-    if (!photo) return null;
-
-    const record = this.store.getAttachment(photo.id);
-    if (!record?.local_path) return null;
-    try {
-      const bytes = await readFile(record.local_path);
-      if (bytes.byteLength > 4_000_000) return null;
-      return `data:image/jpeg;base64,${bytes.toString('base64')}`;
-    } catch {
-      return null;
-    }
-  }
 }

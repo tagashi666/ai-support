@@ -15,14 +15,26 @@ export interface NodesSnapshot {
   error?: string;
 }
 
+export interface RemnawaveNodeSource {
+  id: string;
+  name: string;
+  client: RemnawaveClient;
+}
+
 export class NodeWatch {
   private snapshot: NodesSnapshot = { at: 0, nodes: [] };
   private timer?: NodeJS.Timeout;
 
   constructor(
     private readonly store: Store,
-    private readonly remnawave: RemnawaveClient,
-  ) {}
+    remnawave: RemnawaveClient | RemnawaveNodeSource[],
+  ) {
+    this.sources = Array.isArray(remnawave)
+      ? remnawave
+      : [{ id: 'remnawave:legacy', name: 'Remnawave', client: remnawave }];
+  }
+
+  private readonly sources: RemnawaveNodeSource[];
 
   start(): void {
     void this.refresh();
@@ -39,13 +51,40 @@ export class NodeWatch {
   }
 
   async refresh(): Promise<NodesSnapshot> {
-    try {
-      const nodes = await this.remnawave.nodes();
+    const results = await Promise.allSettled(this.sources.map(async (source) => {
+      const nodes = await source.client.nodes();
       if (!nodes) throw new Error('панель не отдала список узлов');
-      this.snapshot = { at: Date.now(), nodes };
+      return nodes.map((node) => ({
+        ...node,
+        sourceId: source.id,
+        sourceName: source.name,
+        aliasKey: `${source.id}:${node.rawName}`,
+      }));
+    }));
+
+    const previousBySource = new Map(this.sources.map((source) => [
+      source.id,
+      this.snapshot.nodes.filter((node) => node.sourceId === source.id),
+    ]));
+    const nodes: NodeState[] = [];
+    const errors: string[] = [];
+    let succeeded = 0;
+    results.forEach((result, index) => {
+      const source = this.sources[index]!;
+      if (result.status === 'fulfilled') {
+        succeeded += 1;
+        nodes.push(...result.value);
+      } else {
+        nodes.push(...(previousBySource.get(source.id) ?? []));
+        errors.push(`${source.name}: ${(result.reason as Error)?.message ?? String(result.reason)}`);
+      }
+    });
+
+    if (succeeded) {
+      this.snapshot = { at: Date.now(), nodes, ...(errors.length ? { error: errors.join('; ') } : {}) };
       this.store.setState('nodes:last_ok', String(Date.now()));
-    } catch (err) {
-      const message = (err as Error).message;
+    } else {
+      const message = errors.join('; ') || 'ни одна панель не отдала список узлов';
       log.debug(`Состояние узлов не обновилось: ${message}`);
       this.snapshot = { ...this.snapshot, error: message };
     }
@@ -72,7 +111,9 @@ export class NodeWatch {
     // модель видеть не должна вовсе.
     const aliases = this.store.nodeAliases();
     const lines = nodes.map((node) => {
-      const label = aliases[node.rawName]?.trim() || node.name;
+      const label = aliases[node.aliasKey ?? node.rawName]?.trim()
+        || aliases[node.rawName]?.trim()
+        || node.name;
       const state = node.disabled ? 'выключен администратором'
         : node.online ? 'работает'
         : 'недоступен';

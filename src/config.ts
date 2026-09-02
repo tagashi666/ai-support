@@ -76,15 +76,69 @@ const megabytes = (name: string, fallback: number): number => {
   return Math.floor(value * 1024 * 1024);
 };
 
-export type AiMode = 'off' | 'suggest' | 'auto';
+const SOURCE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
+function jsonArray<T>(name: string): T[] {
+  const raw = optional(name);
+  if (!raw) return [];
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new Error(`${name} должен содержать корректный JSON`); }
+  if (!Array.isArray(parsed)) throw new Error(`${name} должен быть JSON-массивом`);
+  return parsed as T[];
+}
 
-const aiMode = optional('AI_MODE') || 'suggest';
-if (!['off', 'suggest', 'auto'].includes(aiMode)) {
-  throw new Error(`AI_MODE должен быть off, suggest или auto — получено "${aiMode}"`);
+export interface TelegramBotConfig { id: string; name: string; token: string }
+export interface RemnawavePanelConfig { id: string; name: string; url: string; token: string; readOnly: boolean }
+
+const telegramBots = jsonArray<Partial<TelegramBotConfig>>('TELEGRAM_BOTS_JSON').map((entry, index) => ({
+  id: String(entry.id ?? `telegram-${index + 1}`).trim(),
+  name: String(entry.name ?? `Telegram ${index + 1}`).trim(),
+  token: String(entry.token ?? '').trim(),
+}));
+if (!telegramBots.length && optional('BOT_TOKEN')) {
+  telegramBots.push({ id: 'telegram-default', name: 'Telegram', token: optional('BOT_TOKEN') });
+}
+
+const remnawavePanels = jsonArray<Partial<RemnawavePanelConfig>>('REMNAWAVE_PANELS_JSON').map((entry, index) => ({
+  id: String(entry.id ?? `remnawave-${index + 1}`).trim(),
+  name: String(entry.name ?? `Remnawave ${index + 1}`).trim(),
+  url: String(entry.url ?? '').trim(),
+  token: String(entry.token ?? '').trim(),
+  readOnly: entry.readOnly !== false,
+}));
+if (!remnawavePanels.length && bool('REMNAWAVE_ENABLED', false)) {
+  remnawavePanels.push({
+    id: 'remnawave-default', name: 'Remnawave', url: optional('REMNAWAVE_URL'),
+    token: optional('REMNAWAVE_TOKEN'), readOnly: bool('REMNAWAVE_READONLY', true),
+  });
+}
+
+function validateSources(items: Array<{ id: string; name: string }>, envName: string): void {
+  const ids = new Set<string>();
+  for (const item of items) {
+    if (!SOURCE_ID_RE.test(item.id)) throw new Error(`${envName}: недопустимый id "${item.id}"`);
+    if (!item.name || item.name.length > 120) throw new Error(`${envName}: имя источника обязательно и не длиннее 120 символов`);
+    if (ids.has(item.id)) throw new Error(`${envName}: id "${item.id}" повторяется`);
+    ids.add(item.id);
+  }
+}
+validateSources(telegramBots, 'TELEGRAM_BOTS_JSON');
+validateSources(remnawavePanels, 'REMNAWAVE_PANELS_JSON');
+
+export type AiMode = 'off' | 'shadow' | 'suggest' | 'auto';
+
+const aiKeys = keyList('AI_API_KEY');
+// Голая панель должна подниматься без внешних интеграций. Если ключей AI
+// нет и режим явно не задан, безопасный режим — off, а не авария на старте.
+const aiMode = optional('AI_MODE') || (aiKeys.length ? 'suggest' : 'off');
+if (!['off', 'shadow', 'suggest', 'auto'].includes(aiMode)) {
+  throw new Error(`AI_MODE должен быть off, shadow, suggest или auto — получено "${aiMode}"`);
 }
 
 export const config = {
-  botToken: env('BOT_TOKEN'),
+  // Один токен обслуживает и Telegram Business, и обычную личку бота.
+  // Он необязателен: локальная панель, шаблоны и база знаний работают сами.
+  botToken: telegramBots[0]?.token ?? '',
+  telegramBots,
   alertChatId: optional('ALERT_CHAT_ID'),
   // Внешний адрес панели: нужен, чтобы из уведомления можно было сразу
   // открыть нужный диалог, а не искать его руками.
@@ -110,6 +164,28 @@ export const config = {
   panelHost: env('PANEL_HOST', '127.0.0.1'),
   panelToken: env('PANEL_TOKEN'),
 
+  update: {
+    enabled: bool('UPDATE_ENABLED', true),
+    repository: env('UPDATE_REPOSITORY', 'tagashi666/ai-support'),
+    channel: (optional('UPDATE_CHANNEL') === 'stable' ? 'stable' : 'prerelease') as 'stable' | 'prerelease',
+    checkMinutes: num('UPDATE_CHECK_MINUTES', 15),
+    // Файл находится в bind-mounted data. Веб-процесс не получает доступ
+    // ни к Docker socket, ни к systemd. Применение возможно только если
+    // администратор отдельно настроил ограниченный хостовый обработчик.
+    requestFile: env('UPDATE_REQUEST_FILE', './data/update-request.json'),
+    // Результат пишет только хостовый обработчик. Панель читает его и
+    // показывает этапы, backup и доступность отката, не управляя сервисами.
+    statusFile: env('UPDATE_STATUS_FILE', './data/update-status.json'),
+  },
+
+  sourceManagement: {
+    // Как и обновления, подключение нового источника выполняется не веб-
+    // процессом, а отдельным root-only исполнителем. В запросе секрет живёт
+    // только до применения и никогда не возвращается через API.
+    requestFile: env('SOURCE_REQUEST_FILE', './data/source-request.json'),
+    statusFile: env('SOURCE_STATUS_FILE', './data/source-status.json'),
+  },
+
   bedolaga: {
     enabled: bool('BEDOLAGA_ENABLED', false),
     url: optional('BEDOLAGA_API_URL'),
@@ -126,13 +202,14 @@ export const config = {
   },
 
   remnawave: {
-    enabled: bool('REMNAWAVE_ENABLED', false),
-    url: optional('REMNAWAVE_URL'),
-    token: optional('REMNAWAVE_TOKEN'),
+    enabled: remnawavePanels.length > 0,
+    url: remnawavePanels[0]?.url ?? '',
+    token: remnawavePanels[0]?.token ?? '',
     // Запрет разрушающих действий на уровне кода. Даже получив доступ к
     // панели, сбросить устройства или перевыпустить подписку нельзя.
-    readOnly: bool('REMNAWAVE_READONLY', true),
+    readOnly: remnawavePanels[0]?.readOnly ?? true,
   },
+  remnawavePanels,
 
   nodes: {
     // Состояние узлов для ответов вида «всё ли в порядке с Германией».
@@ -144,14 +221,16 @@ export const config = {
 
   ai: {
     mode: aiMode as AiMode,
-    baseUrl: env('AI_BASE_URL', 'https://api.moonshot.ai/v1'),
-    apiKeys: keyList('AI_API_KEY'),
-    model: env('AI_MODEL', 'kimi-k2-0905-preview'),
-    // Лимиты у провайдеров считаются на каждую модель отдельно, поэтому
-    // запасная — это не только страховка, но и второй суточный бюджет.
-    fallbackModel: optional('AI_MODEL_FALLBACK'),
-    // 'none' у Qwen полностью выключает рассуждения. На бесплатных тарифах
-    // это принципиально: токены размышлений тратят тот же дневной лимит.
+    baseUrl: env('AI_BASE_URL', 'https://api.groq.com/openai/v1'),
+    apiKeys: aiKeys,
+    // Qwen 3.6 снимается Groq с обслуживания 14 сентября 2026 года.
+    // 3.8 — его официальный мультимодальный преемник.
+    model: env('AI_MODEL', 'qwen/qwen3.8-27b'),
+    // Production-модель страхует текстовые обращения. Для фото она не
+    // используется: provider проверяет возможности модели до отправки.
+    fallbackModel: env('AI_MODEL_FALLBACK', 'openai/gpt-oss-120b'),
+    // 'none' у Qwen полностью выключает рассуждения. Для GPT-OSS provider
+    // автоматически заменяет его на минимально допустимое значение 'low'.
     reasoningEffort: optional('AI_REASONING_EFFORT'),
     temperature: num('AI_TEMPERATURE', 0.3),
     maxTokens: num('AI_MAX_TOKENS', 700),
@@ -184,9 +263,20 @@ export const config = {
       'если шагов несколько, объедини их в связную фразу. Обращайся на «вы», без канцелярита и без извинений.'),
     // Нет опоры в базе знаний — ответ не уходит клиенту сам, ни в каком режиме.
     requireKb: bool('AI_REQUIRE_KB', true),
-    vision: bool('AI_VISION', false),
+    // Модели, которым разрешено передавать изображения. Список явный:
+    // ошибочная отправка фото в текстовую модель хуже безопасного отказа.
+    vision: bool('AI_VISION', true),
+    visionModels: env('AI_VISION_MODELS', 'qwen/qwen3.8-27b')
+      .split(/[\s,;]+/).map((model) => model.trim()).filter(Boolean),
+    visionMaxImages: Math.min(3, Math.max(1, Math.floor(num('AI_VISION_MAX_IMAGES', 3)))),
+    // Вложение скачивает отдельный воркер. Коротко ждём его, чтобы фото,
+    // пришедшее вместе с текстом, не потерялось из-за гонки.
+    visionWaitMs: Math.min(15_000, Math.max(0, Math.floor(num('AI_VISION_WAIT_MS', 4_000)))),
     // Адреса, которые AI разрешено называть клиенту: сайт, страница подписки.
     allowedDomains: env('AI_ALLOWED_DOMAINS', '').split(/[\s,;]+/).filter(Boolean),
+    // Закрытые диалоги превращаются в черновики, а не публикуются сами:
+    // оператор сохраняет контроль над тем, чему будет доверять модель.
+    autoLearn: bool('AI_AUTO_LEARN', false),
   },
 
   transcribe: {
@@ -210,6 +300,10 @@ if (config.panelToken.length < 16) {
   throw new Error('PANEL_TOKEN короче 16 символов — панель будет открыта наружу практически без защиты');
 }
 
+if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.update.repository)) {
+  throw new Error('UPDATE_REPOSITORY должен иметь вид owner/repository');
+}
+
 // Заголовок Authorization — ByteString: кириллица и эмодзи в нём физически
 // не передаются, браузер упадёт на fetch. Ловим на старте, а не в проде.
 if (!/^[\x21-\x7E]+$/.test(config.panelToken)) {
@@ -228,6 +322,13 @@ if (config.ai.mode !== 'off' && !config.ai.apiKeys.length) {
 
 if (config.remnawave.enabled && !(config.remnawave.url && config.remnawave.token)) {
   throw new Error('REMNAWAVE_ENABLED=true, но не заданы REMNAWAVE_URL и REMNAWAVE_TOKEN');
+}
+
+if (config.telegramBots.some((item) => !item.token)) {
+  throw new Error('TELEGRAM_BOTS_JSON: у каждого бота должен быть token');
+}
+if (config.remnawavePanels.some((item) => !(item.url && item.token))) {
+  throw new Error('REMNAWAVE_PANELS_JSON: у каждой панели должны быть url и token');
 }
 
 if (config.transcribe.enabled && !(config.transcribe.baseUrl && config.transcribe.apiKeys.length)) {

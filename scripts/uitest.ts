@@ -8,6 +8,7 @@
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const uiCss = readFileSync(new URL('../public/ui.css', import.meta.url), 'utf8');
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: unknown): void => {
@@ -172,6 +173,9 @@ check('content-type ставится только при наличии тела
 check('пустой пузырь не остаётся без содержимого',
   /if \(!m\.text && !files\.length\)/.test(html));
 check('подробность уведомлений настраивается', /notifyLevel/.test(html));
+check('клавиши подстраиваются под платформу', /function applyPlatformShortcuts\(/.test(html)
+  && /applePlatform/.test(html) && /navigator\.userAgentData/.test(html)
+  && /aria-keyshortcuts/.test(html));
 
 // 22. Вход отдельным экраном: prompt() не показывает ошибку и не даёт
 // стереть неверный токен.
@@ -200,6 +204,11 @@ check('можно ответить на конкретное сообщение'
 // с телефона без ограничения занимает весь экран.
 check('вложение ограничено по высоте', /\.bubble \.shot\s*\{[^}]*max-height:\s*\d+px/.test(html));
 check('полный размер открывается по клику', /function openImage\(/.test(html) && /className = 'lightbox'/.test(html));
+check('просмотр картинки всегда можно закрыть', /lightbox-close/.test(uiCss)
+  && /closeButton\.onclick\s*=/.test(html)
+  && /e\.key === 'Escape'/.test(html));
+check('аватар не может растянуть раскладку', /\.avatar-photo\s*\{[^}]*position:absolute[^}]*max-width:100%\s*!important[^}]*max-height:100%\s*!important/s.test(uiCss)
+  && /\.row-avatar[^}]*max-width:38px/s.test(uiCss));
 
 // 25. Действие «ответить» не спрятано за наведение: невидимую кнопку
 // не находят.
@@ -218,6 +227,20 @@ check('песочница AI есть', /id="view-lab"/.test(html) && /\/api\/ai
 check('связь проверяется кнопкой', /\/api\/ai\/ping/.test(html));
 check('модель выбирается из списка провайдера', /\/api\/ai\/models/.test(html));
 check('подозрительные видны в списке', /нет в базах/.test(html));
+
+// 38. Подключение источников должно быть обнаруживаемым действием в панели,
+// а не требовать ручного редактирования .env. Секрет вводится как пароль и
+// сразу удаляется из DOM после постановки root-only задания в очередь.
+check('в настройках есть явное добавление источника', /Добавить источник/.test(html)
+  && /function openSourceWizard\(/.test(html));
+check('мастер поддерживает бота, Business и Remnawave', /value="telegram_bot"/.test(html)
+  && /value="telegram_business"/.test(html) && /value="remnawave"/.test(html));
+check('токен источника скрыт и очищается', /id="sourceToken" type="password"/.test(html)
+  && /\$\('sourceToken'\)\.value = ''/.test(html));
+check('подключение источника использует отдельный безопасный API', /\/api\/sources\/request/.test(html)
+  && /\/api\/sources\/status/.test(html) && /watchSourceApply/.test(html));
+check('Telegram Business подключается понятной инструкцией', /Настройки → Telegram Business → Чат-боты/.test(html)
+  && /Один бот может обслуживать несколько Business-аккаунтов/.test(html));
 
 // 28. У каждой настройки обязано быть объяснение: без него оператор меняет
 // значение, не видит эффекта и считает параметр сломанным.
@@ -273,6 +296,11 @@ check('отметка о прочтении не блокирует отрисо
   /void api\(`\/api\/conversations\/\$\{id\}\/read`/.test(html));
 check('быстрое переключение не путает диалоги', /ticket !== openToken/.test(html));
 check('подписка грузится по раскрытию раздела', /if \(!wrap\.open\)/.test(html));
+check('новые диалоги сразу сливаются из WebSocket в список', /mergeLiveConversation\(frame\.conversation\)/.test(html));
+check('список имеет резервный опрос не реже пяти секунд',
+  /setInterval\(\(\) => \{ if \(document\.visibilityState === 'visible'\) void refresh\(\); \}, 5000\)/.test(html));
+check('ошибка аватара повторяется, а не удаляет картинку навсегда',
+  /function armAvatars/.test(html) && !/onerror="this\.remove\(\)"/.test(html));
 
 // 36. Анимации только на transform и opacity: всё остальное заставляет
 // браузер пересчитывать раскладку, и на высокой частоте это заметно.

@@ -2,7 +2,7 @@ import { config, log, version } from './config.js';
 import { syncKbFromBedolaga, syncKbFromFiles } from './ai/kb.js';
 import { Responder } from './ai/responder.js';
 import { BedolagaClient, BedolagaPoller, BedolagaSender } from './channels/bedolaga.js';
-import { createBot, markReadInTelegram, TelegramDmSender } from './channels/tgdm.js';
+import { createBot, markReadInTelegram, refreshTelegramProfiles, TelegramBotRegistry, TelegramBotSender, TelegramDmSender } from './channels/tgdm.js';
 import { Store } from './core/store.js';
 import { detectSubLink } from './ai/sublink.js';
 import { openDatabase } from './core/db.js';
@@ -26,9 +26,17 @@ async function main(): Promise<void> {
   seedTemplates(store);
   loadSettings(store);
 
-  const bot = createBot(store);
+  const bots = new TelegramBotRegistry();
+  for (const source of config.telegramBots) {
+    const bot = createBot(store, source.token, { sourceId: source.id, sourceName: source.name });
+    bots.add(source.id, source.name, source.token, bot);
+  }
+  const bot = bots.first();
   const outbox = new Outbox(store);
-  outbox.register('tg_dm', new TelegramDmSender(bot));
+  if (bot) {
+    outbox.register('tg_dm', new TelegramDmSender(bots));
+    outbox.register('tg_bot', new TelegramBotSender(bots));
+  }
 
   const bedolaga = config.bedolaga.enabled
     ? new BedolagaClient(config.bedolaga.url, config.bedolaga.token)
@@ -40,12 +48,21 @@ async function main(): Promise<void> {
     poller = new BedolagaPoller(bedolaga, store, config.bedolaga.pollSeconds * 1000);
   }
 
-  const remnawave = config.remnawave.enabled ? new RemnawaveClient() : undefined;
-  const customers = new CustomerDirectory(store, bedolaga, remnawave);
-  const media = new MediaFetcher(store, bot, bedolaga);
-  const notifier = new Notifier(store, bot);
-  const sla = new SlaWatcher(store, notifier);
-  const nodes = config.nodes.enabled && remnawave ? new NodeWatch(store, remnawave) : undefined;
+  const remnawaves = config.remnawavePanels.map((panel) => ({
+    id: panel.id,
+    name: panel.name,
+    readOnly: panel.readOnly,
+    client: new RemnawaveClient(panel.url, panel.token, panel.readOnly),
+  }));
+  for (const panel of remnawaves) {
+    store.syncSource({ id: panel.id, kind: 'remnawave', name: panel.name });
+  }
+  const remnawave = remnawaves[0]?.client;
+  const customers = new CustomerDirectory(store, bedolaga, remnawaves);
+  const media = new MediaFetcher(store, bot ? bots : undefined, bedolaga);
+  const notifier = bot ? new Notifier(store, bot) : undefined;
+  const sla = notifier ? new SlaWatcher(store, notifier) : undefined;
+  const nodes = config.nodes.enabled && remnawaves.length ? new NodeWatch(store, remnawaves) : undefined;
   nodes?.start();
   // Responder существует даже при стартовом AI_MODE=off: runtime-режим можно
   // включить из панели без перезапуска. Сам обработчик первым делом проверяет
@@ -89,13 +106,13 @@ async function main(): Promise<void> {
 
       const isFirst = store.listMessages(conversation.id, 2).length === 1;
       const excerpt = message.text ?? (message.media_type ? `[${message.media_type}]` : '[без текста]');
-      void notifier.notify(isFirst ? 'new' : 'message', conversation, { excerpt });
+      void notifier?.notify(isFirst ? 'new' : 'message', conversation, { excerpt });
       return;
     }
 
     // Ответы оператора не дублируем: он их сам и отправил.
     if (message.direction === 'out' && message.author === 'ai') {
-      void notifier.notify('ai_reply', conversation, { excerpt: message.text ?? undefined });
+      void notifier?.notify('ai_reply', conversation, { excerpt: message.text ?? undefined });
     }
   });
 
@@ -111,17 +128,19 @@ async function main(): Promise<void> {
     customers,
     notifier,
     remnawave,
+    remnawaves,
+    bedolaga,
     nodes,
     onKbChanged: () => void syncKb(),
     onOpened: (conversation) => {
-      if (conversation.channel !== 'tg_dm') return;
+      if (conversation.channel !== 'tg_dm' || !bot) return;
       const last = store.lastInboundMessage(conversation.id);
-      if (last?.external_msg_id) void markReadInTelegram(bot, conversation, Number(last.external_msg_id));
+      if (last?.external_msg_id) void markReadInTelegram(bots, conversation, Number(last.external_msg_id));
     },
   });
 
   media.start();
-  sla.start();
+  sla?.start();
   poller?.start();
 
   const shutdown = async (signal: string): Promise<void> => {
@@ -129,10 +148,10 @@ async function main(): Promise<void> {
     clearInterval(kbTimer);
     poller?.stop();
     media.stop();
-    sla.stop();
+    sla?.stop();
     responder.stop();
     nodes?.stop();
-    await bot.stop().catch(() => {});
+    await Promise.all(bots.all().map((configuredBot) => configuredBot.stop().catch(() => {})));
     await app.close().catch(() => {});
     db.close();
     process.exit(0);
@@ -142,8 +161,12 @@ async function main(): Promise<void> {
 
   // bot.start() возвращает промис, который живёт до остановки бота.
   // Без catch неверный токен или сетевой сбой уронят процесс без внятной причины.
-  void bot
-    .start({
+  if (!bot) {
+    log.warn(`ai-support ${version}: BOT_TOKEN не задан — панель работает автономно, Telegram отключён`);
+    return;
+  }
+
+  for (const [index, configuredBot] of bots.all().entries()) void configuredBot.start({
       allowed_updates: [
         'business_connection',
         'business_message',
@@ -152,7 +175,9 @@ async function main(): Promise<void> {
         'message',
       ],
       onStart: (me) => {
-        log.info(`ai-support ${version}: бот @${me.username} запущен, AI в режиме ${runtime.aiMode}`);
+        const source = config.telegramBots[index];
+        log.info(`ai-support ${version}: ${source?.name ?? 'бот'} @${me.username} запущен, AI в режиме ${runtime.aiMode}`);
+        if (source) void refreshTelegramProfiles(store, configuredBot, source.id);
         const active = store.activeBusinessConnectionId();
         if (active) {
           log.info(`Активное бизнес-подключение: ${active}`);
@@ -165,8 +190,7 @@ async function main(): Promise<void> {
       },
     })
     .catch((err) => {
-      log.error('Бот остановился с ошибкой', err);
-      process.exit(1);
+      log.error(`Бот ${config.telegramBots[index]?.name ?? index + 1} остановился с ошибкой; панель и остальные источники продолжают работу`, err);
     });
 }
 

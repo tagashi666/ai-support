@@ -1,5 +1,5 @@
 import { config, log } from '../config.js';
-import type { Store } from './store.js';
+import type { Conversation, Store } from './store.js';
 
 /**
  * Настройки, которые меняются из панели без перезапуска.
@@ -10,7 +10,7 @@ import type { Store } from './store.js';
  * превращается в способ увести доступ ко всей инфраструктуре.
  */
 export interface Runtime {
-  aiMode: 'off' | 'suggest' | 'auto';
+  aiMode: 'off' | 'shadow' | 'suggest' | 'auto';
   minConfidence: number;
   autoPerHour: number;
   humanHoldMinutes: number;
@@ -27,6 +27,7 @@ export interface Runtime {
   /** Индекс ключа для модели, -1 — любой доступный. */
   modelKey: number;
   fallbackKey: number;
+  autoLearn: boolean;
 }
 
 export const runtime: Runtime = {
@@ -46,7 +47,47 @@ export const runtime: Runtime = {
   fallbackModel: config.ai.fallbackModel,
   modelKey: -1,
   fallbackKey: -1,
+  autoLearn: config.ai.autoLearn,
 };
+
+export interface ResolvedService {
+  sourceId: string | null;
+  serviceName: string;
+  greetingMessage: string;
+  handoffMessage: string;
+}
+
+/**
+ * Выбирает клиентский профиль детерминированно. Связанная Remnawave-панель
+ * важнее канала доставки: один Telegram Business может обслуживать несколько
+ * брендов, а клиент всё равно должен увидеть текст своего сервиса.
+ */
+export function resolveService(store: Store, conversation: Conversation): ResolvedService {
+  const linked = store.conversationSourceIds(conversation.id);
+  const candidates = [
+    ...linked.filter((id) => store.sourceAccount(id)?.kind === 'remnawave'),
+    conversation.source_id,
+    ...linked,
+  ].filter((id, index, all): id is string => Boolean(id) && all.indexOf(id) === index);
+  const profiles = store.serviceProfiles();
+  const sourceId = candidates.find((id) => Boolean(profiles[id])) ?? null;
+  const profile = sourceId ? profiles[sourceId] : undefined;
+  return {
+    sourceId,
+    serviceName: profile?.serviceName || runtime.brand,
+    greetingMessage: profile?.greetingMessage || '',
+    handoffMessage: profile?.handoffMessage || runtime.handoffMessage,
+  };
+}
+
+/** Приветствие добавляется только к первому содержательному ответу. */
+export function withServiceGreeting(text: string, greeting: string, firstResponse: boolean): string {
+  const reply = text.trim();
+  const intro = greeting.trim();
+  if (!reply || !intro || !firstResponse) return reply;
+  if (reply.toLocaleLowerCase('ru').startsWith(intro.toLocaleLowerCase('ru'))) return reply;
+  return `${intro}\n\n${reply}`;
+}
 
 type Validator = (value: unknown) => unknown | undefined;
 
@@ -63,7 +104,7 @@ const NUMBER = (min: number, max: number): Validator => (value) => {
 
 /** Каждое поле проверяется: панель не должна уметь записать мусор в конфиг. */
 const FIELDS: Record<keyof Runtime, Validator> = {
-  aiMode: (value) => (['off', 'suggest', 'auto'].includes(String(value)) ? String(value) : undefined),
+  aiMode: (value) => (['off', 'shadow', 'suggest', 'auto'].includes(String(value)) ? String(value) : undefined),
   minConfidence: NUMBER(0, 1),
   autoPerHour: NUMBER(0, 100),
   humanHoldMinutes: NUMBER(0, 1440),
@@ -103,12 +144,26 @@ const FIELDS: Record<keyof Runtime, Validator> = {
     if (['false','0','off','no','нет'].includes(text)) return false;
     return undefined;
   },
+  autoLearn: (value) => {
+    if (typeof value === 'boolean') return value;
+    const text = String(value).toLowerCase();
+    if (['true','1','on','yes','да'].includes(text)) return true;
+    if (['false','0','off','no','нет'].includes(text)) return false;
+    return undefined;
+  },
 };
 
 export function loadSettings(store: Store): void {
   for (const key of Object.keys(FIELDS) as (keyof Runtime)[]) {
-    const raw = store.getSetting(key);
+    let raw = store.getSetting(key);
     if (raw === undefined) continue;
+    // Безопасная миграция сохранённой через панель модели. Иначе значение
+    // из SQLite продолжает перекрывать исправленный default из .env.
+    if ((key === 'model' || key === 'fallbackModel') && raw === 'qwen/qwen3.6-27b') {
+      raw = key === 'model' ? config.ai.model : config.ai.fallbackModel;
+      store.setSetting(key, raw);
+      log.warn(`Снятая Groq-модель qwen/qwen3.6-27b заменена в настройке ${key} на ${String(raw)}`);
+    }
     const parsed = FIELDS[key](raw);
     if (parsed === undefined) {
       log.warn(`Настройка ${key} в базе невалидна, беру значение из окружения`);

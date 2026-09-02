@@ -43,21 +43,23 @@ const store = new Store(db);
 report('ok', 'База данных', `${config.dbPath}, версия схемы ${db.pragma('user_version', { simple: true })}`);
 
 // --- Telegram ----------------------------------------------------------
-const bot = new Bot(config.botToken);
-await step('Токен бота', async () => {
-  const me = await bot.api.getMe();
-  if (!me.can_connect_to_business) {
-    throw new Error(`@${me.username}: Business Mode выключен в @BotFather`);
-  }
-  return `@${me.username}, Business Mode включён`;
-});
+if (config.botToken) {
+  const bot = new Bot(config.botToken);
+  await step('Токен бота', async () => {
+    const me = await bot.api.getMe();
+    const business = me.can_connect_to_business ? 'Business Mode включён' : 'Business Mode выключен';
+    return `@${me.username}, ${business}`;
+  });
 
-const connection = store.activeBusinessConnectionId();
-report(
-  connection ? 'ok' : 'warn',
-  'Бизнес-подключение',
-  connection ?? 'бот ещё не подключён к аккаунту — появится после подключения в настройках Telegram',
-);
+  const connection = store.activeBusinessConnectionId();
+  report(
+    connection ? 'ok' : 'warn',
+    'Бизнес-подключение',
+    connection ?? 'не подключено — обычная личка бота при этом продолжает работать',
+  );
+} else {
+  report('skip', 'Telegram', 'BOT_TOKEN не задан — панель работает без Telegram');
+}
 
 // --- бедолага ----------------------------------------------------------
 let bedolaga: BedolagaClient | undefined;
@@ -136,7 +138,7 @@ if (config.ai.mode === 'off') {
     return `${config.ai.model} отвечает, ключей ${total}`;
   });
   if (config.ai.fallbackModel) {
-    report('ok', 'Запасная модель', `${config.ai.fallbackModel} — свой дневной лимит`);
+    report('ok', 'Запасная модель', `${config.ai.fallbackModel} — резерв для текстовых обращений`);
   }
   if (config.ai.reasoningEffort) {
     report('ok', 'Рассуждения модели', config.ai.reasoningEffort);
@@ -144,7 +146,9 @@ if (config.ai.mode === 'off') {
     report('warn', 'Рассуждения модели', 'не ограничены — на бесплатном тарифе съедят дневной лимит токенов');
   }
   if (config.ai.vision) {
-    report('warn', 'AI_VISION=true', 'картинки стоят много токенов, следи за дневным лимитом');
+    const primaryVision = config.ai.visionModels.includes(config.ai.model);
+    report(primaryVision ? 'ok' : 'fail', 'Распознавание изображений',
+      `${primaryVision ? 'включено' : 'основная модель не в allowlist'}, до ${config.ai.visionMaxImages} фото; модели: ${config.ai.visionModels.join(', ') || 'нет'}`);
   }
   if (config.ai.mode === 'auto') {
     report('warn', 'AI_MODE=auto', 'ответы уйдут клиентам без подтверждения — начинать стоит с suggest');

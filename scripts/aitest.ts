@@ -17,6 +17,8 @@ process.env.AI_API_KEY = 'fake';
 process.env.AI_MIN_CONFIDENCE = '0.75';
 process.env.AI_AUTO_PER_HOUR = '2';
 process.env.AI_HUMAN_HOLD_MINUTES = '30';
+process.env.AI_REASONING_EFFORT = 'none';
+process.env.AI_VISION_MODELS = 'qwen/qwen3.8-27b';
 process.env.LOG_LEVEL = 'error';
 const dir = mkdtempSync(join(tmpdir(), 'ai-support-ai-'));
 process.env.DB_PATH = join(dir, 'ai.db');
@@ -24,7 +26,7 @@ process.env.KB_DIR = join(dir, 'kb');
 
 const { decide, isSensitive, resolveMode } = await import('../src/ai/gate.js');
 const { parseDraft } = await import('../src/ai/provider.js');
-const { BedolagaClient, BedolagaPoller, parseTimestamp } = await import('../src/channels/bedolaga.js');
+const { BedolagaClient, BedolagaPoller, BedolagaSender, parseTimestamp } = await import('../src/channels/bedolaga.js');
 const { Store, REPLY_WINDOW_MS } = await import('../src/core/store.js');
 const { openDatabase } = await import('../src/core/db.js');
 
@@ -294,6 +296,8 @@ check('нет поля времени — подставляется fallback', 
 // ---------- канал бедолаги ----------
 console.log('\n[ канал бедолаги ]');
 let replyCalls = 0;
+let statusCalls = 0;
+let statusPayload: unknown;
 const tickets = [
   {
     id: 77,
@@ -302,20 +306,52 @@ const tickets = [
     priority: 'normal',
     user_id: 5,
     messages: [
-      { id: 1, message_text: 'не работает на роутере', is_from_admin: false, created_at: '2026-08-01T10:00:00Z', has_media: true, media_type: 'photo' },
-      { id: 2, message_text: 'посмотрю', is_from_admin: true, created_at: '2026-08-01T10:05:00Z' },
+      { id: 1, message_text: 'не работает на роутере', is_from_admin: false, created_at: '2026-08-01T10:00:00Z', has_media: true, media_type: 'photo', media_file_id: 'file-abc' },
+      { id: 2, message_text: 'посмотрю', is_from_admin: true, created_at: '2026-08-01T10:05:00Z', has_media: true, media_type: 'photo', media_file_id: 'file-admin' },
     ],
   },
 ];
+const archivedTicket = {
+  id: 78,
+  title: 'Закрытый тикет с фото',
+  status: 'closed',
+  messages: [
+    { id: 3, message_text: 'старое фото', is_from_admin: false, created_at: '2026-07-31T10:00:00Z', has_media: true, media_type: 'photo', media_file_id: 'file-closed' },
+  ],
+};
+
+// Имитируем состояние после rc.5: сообщение закрытого тикета уже есть, а
+// attachment потерян и обычный active poll этот тикет больше не увидит.
+const archivedConversation = store.upsertConversation({ channel: 'bedolaga', externalId: '78', subject: archivedTicket.title });
+store.recordInbound({
+  channel: 'bedolaga',
+  externalId: '78',
+  subject: archivedTicket.title,
+  text: 'старое фото',
+  externalMsgId: '3',
+  sentAt: Date.parse('2026-07-31T10:00:00Z'),
+  backfill: true,
+});
 
 const server = createServer((req, res) => {
   const url = new URL(req.url!, 'http://localhost');
   const send = (body: unknown, code = 200) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(body)); };
   if (req.headers['x-api-key'] !== 'secret') return send({ error: 'no key' }, 401);
   if (url.pathname === '/tickets') return send(url.searchParams.get('status') === 'open' ? tickets : []);
-  if (url.pathname === '/tickets/77/messages/1/media') return send({ file_id: 'file-abc' });
+  if (url.pathname === '/tickets/78') return send(archivedTicket);
+  if (url.pathname === '/tickets/77/messages/1/media') return send({ media_file_id: 'file-abc' });
   if (url.pathname === '/users/5') return send({ id: 5, telegram_id: 555000, username: 'router_guy' });
   if (url.pathname === '/tickets/77/reply') { replyCalls += 1; return send({ message: { id: 99 } }); }
+  if (url.pathname === '/tickets/77/status') {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: Buffer) => chunks.push(chunk));
+    req.on('end', () => {
+      statusCalls += 1;
+      statusPayload = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+      send({ ok: true });
+    });
+    return;
+  }
   return send({ error: 'not found' }, 404);
 });
 await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -325,7 +361,7 @@ const client = new BedolagaClient(`http://127.0.0.1:${port}`, 'secret');
 const poller = new BedolagaPoller(client, store, 60_000);
 await poller.tick();
 
-const ticketConversation = store.findConversation('bedolaga', '77');
+const ticketConversation = store.findConversation('bedolaga', '77', 'bedolaga-default');
 check('тикет превратился в диалог', !!ticketConversation, store.listConversations().map((c) => c.external_id));
 check('заголовок тикета сохранён', ticketConversation?.subject === 'Не работает на роутере');
 check('telegram id резолвится через /users/{id}', ticketConversation?.tg_user_id === 555000);
@@ -336,14 +372,31 @@ check('сообщение клиента — входящее', ticketMessages[0
 check('ответ админа — исходящее', ticketMessages[1]?.direction === 'out');
 check('время взято из тикета', ticketMessages[0]?.created_at === Date.parse('2026-08-01T10:00:00Z'));
 check('вложение зарегистрировано', store.pendingAttachments().some((a) => a.file_ref === 'bedolaga:file-abc'));
+check('вложение ответа администратора зарегистрировано',
+  store.pendingAttachments().some((a) => a.file_ref === 'bedolaga:file-admin'));
+check('одноразовый repair восстанавливает фото закрытого тикета',
+  store.pendingAttachments().some((a) => a.file_ref === 'bedolaga:file-closed'));
+check('repair не дублирует сообщение закрытого тикета', store.listMessages(archivedConversation.id).length === 1);
 
+// rc.5 успевал сохранить сообщение, но не вложение. Повторный опрос должен
+// ремонтировать такую запись, несмотря на дедупликацию самого сообщения.
+db.prepare("DELETE FROM attachment WHERE file_ref = 'bedolaga:file-abc'").run();
 await poller.tick();
 check('повторный опрос ничего не дублирует', store.listMessages(ticketConversation!.id).length === 2);
+check('повторный опрос восстанавливает пропущенное фото',
+  store.pendingAttachments().filter((a) => a.file_ref === 'bedolaga:file-abc').length === 1);
+
+const sender = new BedolagaSender(client);
+const sent = await sender.send(store.getConversation(ticketConversation!.id)!, { text: 'проверьте прошивку роутера' });
+check('ответ из namespaced-диалога уходит в числовой ID тикета', sent.externalMsgId === '99' && replyCalls === 1, replyCalls);
 
 // Ответ в тикет не идемпотентен: убеждаемся, что клиент не ретраит POST.
 const messageId = await client.reply(77, 'проверьте прошивку роутера');
 check('reply возвращает id сообщения', messageId === '99');
-check('reply отправлен ровно один раз', replyCalls === 1, replyCalls);
+check('reply отправлен без ретраев', replyCalls === 2, replyCalls);
+
+await client.setStatus(77, 'closed');
+check('статус меняется у исходного тикета', statusCalls === 1 && (statusPayload as { status?: string })?.status === 'closed', statusPayload);
 
 // Окно 24 часов не применяется к тикетам.
 const ticketWindow = store.getConversation(ticketConversation!.id)!;
@@ -412,7 +465,7 @@ console.log('\n[ связка бедолага → remnawave ]');
   panelUsers.push(
     { uuid:'target-1', username:'user_123456789_c4fbd4', telegramId: null as never,
       description:'Bot user: Example @example_user', shortUuid:'WNXt2nN2ZnvG4jNA' },
-    { uuid:'target-2', username:'random_name', telegramId: 1721821999 as never,
+    { uuid:'target-2', username:'random_name', telegramId: 987654321 as never,
       description:'', shortUuid:'ZZZ111' },
   );
 
@@ -431,7 +484,7 @@ console.log('\n[ связка бедолага → remnawave ]');
   const rw = new RemnawaveClient(`http://127.0.0.1:${rwPort}`, 'tok');
 
   check('находит по нику вида user_{telegram_id}_*', await rw.findUser(123456789) === 'target-1');
-  check('находит по полю telegramId', await rw.findUser(1721821999) === 'target-2');
+  check('находит по полю telegramId', await rw.findUser(987654321) === 'target-2');
   check('находит по @нику в описании', await rw.findUser(undefined, '@example_user') === 'target-1');
   check('находит по short uuid из подписки',
     await rw.findUser(undefined, undefined, ['WNXt2nN2ZnvG4jNA']) === 'target-1');
@@ -634,10 +687,10 @@ check('архивные сообщения помечены как бэкфил�
 check('свежее сообщение приходит как живое', liveEvents === 1, liveEvents);
 
 // 3. SLA не поднимает архив.
-const oldOverdue = store.overdueConversations(30, 24).some((c) => c.external_id === 'old');
+const oldOverdue = store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'old');
 check('SLA игнорирует диалоги старше суток', !oldOverdue);
 store.recordInbound({ channel: 'tg_dm', externalId: 'sla', text: 'жду', externalMsgId: 's1', sentAt: Date.now() - 3_600_000 });
-check('SLA видит свежий неотвеченный диалог', store.overdueConversations(30, 24).some((c) => c.external_id === 'sla'));
+check('SLA видит свежий неотвеченный диалог', store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'sla'));
 
 // 4. Для отметки прочитанным берётся последнее ВХОДЯЩЕЕ, а не наш же ответ.
 store.recordOutbound({ conversationId: metric.id, author: 'agent', text: 'последним говорим мы', externalMsgId: 'out9' });
@@ -652,7 +705,7 @@ check('вложение бросается после 5 неудач', !store.pe
 
 // ---------- ретраи AI ----------
 console.log('\n[ поведение при лимитах ]');
-const { AiProvider } = await import('../src/ai/provider.js');
+const { AiProvider, hasImageInput, reasoningEffortFor, supportsVision } = await import('../src/ai/provider.js');
 let calls = 0;
 const aiServer = createServer((req, res) => {
   calls += 1;
@@ -680,17 +733,17 @@ aiServer.close(); badServer.close();
 
 // ---------- запасная модель и рассуждения ----------
 console.log('\n[ запасная модель ]');
-const seen: string[] = [];
+const seen: { model: string; reasoning_effort?: string; messages?: unknown[] }[] = [];
 let exhausted = true;
 const fbServer = createServer((req, res) => {
   let raw = '';
   req.on('data', (c) => { raw += c; });
   req.on('end', () => {
-    const body = JSON.parse(raw);
-    seen.push(body.model);
-    if (body.model === 'primary' && exhausted) {
-      res.writeHead(429, { 'retry-after': '0' });
-      return res.end('daily limit');
+    const body = JSON.parse(raw) as { model: string; reasoning_effort?: string; messages?: unknown[] };
+    seen.push(body);
+    if (body.model === 'qwen/qwen3.8-27b' && exhausted) {
+      res.writeHead(410);
+      return res.end('model decommissioned');
     }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { content: '{"reply":"ответ","confidence":0.8}' } }] }));
@@ -699,36 +752,43 @@ const fbServer = createServer((req, res) => {
 await new Promise<void>((resolve) => fbServer.listen(0, '127.0.0.1', resolve));
 const fbPort = (fbServer.address() as { port: number }).port;
 
-const withFallback = new AiProvider(`http://127.0.0.1:${fbPort}/v1`, 'k', 'primary', 'backup');
+const withFallback = new AiProvider(
+  `http://127.0.0.1:${fbPort}/v1`, 'k', 'qwen/qwen3.8-27b', 'openai/gpt-oss-120b',
+);
 const fbAnswer = await withFallback.complete([{ role: 'user', content: 'ping' }], 1);
-check('при исчерпании лимита уходит на запасную', fbAnswer.includes('ответ'));
-check('запасная модель действительно вызвана', seen.includes('backup'), seen);
-check('в предложку запишется та модель, что ответила', withFallback.lastModel === 'backup', withFallback.lastModel);
+check('при снятии основной модели текст уходит на запасную', fbAnswer.includes('ответ'));
+check('запасная модель действительно вызвана', seen.some((item) => item.model === 'openai/gpt-oss-120b'), seen);
+check('GPT-OSS получает допустимый reasoning_effort=low',
+  seen.some((item) => item.model === 'openai/gpt-oss-120b' && item.reasoning_effort === 'low'), seen);
+check('в предложку запишется та модель, что ответила',
+  withFallback.lastModel === 'openai/gpt-oss-120b', withFallback.lastModel);
+
+const imageMessage = [{
+  role: 'user' as const,
+  content: [
+    { type: 'text' as const, text: 'Что на скриншоте?' },
+    { type: 'image_url' as const, image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } },
+  ],
+}];
+check('вход с изображением определяется', hasImageInput(imageMessage));
+check('Qwen3.8 отмечен vision-моделью', supportsVision('qwen/qwen3.8-27b'));
+check('GPT-OSS не отмечен vision-моделью', !supportsVision('openai/gpt-oss-120b'));
+const beforeImage = seen.length;
+let imageFailedSafely = false;
+try { await withFallback.complete(imageMessage, 0); } catch { imageFailedSafely = true; }
+check('фото не уходит в текстовый fallback при сбое Qwen', imageFailedSafely
+  && seen.slice(beforeImage).every((item) => item.model !== 'openai/gpt-oss-120b'), seen.slice(beforeImage));
 
 seen.length = 0; exhausted = false;
 await withFallback.complete([{ role: 'user', content: 'ping' }], 1);
-check('пока основная жива, запасная не трогается', !seen.includes('backup'), seen);
-check('lastModel возвращается на основную', withFallback.lastModel === 'primary');
-
-// reasoning_effort доезжает до провайдера, если задан
-process.env.AI_REASONING_EFFORT = 'none';
-seen.length = 0;
-let sawEffort = false;
-const effortServer = createServer((req, res) => {
-  let raw = '';
-  req.on('data', (c) => { raw += c; });
-  req.on('end', () => {
-    sawEffort = JSON.parse(raw).reasoning_effort === 'none';
-    res.writeHead(200, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ choices: [{ message: { content: '{"reply":"x","confidence":1}' } }] }));
-  });
-});
-await new Promise<void>((resolve) => effortServer.listen(0, '127.0.0.1', resolve));
-const effortPort = (effortServer.address() as { port: number }).port;
-// config читается при импорте, поэтому проверяем сам факт проброса поля
-check('поле reasoning_effort предусмотрено в запросе',
-  typeof process.env.AI_REASONING_EFFORT === 'string');
-effortServer.close(); fbServer.close();
+check('пока основная жива, запасная не трогается',
+  !seen.some((item) => item.model === 'openai/gpt-oss-120b'), seen);
+check('Qwen получает reasoning_effort=none',
+  seen.some((item) => item.model === 'qwen/qwen3.8-27b' && item.reasoning_effort === 'none'), seen);
+check('lastModel возвращается на основную', withFallback.lastModel === 'qwen/qwen3.8-27b');
+check('нормализация reasoning_effort отдельно проверяется',
+  reasoningEffortFor('openai/gpt-oss-120b') === 'low');
+fbServer.close();
 
 // ---------- расшифровка голосового ----------
 console.log('\n[ голосовые ]');

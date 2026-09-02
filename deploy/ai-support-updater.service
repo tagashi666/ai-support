@@ -1,0 +1,23 @@
+[Unit]
+Description=AI Support verified one-click updater
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/ai-support-host-updater @PROJECT_ROOT@
+TimeoutStartSec=20min
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+ReadWritePaths=@PROJECT_ROOT@/data /var/lib/ai-support-updater /var/backups/ai-support /var/log/nginx /run/lock /run/docker.sock

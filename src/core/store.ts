@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 
-export type Channel = 'tg_dm' | 'bedolaga';
+export type Channel = 'tg_dm' | 'tg_bot' | 'bedolaga';
 export type Direction = 'in' | 'out' | 'note';
 export type Author = 'client' | 'agent' | 'ai' | 'system';
 export type SuggestionStatus = 'pending' | 'sent' | 'edited' | 'rejected' | 'superseded';
@@ -10,6 +10,9 @@ export interface Conversation {
   id: number;
   channel: Channel;
   external_id: string;
+  remote_external_id: string | null;
+  source_id: string | null;
+  avatar_source_id: string | null;
   tg_user_id: number | null;
   business_connection_id: string | null;
   username: string | null;
@@ -30,9 +33,43 @@ export interface Conversation {
   last_ai_at: number | null;
   handoff_at: number | null;
   handoff_notified_at: number | null;
+  avatar_file_id: string | null;
+  operator_active_at: number | null;
+  assigned_operator_id: number | null;
+  claimed_at: number | null;
+  customer_profile_id: number | null;
   unread: number;
   created_at: number;
   updated_at: number;
+}
+
+export interface SourceAccount {
+  id: string;
+  kind: 'telegram_bot' | 'telegram_business' | 'bedolaga' | 'remnawave';
+  name: string;
+  enabled: number;
+  metadata: string | null;
+  updated_at: number;
+}
+
+export interface InboxFolder {
+  id: number;
+  name: string;
+  color: string | null;
+  position: number;
+  source_ids: string[];
+}
+
+/**
+ * Клиентские тексты и название конкретного сервиса. Профиль привязан к
+ * источнику, а не к транспорту диалога: Telegram-чат может быть связан с
+ * одной из нескольких панелей Remnawave и получить именно её бренд.
+ */
+export interface ServiceProfile {
+  sourceId: string;
+  serviceName: string;
+  greetingMessage: string;
+  handoffMessage: string;
 }
 
 /** Вложение в том виде, в каком его показывает панель. */
@@ -52,10 +89,12 @@ export interface Message {
   media_type: string | null;
   media_file_id: string | null;
   external_msg_id: string | null;
+  sender_tg_user_id: number | null;
   suggestion_id: number | null;
   reply_to_external_id: string | null;
   reply_excerpt: string | null;
   created_at: number;
+  is_backfill: number;
 }
 
 export interface Suggestion {
@@ -93,10 +132,17 @@ export interface KbHit {
 export interface InboundMessage {
   channel: Channel;
   externalId: string;
+  sourceId?: string;
+  sourceName?: string;
+  sourceKind?: SourceAccount['kind'];
+  avatarSourceId?: string;
   tgUserId?: number;
+  /** Реальный автор Telegram update; нужен для точной атрибуции направления. */
+  senderTgUserId?: number;
   businessConnectionId?: string;
   username?: string;
   displayName?: string;
+  avatarFileId?: string;
   subject?: string;
   text?: string;
   mediaType?: string;
@@ -150,7 +196,13 @@ export class Store extends EventEmitter<StoreEvents> {
     return this.db.prepare('SELECT * FROM conversation WHERE id = ?').get(id) as Conversation | undefined;
   }
 
-  findConversation(channel: Channel, externalId: string): Conversation | undefined {
+  findConversation(channel: Channel, externalId: string, sourceId?: string): Conversation | undefined {
+    if (sourceId) {
+      const found = this.db
+        .prepare('SELECT * FROM conversation WHERE channel = ? AND source_id = ? AND remote_external_id = ?')
+        .get(channel, sourceId, externalId) as Conversation | undefined;
+      if (found) return found;
+    }
     return this.db
       .prepare('SELECT * FROM conversation WHERE channel = ? AND external_id = ?')
       .get(channel, externalId) as Conversation | undefined;
@@ -166,6 +218,17 @@ export class Store extends EventEmitter<StoreEvents> {
       .all(limit) as Conversation[];
   }
 
+  /** Полный список одного транспорта нужен для редких repair/backfill-задач. */
+  listConversationsByChannel(channel: Channel): Conversation[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM conversation
+          WHERE channel = ?
+          ORDER BY id`,
+      )
+      .all(channel) as Conversation[];
+  }
+
   listMessages(conversationId: number, limit = 200): Message[] {
     return this.db
       .prepare('SELECT * FROM message WHERE conversation_id = ? ORDER BY id DESC LIMIT ?')
@@ -173,40 +236,99 @@ export class Store extends EventEmitter<StoreEvents> {
       .reverse() as Message[];
   }
 
+  /**
+   * Telegram-профили, которым не хватает имени или аватарки. Legacy Business
+   * использовал общий avatar_source_id, поэтому выбираем и по нему: после
+   * обновления карточки должны восстановиться без нового сообщения клиента.
+   */
+  telegramProfilesForRefresh(sourceId: string, limit = 200): Conversation[] {
+    return this.db.prepare(
+      `SELECT * FROM conversation
+        WHERE channel IN ('tg_dm','tg_bot')
+          AND tg_user_id IS NOT NULL
+          AND (source_id = ? OR avatar_source_id = ?)
+          AND (avatar_file_id IS NULL OR avatar_file_id = ''
+               OR username IS NULL OR username = ''
+               OR display_name IS NULL OR display_name = '')
+        ORDER BY COALESCE(last_message_at, created_at) DESC
+        LIMIT ?`,
+    ).all(sourceId, sourceId, limit) as Conversation[];
+  }
+
   upsertConversation(input: {
     channel: Channel;
     externalId: string;
+    sourceId?: string;
+    sourceName?: string;
+    sourceKind?: SourceAccount['kind'];
+    avatarSourceId?: string;
     tgUserId?: number;
     businessConnectionId?: string;
     username?: string;
     displayName?: string;
     subject?: string;
+    avatarFileId?: string;
   }): Conversation {
     const now = Date.now();
+    const sourceId = input.sourceId ?? (input.channel === 'bedolaga' ? 'bedolaga-default' : 'telegram-default');
+    this.syncSource({ id: sourceId, kind: input.sourceKind ?? (input.channel === 'bedolaga' ? 'bedolaga' : input.channel === 'tg_dm' ? 'telegram_business' : 'telegram_bot'), name: input.sourceName ?? sourceId });
+    const sourceKey = `${sourceId}:${input.externalId}`;
+    const legacy = this.findConversation(input.channel, input.externalId);
+    const reusableLegacy = legacy && (
+      !legacy.source_id
+      || (legacy.source_id === 'telegram-business:legacy' && input.channel === 'tg_dm')
+      || (legacy.source_id === 'telegram-default' && sourceId === 'telegram-default')
+      || (legacy.source_id === 'bedolaga-default' && sourceId === 'bedolaga-default')
+    );
+    const externalId = this.findConversation(input.channel, input.externalId, sourceId)?.external_id
+      ?? (reusableLegacy ? legacy.external_id : sourceKey);
     this.db
       .prepare(
         `INSERT INTO conversation
-           (channel, external_id, tg_user_id, business_connection_id, username, display_name, subject, ai_mode, created_at, updated_at)
-         VALUES (@channel, @externalId, @tgUserId, @businessConnectionId, @username, @displayName, @subject, 'inherit', @now, @now)
+           (channel, external_id, remote_external_id, source_id, avatar_source_id,
+            tg_user_id, business_connection_id, username, display_name, subject,
+            avatar_file_id, ai_mode, created_at, updated_at)
+         VALUES (@channel, @externalId, @remoteExternalId, @sourceId, @avatarSourceId,
+                 @tgUserId, @businessConnectionId, @username, @displayName, @subject,
+                 @avatarFileId, 'inherit', @now, @now)
          ON CONFLICT (channel, external_id) DO UPDATE SET
+           remote_external_id     = excluded.remote_external_id,
+           source_id              = excluded.source_id,
+           avatar_source_id       = COALESCE(excluded.avatar_source_id, conversation.avatar_source_id),
            tg_user_id             = COALESCE(excluded.tg_user_id, conversation.tg_user_id),
            business_connection_id = COALESCE(excluded.business_connection_id, conversation.business_connection_id),
            username               = COALESCE(excluded.username, conversation.username),
            display_name           = COALESCE(excluded.display_name, conversation.display_name),
            subject                = COALESCE(excluded.subject, conversation.subject),
+           avatar_file_id         = COALESCE(excluded.avatar_file_id, conversation.avatar_file_id),
            updated_at             = @now`,
       )
       .run({
         channel: input.channel,
-        externalId: input.externalId,
+        externalId,
+        remoteExternalId: input.externalId,
+        sourceId,
+        avatarSourceId: input.avatarSourceId ?? sourceId,
         tgUserId: input.tgUserId ?? null,
         businessConnectionId: input.businessConnectionId ?? null,
         username: input.username ?? null,
         displayName: input.displayName ?? null,
         subject: input.subject ?? null,
+        avatarFileId: input.avatarFileId ?? null,
         now,
       });
-    return this.findConversation(input.channel, input.externalId)!;
+    const conversation = this.findConversation(input.channel, input.externalId, sourceId)
+      ?? this.findConversation(input.channel, externalId)!;
+    this.db.prepare('INSERT OR IGNORE INTO conversation_source (conversation_id, source_id) VALUES (?, ?)')
+      .run(conversation.id, sourceId);
+    // При первом живом update после миграции старый общий источник заменяется
+    // конкретным Business-аккаунтом. Иначе один диалог оставался сразу в
+    // legacy-папке и в новой папке, что выглядело как дубликат.
+    if (reusableLegacy && legacy.source_id && legacy.source_id !== sourceId) {
+      this.db.prepare('DELETE FROM conversation_source WHERE conversation_id = ? AND source_id = ?')
+        .run(conversation.id, legacy.source_id);
+    }
+    return conversation;
   }
 
   /**
@@ -215,12 +337,13 @@ export class Store extends EventEmitter<StoreEvents> {
    */
   recordInbound(input: InboundMessage): { conversation: Conversation; message: Message } | null {
     const conversation = this.upsertConversation(input);
+    const backfill = input.backfill === true ? 1 : 0;
     const result = this.db
       .prepare(
         `INSERT OR IGNORE INTO message
-           (conversation_id, direction, author, text, media_type, media_file_id, external_msg_id,
-            reply_to_external_id, reply_excerpt, created_at)
-         VALUES (?, 'in', 'client', ?, ?, ?, ?, ?, ?, ?)`,
+           (conversation_id, direction, author, text, media_type, media_file_id, external_msg_id, sender_tg_user_id,
+            reply_to_external_id, reply_excerpt, created_at, is_backfill)
+         VALUES (?, 'in', 'client', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -228,9 +351,11 @@ export class Store extends EventEmitter<StoreEvents> {
         input.mediaType ?? null,
         input.mediaFileId ?? null,
         input.externalMsgId ?? null,
+        input.senderTgUserId ?? null,
         input.replyToExternalId ?? null,
         input.replyExcerpt ?? null,
         input.sentAt,
+        backfill,
       );
     if (result.changes === 0) return null;
     const messageId = Number(result.lastInsertRowid);
@@ -239,8 +364,10 @@ export class Store extends EventEmitter<StoreEvents> {
     // синхронно, и если сделать это после, в панель уедет сообщение без
     // картинки — пустой пузырь без единого признака, что там был файл.
     if (input.mediaFileId) {
-      const prefix = input.channel === 'bedolaga' ? 'bedolaga' : 'tg';
-      this.addAttachment(messageId, input.mediaType, `${prefix}:${input.mediaFileId}`, {
+      const fileRef = input.channel === 'bedolaga'
+        ? `bedolaga:${input.mediaFileId}`
+        : `tg:${encodeURIComponent(input.avatarSourceId ?? input.sourceId ?? 'telegram-default')}:${input.mediaFileId}`;
+      this.addAttachment(messageId, input.mediaType, fileRef, {
         width: input.mediaWidth,
         height: input.mediaHeight,
       });
@@ -252,18 +379,21 @@ export class Store extends EventEmitter<StoreEvents> {
             SET first_inbound_at = COALESCE(first_inbound_at, ?),
                 last_inbound_at = MAX(COALESCE(last_inbound_at, 0), ?),
                 last_message_at = MAX(COALESCE(last_message_at, 0), ?),
-                unread          = unread + 1,
-                resolved_at     = NULL,
-                status          = CASE WHEN status IN ('closed','resolved') THEN 'open' ELSE status END,
+                unread          = unread + CASE WHEN ? = 1 THEN 0 ELSE 1 END,
+                resolved_at     = CASE WHEN ? = 1 THEN resolved_at ELSE NULL END,
+                status          = CASE WHEN ? = 1 THEN status
+                                       ELSE 'open' END,
                 updated_at      = ?
           WHERE id = ?`,
       )
-      .run(input.sentAt, input.sentAt, input.sentAt, Date.now(), conversation.id);
+      .run(input.sentAt, input.sentAt, input.sentAt, backfill, backfill, backfill, Date.now(), conversation.id);
 
     // Клиент написал снова — незакрытая предложка устарела.
-    this.db
-      .prepare(`UPDATE ai_suggestion SET status='superseded', decided_at=? WHERE conversation_id=? AND status='pending'`)
-      .run(Date.now(), conversation.id);
+    if (!backfill) {
+      this.db
+        .prepare(`UPDATE ai_suggestion SET status='superseded', decided_at=? WHERE conversation_id=? AND status='pending'`)
+        .run(Date.now(), conversation.id);
+    }
 
     return this.emitMessage(conversation.id, messageId, input.backfill === true);
   }
@@ -281,12 +411,19 @@ export class Store extends EventEmitter<StoreEvents> {
     text?: string;
     mediaType?: string;
     mediaFileId?: string;
+    mediaWidth?: number;
+    mediaHeight?: number;
+    /** Источник Telegram, через который можно скачать вложение. */
+    mediaSourceId?: string;
     externalMsgId?: string;
+    senderTgUserId?: number;
     suggestionId?: number;
     replyToExternalId?: string;
     replyExcerpt?: string;
     sentAt?: number;
     dedupe?: boolean;
+    /** Импорт старой истории не должен менять текущее состояние диалога. */
+    backfill?: boolean;
   }): { conversation: Conversation; message: Message } | null {
     if (input.dedupe && input.externalMsgId) {
       const existing = this.db
@@ -301,9 +438,9 @@ export class Store extends EventEmitter<StoreEvents> {
     const result = this.db
       .prepare(
         `INSERT INTO message
-           (conversation_id, direction, author, text, media_type, media_file_id, external_msg_id,
-            suggestion_id, reply_to_external_id, reply_excerpt, created_at)
-         VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (conversation_id, direction, author, text, media_type, media_file_id, external_msg_id, sender_tg_user_id,
+            suggestion_id, reply_to_external_id, reply_excerpt, created_at, is_backfill)
+         VALUES (?, 'out', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.conversationId,
@@ -312,11 +449,25 @@ export class Store extends EventEmitter<StoreEvents> {
         input.mediaType ?? null,
         input.mediaFileId ?? null,
         input.externalMsgId ?? null,
+        input.senderTgUserId ?? null,
         input.suggestionId ?? null,
         input.replyToExternalId ?? null,
         input.replyExcerpt ?? null,
         at,
+        input.backfill === true ? 1 : 0,
       );
+
+    const messageId = Number(result.lastInsertRowid);
+    if (input.mediaFileId) {
+      const conversation = this.getConversation(input.conversationId);
+      const fileRef = conversation?.channel === 'bedolaga'
+        ? `bedolaga:${input.mediaFileId}`
+        : `tg:${encodeURIComponent(input.mediaSourceId ?? conversation?.avatar_source_id ?? conversation?.source_id ?? 'telegram-default')}:${input.mediaFileId}`;
+      this.addAttachment(messageId, input.mediaType, fileRef, {
+        width: input.mediaWidth,
+        height: input.mediaHeight,
+      });
+    }
 
     this.db
       .prepare(
@@ -328,12 +479,51 @@ export class Store extends EventEmitter<StoreEvents> {
                 -- иначе напоминание «ожидайте» тут же разблокировало бы модель.
                 handoff_at        = CASE WHEN ? = 'agent' THEN NULL ELSE handoff_at END,
                 unread            = 0,
+                resolved_at       = CASE WHEN ? = 1 THEN resolved_at ELSE NULL END,
+                status            = CASE WHEN ? = 1 THEN status ELSE 'pending' END,
                 updated_at        = ?
           WHERE id = ?`,
       )
-      .run(at, at, input.author, at, input.author, Date.now(), input.conversationId);
+      .run(
+        at,
+        at,
+        input.author,
+        at,
+        input.author,
+        input.backfill === true ? 1 : 0,
+        input.backfill === true ? 1 : 0,
+        Date.now(),
+        input.conversationId,
+      );
 
-    return this.emitMessage(input.conversationId, Number(result.lastInsertRowid));
+    return this.emitMessage(input.conversationId, messageId, input.backfill === true);
+  }
+
+  /**
+   * Исходящее сообщение, отправленное владельцем Telegram Business вне
+   * панели. Telegram присылает его тем же `business_message`, что и
+   * сообщение клиента, поэтому сначала связываем его с диалогом, а затем
+   * записываем как ответ живого оператора. События входящего здесь нет — AI
+   * на собственное сообщение поддержки не запустится.
+   */
+  recordExternalOutbound(input: InboundMessage): { conversation: Conversation; message: Message } | null {
+    const conversation = this.upsertConversation(input);
+    return this.recordOutbound({
+      conversationId: conversation.id,
+      author: 'agent',
+      text: input.text,
+      mediaType: input.mediaType,
+      mediaFileId: input.mediaFileId,
+      mediaWidth: input.mediaWidth,
+      mediaHeight: input.mediaHeight,
+      mediaSourceId: input.avatarSourceId ?? input.sourceId,
+      externalMsgId: input.externalMsgId,
+      senderTgUserId: input.senderTgUserId,
+      replyToExternalId: input.replyToExternalId,
+      replyExcerpt: input.replyExcerpt,
+      sentAt: input.sentAt,
+      dedupe: true,
+    });
   }
 
   addNote(conversationId: number, text: string): { conversation: Conversation; message: Message } {
@@ -388,21 +578,107 @@ export class Store extends EventEmitter<StoreEvents> {
     this.db.prepare('UPDATE conversation SET unread = 0, updated_at = ? WHERE id = ?').run(Date.now(), conversationId);
   }
 
+  /**
+   * Оператор начал печатать, явно взял диалог или отправляет ответ. Метка
+   * ставится синхронно, поэтому медленный внешний API не оставляет AI окно
+   * для параллельного ответа. Простой просмотр диалога её не выставляет.
+   */
+  markOperatorActive(conversationId: number, at = Date.now()): void {
+    this.db
+      .prepare('UPDATE conversation SET operator_active_at = ?, updated_at = ? WHERE id = ?')
+      .run(at, at, conversationId);
+  }
+
+  operatorIsActive(conversationId: number, withinMs = 45_000, now = Date.now()): boolean {
+    const row = this.db
+      .prepare('SELECT operator_active_at AS at FROM conversation WHERE id = ?')
+      .get(conversationId) as { at: number | null } | undefined;
+    return !!row?.at && now - row.at <= withinMs;
+  }
+
   setConversationUser(conversationId: number, tgUserId: number, username?: string): void {
     this.db
       .prepare('UPDATE conversation SET tg_user_id = ?, username = COALESCE(?, username), updated_at = ? WHERE id = ?')
       .run(tgUserId, username ?? null, Date.now(), conversationId);
   }
 
-  setAiMode(conversationId: number, mode: 'inherit' | 'off' | 'suggest' | 'auto'): void {
+  /** Обновляет карточку только данными её реального Telegram-собеседника. */
+  setTelegramProfile(conversationId: number, input: {
+    tgUserId: number;
+    username?: string;
+    displayName?: string;
+    avatarFileId?: string;
+    avatarSourceId?: string;
+  }): boolean {
+    const now = Date.now();
+    const result = this.db.prepare(
+      `UPDATE conversation
+          SET username = COALESCE(NULLIF(?, ''), username),
+              display_name = COALESCE(NULLIF(?, ''), display_name),
+              avatar_file_id = COALESCE(NULLIF(?, ''), avatar_file_id),
+              avatar_source_id = COALESCE(NULLIF(?, ''), avatar_source_id),
+              updated_at = ?
+        WHERE id = ? AND tg_user_id = ?`,
+    ).run(
+      input.username ?? null,
+      input.displayName ?? null,
+      input.avatarFileId ?? null,
+      input.avatarSourceId ?? null,
+      now,
+      conversationId,
+      input.tgUserId,
+    );
+    if (result.changes === 0) return false;
+    this.db.prepare(
+      `UPDATE customer_profile
+          SET username = COALESCE(NULLIF(?, ''), username),
+              display_name = COALESCE(NULLIF(?, ''), display_name),
+              updated_at = ?
+        WHERE id = (SELECT customer_profile_id FROM conversation WHERE id = ?)`,
+    ).run(input.username ?? null, input.displayName ?? null, now, conversationId);
+    const conversation = this.getConversation(conversationId);
+    if (conversation) this.emit('conversation', conversation);
+    return true;
+  }
+
+  setConversationAvatar(conversationId: number, fileId: string, sourceId?: string): void {
+    this.db
+      .prepare('UPDATE conversation SET avatar_file_id = ?, avatar_source_id = COALESCE(?, avatar_source_id), updated_at = ? WHERE id = ?')
+      .run(fileId, sourceId ?? null, Date.now(), conversationId);
+    const conversation = this.getConversation(conversationId);
+    if (conversation) this.emit('conversation', conversation);
+  }
+
+  setAiMode(conversationId: number, mode: 'inherit' | 'off' | 'shadow' | 'suggest' | 'auto'): void {
     this.db.prepare('UPDATE conversation SET ai_mode = ?, updated_at = ? WHERE id = ?').run(mode, Date.now(), conversationId);
   }
 
-  setStatus(conversationId: number, status: string): void {
-    const resolved = status === 'resolved' || status === 'closed' ? Date.now() : null;
+  setStatus(conversationId: number, status: string): boolean {
+    const before = this.getConversation(conversationId);
+    if (!before) return false;
+    const isResolved = status === 'resolved' || status === 'closed';
+    const resolved = isResolved ? (before.resolved_at ?? Date.now()) : null;
+    if (before.status === status && before.resolved_at === resolved) return false;
     this.db
       .prepare('UPDATE conversation SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?')
       .run(status, resolved, Date.now(), conversationId);
+    const conversation = this.getConversation(conversationId);
+    if (conversation) this.emit('conversation', conversation);
+    return true;
+  }
+
+  /** Активные диалоги без единого сообщения за последние `cutoff` мс. */
+  inactiveConversations(cutoff: number, limit = 100): Conversation[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM conversation
+          WHERE last_message_at IS NOT NULL
+            AND last_message_at <= ?
+            AND status NOT IN ('closed', 'resolved')
+          ORDER BY last_message_at ASC
+          LIMIT ?`,
+      )
+      .all(cutoff, limit) as Conversation[];
   }
 
   /**
@@ -675,6 +951,10 @@ export class Store extends EventEmitter<StoreEvents> {
     fileRef: string,
     size?: { width?: number; height?: number },
   ): number {
+    const existing = this.db
+      .prepare('SELECT id FROM attachment WHERE message_id = ? AND file_ref = ?')
+      .get(messageId, fileRef) as { id: number } | undefined;
+    if (existing) return existing.id;
     const result = this.db
       .prepare(
         `INSERT INTO attachment (message_id, media_type, file_ref, width, height, created_at)
@@ -682,6 +962,18 @@ export class Store extends EventEmitter<StoreEvents> {
       )
       .run(messageId, mediaType ?? null, fileRef, size?.width ?? null, size?.height ?? null, Date.now());
     return Number(result.lastInsertRowid);
+  }
+
+  findMessageByExternalId(
+    conversationId: number,
+    externalMsgId: string,
+    direction?: Direction,
+  ): Message | undefined {
+    return (direction
+      ? this.db.prepare('SELECT * FROM message WHERE conversation_id = ? AND external_msg_id = ? AND direction = ?')
+        .get(conversationId, externalMsgId, direction)
+      : this.db.prepare('SELECT * FROM message WHERE conversation_id = ? AND external_msg_id = ?')
+        .get(conversationId, externalMsgId)) as Message | undefined;
   }
 
   markAttachmentDownloaded(id: number, localPath: string, bytes: number): void {
@@ -710,9 +1002,9 @@ export class Store extends EventEmitter<StoreEvents> {
     this.db.prepare('UPDATE attachment SET attempts = attempts + 1 WHERE id = ?').run(id);
   }
 
-  getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null } | undefined {
-    return this.db.prepare('SELECT id, local_path, media_type FROM attachment WHERE id = ?').get(id) as
-      | { id: number; local_path: string | null; media_type: string | null }
+  getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null; file_ref: string } | undefined {
+    return this.db.prepare('SELECT id, local_path, media_type, file_ref FROM attachment WHERE id = ?').get(id) as
+      | { id: number; local_path: string | null; media_type: string | null; file_ref: string }
       | undefined;
   }
 
@@ -752,6 +1044,120 @@ export class Store extends EventEmitter<StoreEvents> {
          ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
       )
       .run(key, JSON.stringify(value), Date.now());
+  }
+
+  // --- источники и папки inbox ----------------------------------------
+
+  syncSource(input: { id: string; kind: SourceAccount['kind']; name: string; enabled?: boolean; metadata?: unknown }): void {
+    this.db.prepare(
+      `INSERT INTO source_account (id, kind, name, enabled, metadata, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET kind=excluded.kind, name=excluded.name,
+         enabled=excluded.enabled, metadata=excluded.metadata, updated_at=excluded.updated_at`,
+    ).run(input.id, input.kind, input.name, input.enabled === false ? 0 : 1,
+      input.metadata === undefined ? null : JSON.stringify(input.metadata), Date.now());
+  }
+
+  sourceAccount(id: string | null | undefined): SourceAccount | undefined {
+    if (!id) return undefined;
+    return this.db.prepare('SELECT * FROM source_account WHERE id = ?').get(id) as SourceAccount | undefined;
+  }
+
+  sourceAccounts(): SourceAccount[] {
+    return this.db.prepare('SELECT * FROM source_account WHERE enabled = 1 ORDER BY kind, name, id').all() as SourceAccount[];
+  }
+
+  conversationSourceIds(conversationId: number): string[] {
+    return (this.db.prepare('SELECT source_id FROM conversation_source WHERE conversation_id = ? ORDER BY source_id')
+      .all(conversationId) as { source_id: string }[]).map((row) => row.source_id);
+  }
+
+  linkConversationSource(conversationId: number, sourceId: string): void {
+    this.db.prepare('INSERT OR IGNORE INTO conversation_source (conversation_id, source_id) VALUES (?, ?)')
+      .run(conversationId, sourceId);
+  }
+
+  serviceProfiles(): Record<string, ServiceProfile> {
+    const raw = this.getSetting('serviceProfiles');
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    const result: Record<string, ServiceProfile> = {};
+    for (const [sourceId, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+      const item = value as Record<string, unknown>;
+      const serviceName = typeof item.serviceName === 'string' ? item.serviceName.trim() : '';
+      const greetingMessage = typeof item.greetingMessage === 'string' ? item.greetingMessage.trim() : '';
+      const handoffMessage = typeof item.handoffMessage === 'string' ? item.handoffMessage.trim() : '';
+      if (!serviceName) continue;
+      result[sourceId] = { sourceId, serviceName, greetingMessage, handoffMessage };
+    }
+    return result;
+  }
+
+  serviceProfile(sourceId: string | null | undefined): ServiceProfile | undefined {
+    return sourceId ? this.serviceProfiles()[sourceId] : undefined;
+  }
+
+  saveServiceProfile(sourceId: string, input: {
+    serviceName?: unknown;
+    greetingMessage?: unknown;
+    handoffMessage?: unknown;
+  }): ServiceProfile {
+    if (!this.sourceAccount(sourceId)) throw new Error('Источник не найден');
+    const serviceName = String(input.serviceName ?? '').trim();
+    const greetingMessage = String(input.greetingMessage ?? '').trim();
+    const handoffMessage = String(input.handoffMessage ?? '').trim();
+    if (!serviceName || serviceName.length > 80) {
+      throw new Error('Название сервиса должно быть от 1 до 80 символов');
+    }
+    if (greetingMessage.length > 600) throw new Error('Приветствие не длиннее 600 символов');
+    if (handoffMessage.length > 600 || (handoffMessage.length > 0 && handoffMessage.length < 5)) {
+      throw new Error('Фраза передачи должна быть от 5 до 600 символов');
+    }
+    const profile = { sourceId, serviceName, greetingMessage, handoffMessage };
+    const profiles = this.serviceProfiles();
+    profiles[sourceId] = profile;
+    this.setSetting('serviceProfiles', profiles);
+    return profile;
+  }
+
+  folders(): InboxFolder[] {
+    const rows = this.db.prepare('SELECT id, name, color, position FROM inbox_folder ORDER BY position, id').all() as Omit<InboxFolder, 'source_ids'>[];
+    const sourceRows = this.db.prepare('SELECT folder_id, source_id FROM inbox_folder_source ORDER BY source_id')
+      .all() as { folder_id: number; source_id: string }[];
+    const grouped = new Map<number, string[]>();
+    for (const row of sourceRows) {
+      const ids = grouped.get(row.folder_id) ?? [];
+      ids.push(row.source_id);
+      grouped.set(row.folder_id, ids);
+    }
+    return rows.map((row) => ({ ...row, source_ids: grouped.get(row.id) ?? [] }));
+  }
+
+  saveFolder(input: { id?: number; name: string; color?: string | null; sourceIds: string[] }): InboxFolder {
+    const name = input.name.trim();
+    if (!name || name.length > 80) throw new Error('Название папки должно быть от 1 до 80 символов');
+    const sourceIds = [...new Set(input.sourceIds)].filter((id) => this.sourceAccount(id));
+    const id = this.db.transaction(() => {
+      let folderId = input.id;
+      if (folderId) {
+        const changed = this.db.prepare('UPDATE inbox_folder SET name=?, color=?, updated_at=? WHERE id=?')
+          .run(name, input.color ?? null, Date.now(), folderId);
+        if (!changed.changes) throw new Error('Папка не найдена');
+      } else {
+        const position = (this.db.prepare('SELECT COALESCE(MAX(position), -1) + 1 AS n FROM inbox_folder').get() as { n: number }).n;
+        folderId = Number(this.db.prepare('INSERT INTO inbox_folder (name,color,position,created_at,updated_at) VALUES (?,?,?,?,?)')
+          .run(name, input.color ?? null, position, Date.now(), Date.now()).lastInsertRowid);
+      }
+      this.db.prepare('DELETE FROM inbox_folder_source WHERE folder_id=?').run(folderId);
+      const link = this.db.prepare('INSERT INTO inbox_folder_source (folder_id,source_id) VALUES (?,?)');
+      for (const sourceId of sourceIds) link.run(folderId, sourceId);
+      return folderId!;
+    })();
+    return this.folders().find((folder) => folder.id === id)!;
+  }
+
+  deleteFolder(id: number): boolean {
+    return this.db.prepare('DELETE FROM inbox_folder WHERE id=?').run(id).changes > 0;
   }
 
   /**
@@ -816,6 +1222,21 @@ export class Store extends EventEmitter<StoreEvents> {
       .run(key, value, Date.now());
   }
 
+  statsResetAt(): number | null {
+    const value = Number(this.getState('stats:reset_at'));
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  /**
+   * Начинает новый статистический период, не удаляя переписку и тикеты.
+   * Это безопаснее физического обнуления: аудит и история сохраняются.
+   */
+  resetStats(at = Date.now()): number {
+    this.setState('stats:reset_at', String(at));
+    this.logEvent('stats_reset', null, { at });
+    return at;
+  }
+
   saveCustomer(tgUserId: number, snapshot: unknown, profile?: { username?: string; firstName?: string }): void {
     this.db
       .prepare(
@@ -863,14 +1284,22 @@ export class Store extends EventEmitter<StoreEvents> {
     isEnabled: boolean;
     rights?: unknown;
     connectedAt?: number;
+    sourceId?: string;
+    displayName?: string;
+    username?: string;
   }): void {
     this.db
       .prepare(
-        `INSERT INTO business_connection (id, user_id, user_chat_id, is_enabled, rights, connected_at, updated_at)
-         VALUES (@id, @userId, @userChatId, @isEnabled, @rights, @connectedAt, @now)
+        `INSERT INTO business_connection (id, user_id, user_chat_id, is_enabled, rights, connected_at,
+                                          source_id, display_name, username, updated_at)
+         VALUES (@id, @userId, @userChatId, @isEnabled, @rights, @connectedAt,
+                 @sourceId, @displayName, @username, @now)
          ON CONFLICT (id) DO UPDATE SET
            is_enabled = excluded.is_enabled,
            rights     = excluded.rights,
+           source_id  = COALESCE(excluded.source_id, business_connection.source_id),
+           display_name = COALESCE(excluded.display_name, business_connection.display_name),
+           username   = COALESCE(excluded.username, business_connection.username),
            updated_at = excluded.updated_at`,
       )
       .run({
@@ -880,6 +1309,9 @@ export class Store extends EventEmitter<StoreEvents> {
         isEnabled: input.isEnabled ? 1 : 0,
         rights: input.rights ? JSON.stringify(input.rights) : null,
         connectedAt: input.connectedAt ?? Date.now(),
+        sourceId: input.sourceId ?? null,
+        displayName: input.displayName ?? null,
+        username: input.username ?? null,
         now: Date.now(),
       });
   }
@@ -908,6 +1340,45 @@ export class Store extends EventEmitter<StoreEvents> {
         .prepare('SELECT id FROM business_connection WHERE is_enabled = 1 ORDER BY updated_at DESC LIMIT 1')
         .get() as { id: string } | undefined
     )?.id;
+  }
+
+  businessConnection(id: string | null | undefined): {
+    id: string;
+    user_id: number;
+    source_id: string | null;
+    display_name: string | null;
+    username: string | null;
+    is_enabled: number;
+  } | undefined {
+    if (!id) return undefined;
+    return this.db.prepare(
+      'SELECT id, user_id, source_id, display_name, username, is_enabled FROM business_connection WHERE id = ?',
+    ).get(id) as {
+      id: string;
+      user_id: number;
+      source_id: string | null;
+      display_name: string | null;
+      username: string | null;
+      is_enabled: number;
+    } | undefined;
+  }
+
+  businessConnections(): {
+    id: string;
+    source_id: string | null;
+    display_name: string | null;
+    username: string | null;
+    is_enabled: number;
+  }[] {
+    return this.db.prepare(
+      'SELECT id, source_id, display_name, username, is_enabled FROM business_connection ORDER BY updated_at DESC',
+    ).all() as {
+      id: string;
+      source_id: string | null;
+      display_name: string | null;
+      username: string | null;
+      is_enabled: number;
+    }[];
   }
 
   /** Диалоги без единого ответа — для сводки в уведомлениях. */
@@ -946,26 +1417,59 @@ export class Store extends EventEmitter<StoreEvents> {
    * среднее так, что цифра перестаёт что-либо значить.
    */
   stats(days = 14) {
-    const since = Date.now() - days * 86_400_000;
+    const resetAt = this.statsResetAt();
+    const since = Math.max(Date.now() - days * 86_400_000, resetAt ?? 0);
     const one = <T>(sql: string, ...params: unknown[]): T => this.db.prepare(sql).get(...(params as [])) as T;
     const all = <T>(sql: string, ...params: unknown[]): T[] => this.db.prepare(sql).all(...(params as [])) as T[];
 
     const totals = one<{ total: number; open: number; escalated: number; suspicious: number; waiting: number; handoff: number }>(
       `SELECT COUNT(*) AS total,
-              SUM(CASE WHEN status NOT IN ('closed','resolved') THEN 1 ELSE 0 END) AS open,
-              SUM(escalated) AS escalated,
-              SUM(suspicious) AS suspicious,
-              SUM(CASE WHEN first_response_at IS NULL AND last_inbound_at IS NOT NULL THEN 1 ELSE 0 END) AS waiting,
-              SUM(CASE WHEN handoff_at IS NOT NULL THEN 1 ELSE 0 END) AS handoff
+              COALESCE(SUM(CASE WHEN status NOT IN ('closed','resolved') THEN 1 ELSE 0 END), 0) AS open,
+              COALESCE(SUM(escalated), 0) AS escalated,
+              COALESCE(SUM(suspicious), 0) AS suspicious,
+              COALESCE(SUM(CASE WHEN status NOT IN ('closed','resolved') AND last_inbound_at IS NOT NULL AND (
+                NOT EXISTS (
+                  SELECT 1 FROM message m
+                   WHERE m.conversation_id = conversation.id AND m.direction = 'out'
+                     AND m.created_at >= conversation.last_inbound_at
+                )
+                OR (handoff_at IS NOT NULL AND NOT EXISTS (
+                  SELECT 1 FROM message human
+                   WHERE human.conversation_id = conversation.id AND human.direction = 'out'
+                     AND human.author = 'agent' AND human.created_at > conversation.handoff_at
+                ))
+              ) THEN 1 ELSE 0 END), 0) AS waiting,
+              COALESCE(SUM(CASE WHEN handoff_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS handoff
          FROM conversation`,
     );
 
-    // Медиана устойчивее среднего: считаем её по всем отвеченным диалогам.
+    const liveCte = `WITH live AS (
+      SELECT conversation_id, MIN(created_at) AS started_at
+        FROM message
+       WHERE direction = 'in' AND is_backfill = 0 AND created_at >= ?
+       GROUP BY conversation_id
+    )`;
+
+    const period = one<{ conversations: number; resolved: number }>(
+      `${liveCte}
+       SELECT COUNT(*) AS conversations,
+              COALESCE(SUM(CASE WHEN c.resolved_at IS NOT NULL
+                                  AND c.resolved_at >= live.started_at THEN 1 ELSE 0 END), 0) AS resolved
+         FROM live JOIN conversation c ON c.id = live.conversation_id`,
+      since,
+    );
+
+    // Время первого ответа считаем по первой реальной реплике оператора.
+    // first_response_at включает AI и поэтому раньше делал SLA красивее,
+    // чем он был на самом деле.
     const responseTimes = all<{ ms: number }>(
-      `SELECT (first_response_at - first_inbound_at) AS ms FROM conversation
-        WHERE first_response_at IS NOT NULL AND first_inbound_at IS NOT NULL
-          AND first_response_at >= first_inbound_at AND created_at > ?
-        ORDER BY ms`,
+      `${liveCte}
+       SELECT MIN(m.created_at) - live.started_at AS ms
+         FROM live
+         JOIN message m ON m.conversation_id = live.conversation_id
+        WHERE m.direction = 'out' AND m.author = 'agent'
+          AND m.created_at >= live.started_at
+        GROUP BY live.conversation_id ORDER BY ms`,
       since,
     ).map((row) => row.ms);
     const median = responseTimes.length
@@ -974,9 +1478,31 @@ export class Store extends EventEmitter<StoreEvents> {
     const average = responseTimes.length
       ? Math.round(responseTimes.reduce((sum, ms) => sum + ms, 0) / responseTimes.length)
       : null;
+    const p90 = responseTimes.length
+      ? responseTimes[Math.min(responseTimes.length - 1, Math.ceil(responseTimes.length * 0.9) - 1)]!
+      : null;
+
+    const resolutionTimes = all<{ ms: number }>(
+      `${liveCte}
+       SELECT c.resolved_at - live.started_at AS ms
+         FROM live JOIN conversation c ON c.id = live.conversation_id
+        WHERE c.resolved_at IS NOT NULL AND c.resolved_at >= live.started_at
+        ORDER BY ms`,
+      since,
+    ).map((row) => row.ms);
+    const medianResolution = resolutionTimes.length
+      ? resolutionTimes[Math.floor(resolutionTimes.length / 2)]!
+      : null;
+    const averageResolution = resolutionTimes.length
+      ? Math.round(resolutionTimes.reduce((sum, ms) => sum + ms, 0) / resolutionTimes.length)
+      : null;
 
     const byChannel = all<{ channel: string; n: number }>(
-      `SELECT channel, COUNT(*) AS n FROM conversation GROUP BY channel`,
+      `${liveCte}
+       SELECT c.channel, COUNT(*) AS n
+         FROM live JOIN conversation c ON c.id = live.conversation_id
+        GROUP BY c.channel ORDER BY n DESC`,
+      since,
     );
 
     const suggestions = all<{ status: string; n: number }>(
@@ -984,19 +1510,20 @@ export class Store extends EventEmitter<StoreEvents> {
       since,
     );
 
-    const volume = all<{ day: string; incoming: number; outgoing: number; byAi: number }>(
+    const volume = all<{ day: string; incoming: number; outgoing: number; byAi: number; byHuman: number }>(
       `SELECT DATE(created_at / 1000, 'unixepoch') AS day,
               SUM(CASE WHEN direction = 'in' THEN 1 ELSE 0 END) AS incoming,
               SUM(CASE WHEN direction = 'out' THEN 1 ELSE 0 END) AS outgoing,
-              SUM(CASE WHEN direction = 'out' AND author = 'ai' THEN 1 ELSE 0 END) AS byAi
-         FROM message WHERE created_at > ? GROUP BY day ORDER BY day`,
+              SUM(CASE WHEN direction = 'out' AND author = 'ai' THEN 1 ELSE 0 END) AS byAi,
+              SUM(CASE WHEN direction = 'out' AND author = 'agent' THEN 1 ELSE 0 END) AS byHuman
+         FROM message WHERE created_at > ? AND is_backfill = 0 GROUP BY day ORDER BY day`,
       since,
     );
 
     // Часы суток: показывает, когда обращения приходят, а когда можно спать.
     const hours = all<{ hour: string; n: number }>(
       `SELECT STRFTIME('%H', created_at / 1000, 'unixepoch') AS hour, COUNT(*) AS n
-         FROM message WHERE direction = 'in' AND created_at > ? GROUP BY hour ORDER BY hour`,
+         FROM message WHERE direction = 'in' AND is_backfill = 0 AND created_at > ? GROUP BY hour ORDER BY hour`,
       since,
     );
 
@@ -1024,17 +1551,28 @@ export class Store extends EventEmitter<StoreEvents> {
     const decided = suggestions.filter((r) => r.status !== 'pending').reduce((s2, r) => s2 + r.n, 0);
     const outgoing = volume.reduce((s2, v) => s2 + v.outgoing, 0);
     const byAi = volume.reduce((s2, v) => s2 + v.byAi, 0);
+    const byHuman = volume.reduce((s2, v) => s2 + v.byHuman, 0);
 
     return {
       days,
+      since,
+      resetAt,
       totals,
+      period,
       avgFirstResponseMs: average,
       medianFirstResponseMs: median,
+      p90FirstResponseMs: p90,
       answered: responseTimes.length,
+      avgResolutionMs: averageResolution,
+      medianResolutionMs: medianResolution,
+      resolved: resolutionTimes.length,
       byChannel,
       suggestions,
       acceptanceRate: decided ? accepted / decided : null,
       aiShare: outgoing ? byAi / outgoing : null,
+      automationRate: byAi + byHuman ? byAi / (byAi + byHuman) : null,
+      aiReplies: byAi,
+      humanReplies: byHuman,
       volume,
       hours,
       events,

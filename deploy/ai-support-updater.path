@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch for AI Support update requests
+
+[Path]
+PathExists=@PROJECT_ROOT@/data/update-request.json
+Unit=ai-support-updater.service
+
+[Install]
+WantedBy=multi-user.target

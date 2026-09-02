@@ -34,6 +34,7 @@ export interface Profile {
   };
   balance?: { amount?: number; currency?: string; payments?: number };
   remnawaveRef?: string;
+  remnawaveRefs?: { sourceId: string; name: string; ref: string }[];
   /** Версия сборки, собравшей профиль: чужой кэш переигрываем. */
   builtBy?: string;
   sources: string[];
@@ -55,11 +56,17 @@ function pick(source: Record<string, unknown> | undefined, ...names: string[]): 
 }
 
 export class CustomerDirectory {
+  private readonly remnawaves: { id: string; name: string; client: RemnawaveClient }[];
+
   constructor(
     private readonly store: Store,
     private readonly bedolaga?: BedolagaClient,
-    private readonly remnawave?: RemnawaveClient,
-  ) {}
+    remnawave?: RemnawaveClient | { id: string; name: string; client: RemnawaveClient }[],
+  ) {
+    this.remnawaves = Array.isArray(remnawave)
+      ? remnawave
+      : remnawave ? [{ id: 'remnawave-default', name: 'Remnawave', client: remnawave }] : [];
+  }
 
   async build(conversation: Conversation): Promise<Profile> {
     const linkRef = conversation.sub_link ? detectSubLink(conversation.sub_link)?.ref : undefined;
@@ -136,7 +143,7 @@ export class CustomerDirectory {
     }
 
     // --- Remnawave: подписка, устройства, узлы ---
-    if (this.remnawave) {
+    for (const panel of this.remnawaves) {
       // В бедолаге могут лежать ссылка на подписку, short uuid или email —
       // любое из этого встречается в записи Remnawave и годится как зацепка.
       const extra = [
@@ -154,7 +161,7 @@ export class CustomerDirectory {
 
       const ref =
         remnawaveRefFrom(bedolagaUser) ??
-        (await this.remnawave.findUser(
+        (await panel.client.findUser(
           profile.identity.telegramId,
           profile.identity.username,
           [...(linkRef ? [linkRef] : []), ...extra],
@@ -162,15 +169,17 @@ export class CustomerDirectory {
 
       if (!ref) {
         profile.trace!.push(
-          `в Remnawave не найден по ${[profile.identity.telegramId, profile.identity.username && '@' + profile.identity.username.replace(/^@/, '')].filter(Boolean).join(', ') || 'известным данным'}`,
+          `в ${panel.name} не найден по ${[profile.identity.telegramId, profile.identity.username && '@' + profile.identity.username.replace(/^@/, '')].filter(Boolean).join(', ') || 'известным данным'}`,
         );
       }
       if (ref) {
-        profile.remnawaveRef = ref;
-        const panelProfile = await this.remnawave.profile(ref);
+        profile.remnawaveRef ??= ref;
+        (profile.remnawaveRefs ??= []).push({ sourceId: panel.id, name: panel.name, ref });
+        this.store.linkConversationSource(conversation.id, panel.id);
+        const panelProfile = await panel.client.profile(ref);
         if (panelProfile) {
           profile.found = true;
-          profile.sources.push('remnawave');
+          profile.sources.push(panel.name);
           profile.subscription = {
             ...profile.subscription,
             status: panelProfile.status ?? profile.subscription?.status,
@@ -180,7 +189,7 @@ export class CustomerDirectory {
             deviceLimit: panelProfile.deviceLimit ?? profile.subscription?.deviceLimit,
             shortId: panelProfile.shortId ?? profile.subscription?.shortId,
           };
-          const devices = await this.remnawave.devices(ref);
+          const devices = await panel.client.devices(ref);
           if (devices) profile.subscription.devices = devices.length;
 
           // Первое подключение — «клиент с», если бедолага не дала точнее.
@@ -198,24 +207,27 @@ export class CustomerDirectory {
           }
 
           const aliases = this.store.nodeAliases();
+          const nodeLabel = (rawName: string): string =>
+            aliases[`${panel.id}:${rawName}`]?.trim()
+            || displayNodeName(rawName, aliases);
 
           // Разбивки трафика по узлам эта версия панели не отдаёт, зато знает
           // последний узел клиента — его и показываем, прогнав через псевдоним.
-          const usage = await this.remnawave.usage(ref).catch(() => undefined);
+          const usage = await panel.client.usage(ref).catch(() => undefined);
           if (usage) {
             profile.activity = {
               ...profile.activity,
-              topNodes: usage.nodes.map((n) => ({ ...n, name: displayNodeName(n.name, aliases) })),
+              topNodes: usage.nodes.map((n) => ({ ...n, name: nodeLabel(n.name) })),
             };
           } else if (panelProfile.lastNodeUuid) {
-            const nodes = await this.remnawave.nodes().catch(() => undefined);
+            const nodes = await panel.client.nodes().catch(() => undefined);
             const node = nodes?.find((n) => n.uuid === panelProfile.lastNodeUuid);
             if (node) {
-              profile.activity = { ...profile.activity, lastNode: aliases[node.rawName]?.trim() || node.name };
+              profile.activity = { ...profile.activity, lastNode: nodeLabel(node.rawName) };
             }
           }
         } else {
-          profile.trace!.push(`запись ${ref} в Remnawave найдена, но профиль не читается`);
+          profile.trace!.push(`запись ${ref} в ${panel.name} найдена, но профиль не читается`);
         }
       }
     }

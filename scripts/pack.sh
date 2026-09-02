@@ -33,3 +33,8 @@ for file in "${files[@]}"; do prefixed+=("$project/$file"); done
 # вложения, локальные настройки агентов и прочие секреты сюда не попадут.
 tar -czf "$archive" -C .. "${prefixed[@]}"
 echo "Готово: $archive"
+(
+  cd "$artifact_dir"
+  sha256sum ai-support.tar.gz > ai-support.tar.gz.sha256
+)
+echo "SHA-256: $artifact_dir/ai-support.tar.gz.sha256"
