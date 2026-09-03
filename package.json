@@ -35,7 +35,7 @@
     "@fastify/websocket": "^11.3.0",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.1",
-    "grammy": "^1.45.1"
+    "grammy": "^1.46.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
