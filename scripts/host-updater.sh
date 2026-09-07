@@ -242,6 +242,16 @@ do_update() {
   safe_tag="${safe_tag//[^0-9A-Za-z_-]/-}"
   local target_image="ai-support:release-$safe_tag"
 
+  # Закрепляем запущенный образ отдельным rollback-тегом ДО сборки. При
+  # переустановке той же версии target_image совпадает с текущим тегом, и
+  # docker build переназначает его новому образу. Без предварительного тега
+  # старый image id может быть удалён сборщиком до создания backup-точки.
+  current_image_id="$(docker inspect -f '{{.Image}}' "$CONTAINER")"
+  [[ "$current_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  ROLLBACK_IMAGE="ai-support:rollback-$stamp"
+  docker image tag "$current_image_id" "$ROLLBACK_IMAGE"
+
   write_status installing "Скачивание подписанного релиза" 8
   archive="$WORK_DIR/ai-support.tar.gz"
   checksum="$WORK_DIR/ai-support.tar.gz.sha256"
@@ -282,15 +292,10 @@ PY
   build_image "$target_image" "$source_dir"
 
   write_status backing_up "Резервная копия базы" 58
-  current_image_id="$(docker inspect -f '{{.Image}}' "$CONTAINER")"
-  [[ "$current_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
-  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   backup_folder="$BACKUP_DIR/${stamp}-${current_version}-to-${TARGET_VERSION}"
   install -d -m 0700 "$backup_folder"
   BACKUP_PATH="$backup_folder/ai-support.db"
   backup_db "$BACKUP_PATH"
-  ROLLBACK_IMAGE="ai-support:rollback-$stamp"
-  docker image tag "$current_image_id" "$ROLLBACK_IMAGE"
   write_state "$ROLLBACK_IMAGE" "$BACKUP_PATH" "$current_version" "$TARGET_VERSION"
 
   write_status installing "Атомарное переключение контейнера" 72
