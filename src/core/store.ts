@@ -805,10 +805,21 @@ export class Store extends EventEmitter<StoreEvents> {
     const row = this.db
       .prepare(
         `SELECT MAX(created_at) AS at FROM message
-          WHERE conversation_id = ? AND author = 'agent' AND direction IN ('out','note')`,
+          WHERE conversation_id = ? AND author = 'agent' AND direction = 'out'`,
       )
       .get(conversationId) as { at: number | null };
     return row.at;
+  }
+
+  /**
+   * Пауза после видимого клиенту ответа оператора. Внутренние заметки сюда
+   * намеренно не входят: раньше служебная запись о handoff принималась за
+   * человеческий ответ и могла заблокировать само уведомление клиента.
+   */
+  humanHoldActive(conversationId: number, minutes: number, now = Date.now()): boolean {
+    if (minutes <= 0) return false;
+    const lastHuman = this.lastHumanReplyAt(conversationId);
+    return lastHuman !== null && now - lastHuman < minutes * 60_000;
   }
 
   // --- добыча знаний из переписки ---------------------------------------

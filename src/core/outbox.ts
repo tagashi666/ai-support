@@ -1,5 +1,6 @@
 import { log } from '../config.js';
 import { replyWindow, type Author, type Channel, type Conversation, type Store } from './store.js';
+import { runtime } from './settings.js';
 
 export interface SendPayload {
   text: string;
@@ -37,7 +38,7 @@ export class NoSenderError extends Error {
  */
 export class OperatorActiveError extends Error {
   constructor() {
-    super('Диалог уже взят оператором — отправка AI отменена');
+    super('Диалог ведёт или недавно вёл оператор — отправка AI отменена');
     this.name = 'OperatorActiveError';
   }
 }
@@ -76,8 +77,11 @@ export class Outbox {
     // Последний общий рубеж непосредственно перед внешним API. Responder
     // тоже проверяет эту метку до и после генерации, но только Outbox может
     // гарантировать правило для всех AI-путей: автоответа, handoff и reminder.
-    if (author === 'ai' && this.store.operatorIsActive(conversationId)) {
-      throw new OperatorActiveError();
+    if (author === 'ai') {
+      if (this.store.operatorIsActive(conversationId)
+          || this.store.humanHoldActive(conversationId, runtime.humanHoldMinutes)) {
+        throw new OperatorActiveError();
+      }
     }
 
     // Захватываем диалог ДО сетевого запроса. Пока Telegram или Bedolaga

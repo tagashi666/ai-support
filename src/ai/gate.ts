@@ -53,6 +53,15 @@ export function decide(
   kbHits = 1,
 ): GateDecision {
   const mode = resolveMode(conversation);
+
+  // Ответ человека важнее любых свойств черновика. Раньше эта проверка
+  // стояла после базы знаний, confidence и sensitive: первая сработавшая
+  // ветка возвращала suggest, а Responder успевал отправить handoff клиенту.
+  // В итоге AI снова влезал в разговор через пару минут после оператора.
+  if (store.humanHoldActive(conversation.id, runtime.humanHoldMinutes)) {
+    return { action: 'skip', reason: 'диалог недавно вёл человек' };
+  }
+
   if (mode === 'shadow') return { action: 'shadow', reason: 'теневой режим: только внутренний черновик' };
   if (mode !== 'auto') return { action: 'suggest', reason: `режим ${mode}` };
 
@@ -82,11 +91,6 @@ export function decide(
 
   if (!replyWindow(conversation).open) {
     return { action: 'skip', reason: 'окно ответа закрыто' };
-  }
-
-  const lastHuman = store.lastHumanReplyAt(conversation.id);
-  if (lastHuman && Date.now() - lastHuman < runtime.humanHoldMinutes * 60_000) {
-    return { action: 'suggest', reason: 'диалог недавно вёл человек' };
   }
 
   // Предохранитель от зацикливания: считается в пределах одного диалога.

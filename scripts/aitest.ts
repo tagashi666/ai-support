@@ -139,7 +139,14 @@ console.log('\n[ пауза после человека и предел авто
 
   check('до ответа человека AI отвечает сам', decide(store, conv(), 'вопрос', sure, 2).action === 'auto');
   store.recordOutbound({ conversationId: hold.id, author:'agent', text:'веду сам' });
-  check('после ответа человека AI молчит', decide(store, conv(), 'вопрос', sure, 2).action === 'suggest');
+  check('после ответа человека AI молчит', decide(store, conv(), 'вопрос', sure, 2).action === 'skip');
+
+  // Внутренняя заметка не является ответом клиенту и не включает паузу.
+  const noteOnly = store.upsertConversation({ channel:'tg_dm', externalId:'note-only', tgUserId:9350, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-only', text:'вопрос', externalMsgId:'hn1', sentAt: Date.now() });
+  store.addNote(noteOnly.id, 'внутренняя служебная заметка');
+  check('внутренняя заметка не считается ответом оператора',
+    !store.humanHoldActive(noteOnly.id, rt.humanHoldMinutes));
 
   store.db.prepare("UPDATE message SET created_at = ? WHERE author='agent'").run(Date.now() - 40 * 60_000);
   check('по истечении паузы AI возвращается', decide(store, conv(), 'вопрос', sure, 2).action === 'auto');
@@ -265,7 +272,7 @@ check('эскалированный диалог → предложка', decide
 store.setEscalated(conversation.id, false);
 
 store.addNote(conversation.id, 'взял в работу');
-check('после человека AI не перехватывает', decide(store, fresh(), 'не подключается', good).action === 'suggest');
+check('внутренняя заметка не считается ответом оператора', decide(store, fresh(), 'не подключается', good).action === 'auto');
 db.prepare(`DELETE FROM message WHERE direction = 'note'`).run();
 
 // Предел берём из настроек, а не из окружения: другой блок тестов его меняет.
@@ -569,7 +576,9 @@ console.log('\n[ передача человеку ]');
 
   // Модель: по умолчанию просит человека, по команде — «обращения нет».
   let noRequest = false;
+  let modelCalls = 0;
   const stubServer = createServer((_req, res) => {
+    modelCalls += 1;
     const content = noRequest
       ? '{"reply":"","confidence":0,"no_request":true}'
       : '{"reply":"надо посмотреть руками","confidence":0.2,"needs_human":true}';
@@ -634,7 +643,67 @@ console.log('\n[ передача человеку ]');
   check('на болтовню AI молчит', sent.length === before, sent.slice(before));
   check('болтовня не уходит человеку', store.getConversation(chat.id)!.handoff_at === null);
   check('предложка на болтовню не создаётся', store.pendingSuggestion(chat.id) === undefined);
+
+  // no_request от модели не должен скрывать содержательную проблему.
+  const missed = store.upsertConversation({ channel:'tg_dm', externalId:'missed', tgUserId:8610, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'missed', text:'приложение не подключается', externalMsgId:'mi1', sentAt: Date.now() });
+  const beforeMissed = sent.length;
+  await responder.handleInbound(store.getConversation(missed.id)!);
+  check('ошибочный no_request не оставляет клиента без ответа',
+    sent.length === beforeMissed + 1 && sent.at(-1)!.includes('специалисту'), sent.slice(beforeMissed));
+  check('ошибочный no_request передаёт диалог человеку',
+    store.getConversation(missed.id)!.handoff_at !== null);
   noRequest = false;
+
+  // После видимого ответа оператора AI не должен даже обращаться к модели
+  // и не должен отправлять handoff на новое сообщение клиента.
+  const held = store.upsertConversation({ channel:'tg_dm', externalId:'held-live', tgUserId:8620, businessConnectionId:'b1' });
+  const threeMinutesAgo = Date.now() - 3 * 60_000;
+  store.recordInbound({ channel:'tg_dm', externalId:'held-live', text:'первый вопрос', externalMsgId:'hl1', sentAt: threeMinutesAgo - 1000 });
+  store.recordOutbound({ conversationId: held.id, author:'agent', text:'ответ оператора', sentAt: threeMinutesAgo });
+  store.recordInbound({ channel:'tg_dm', externalId:'held-live', text:'уточнение клиента', externalMsgId:'hl2', sentAt: Date.now() });
+  const callsBeforeHold = modelCalls;
+  const sentBeforeHold = sent.length;
+  await responder.handleInbound(store.getConversation(held.id)!);
+  check('через 3 минуты после оператора модель не вызывается', modelCalls === callsBeforeHold, modelCalls - callsBeforeHold);
+  check('через 3 минуты после оператора AI ничего не отправляет', sent.length === sentBeforeHold, sent.slice(sentBeforeHold));
+  check('пауза оператора не переводит диалог в handoff', store.getConversation(held.id)!.handoff_at === null);
+
+  // Последний рубеж в Outbox защищает и те AI-пути, которые не проходят
+  // через Responder.
+  let outboxBlocked = false;
+  try {
+    await box.send(held.id, { text:'не должен уйти' }, 'ai');
+  } catch (error) {
+    outboxBlocked = error instanceof (await import('../src/core/outbox.js')).OperatorActiveError;
+  }
+  check('Outbox блокирует AI во время паузы после оператора', outboxBlocked);
+
+  // Невалидный ответ провайдера раньше просто логировался и исчезал.
+  const malformed = store.upsertConversation({ channel:'tg_dm', externalId:'malformed', tgUserId:8630, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'malformed', text:'помогите решить проблему', externalMsgId:'mf1', sentAt: Date.now() });
+  const malformedProvider = {
+    lastModel: 'broken-model',
+    complete: async () => 'это не json',
+  } as never;
+  const malformedResponder = new Responder(store, box, customersStub, undefined, undefined, malformedProvider);
+  const beforeMalformed = sent.length;
+  await malformedResponder.handleInbound(store.getConversation(malformed.id)!);
+  check('неразобранный ответ модели не превращается в игнор',
+    sent.length === beforeMalformed + 1 && sent.at(-1)!.includes('специалисту'), sent.slice(beforeMalformed));
+
+  // Ошибка API модели имеет тот же безопасный путь.
+  const failed = store.upsertConversation({ channel:'tg_dm', externalId:'failed-ai', tgUserId:8640, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'failed-ai', text:'не работает подключение', externalMsgId:'fa1', sentAt: Date.now() });
+  const failedProvider = {
+    lastModel: 'failed-model',
+    complete: async () => { throw new Error('provider unavailable'); },
+  } as never;
+  const failedResponder = new Responder(store, box, customersStub, undefined, undefined, failedProvider);
+  const beforeFailed = sent.length;
+  await failedResponder.handleInbound(store.getConversation(failed.id)!);
+  check('ошибка провайдера не превращается в игнор',
+    sent.length === beforeFailed + 1 && sent.at(-1)!.includes('специалисту'), sent.slice(beforeFailed));
 
   rt3.aiMode = 'suggest'; rt3.requireKb = true;
   stubServer.close();

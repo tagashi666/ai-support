@@ -92,6 +92,23 @@ function renderHistory(messages: Message[]): string {
 
 const visionDelay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * no_request разрешено принимать только для однозначной короткой реплики.
+ * Модель иногда ошибочно ставит флаг на реальную проблему без вопросительного
+ * знака (например, «не работает подключение»), и раньше клиент оставался без
+ * ответа. Неясную классификацию безопаснее передать человеку.
+ */
+export function clearlyNoRequest(text: string): boolean {
+  const normalized = text
+    .toLocaleLowerCase('ru')
+    .replace(/[.,!?;:()[\]{}"'«»…]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return true;
+  if (/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\s]+$/u.test(normalized)) return true;
+  return /^(?:спасибо(?: большое)?(?: вам| тебе)?|благодарю|ок(?:ей)?|понял(?:а)?|ясно|хорошо|ладно|привет|здравствуйте|добрый (?:день|вечер|утро)|до свидания|пока|thanks|thank you|ok(?:ay)?|got it|hello|hi|ау|вы тут|есть кто(?:-то)?|мне (?:просто )?(?:поболтать|поговорить) (?:хочется|охота))$/iu.test(normalized);
+}
+
 /** MIME определяем по байтам: Telegram часто сохраняет фото без расширения. */
 export function imageMime(bytes: Buffer): string | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
@@ -216,6 +233,11 @@ export class Responder {
     return humanReply !== null && humanReply >= inboundAt;
   }
 
+  /** Человек ответил недавно — AI не генерирует и ничего не отправляет. */
+  private heldByOperator(conversationId: number): boolean {
+    return this.store.humanHoldActive(conversationId, runtime.humanHoldMinutes);
+  }
+
   /** Разбирает накопившиеся сообщения клиента. Ошибки наружу не идут. */
   async handleInbound(conversation: Conversation): Promise<void> {
     const pending = this.store.pendingInbound(conversation.id);
@@ -241,6 +263,15 @@ export class Responder {
 
     if (this.claimedByOperator(conversation.id, message.created_at)) {
       log.debug(`Диалог ${conversation.id}: оператор уже работает — AI пропускает`);
+      return;
+    }
+
+    // Проверяем ДО handoff и обращения к модели. Это не только экономит
+    // запрос: никакое служебное сообщение AI не вклинится в паузу после
+    // ответа оператора, независимо от confidence и наличия статьи в базе.
+    if (this.heldByOperator(conversation.id)) {
+      log.info(`Диалог ${conversation.id}: действует пауза после ответа оператора — AI молчит`);
+      this.store.logEvent('ai_suppressed_human_hold', conversation.id, { message: message.id });
       return;
     }
 
@@ -310,23 +341,45 @@ export class Responder {
       const draft = parseDraft(raw);
       if (!draft) {
         log.warn(`Диалог ${conversation.id}: ответ модели не разобран`);
-        this.store.logEvent('ai_unparsed', conversation.id, { raw: raw.slice(0, 500) });
+        // Не сохраняем сырой ответ: модель могла повторить персональные
+        // данные клиента из истории диалога.
+        this.store.logEvent('ai_unparsed', conversation.id, { model: this.provider.lastModel });
+        if (!this.claimedByOperator(conversation.id, message.created_at)
+            && !this.heldByOperator(conversation.id)) {
+          await this.handOff(liveConversation, {
+            excerpt: clientText,
+            reason: 'модель не смогла сформировать надёжный ответ',
+            tone,
+          });
+        }
         return;
       }
 
       // Пока модель думала, оператор мог открыть диалог или начать ответ.
       // Не создаём даже предложку: она уже относится к устаревшему состоянию.
-      if (this.claimedByOperator(conversation.id, message.created_at)) {
+      if (this.claimedByOperator(conversation.id, message.created_at)
+          || this.heldByOperator(conversation.id)) {
         log.info(`Диалог ${conversation.id}: оператор перехватил его во время генерации — AI отменён`);
         this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id });
         return;
       }
 
-      // Обращения нет — молчим совсем: ни ответа, ни предложки, ни передачи.
-      // Иначе «мне поболтать охота» уезжает специалисту как заявка.
+      // Флаг модели принимаем только для очевидной короткой реплики. Если
+      // она назвала реальную проблему «болтовнёй», клиент не должен исчезать
+      // в тишине — передаём обращение оператору.
       if (draft.noRequest) {
-        log.info(`Диалог ${conversation.id}: в сообщениях нет обращения — AI молчит`);
-        this.store.logEvent('ai_no_request', conversation.id, { text: clientText.slice(0, 200) });
+        if (clearlyNoRequest(clientText)) {
+          log.info(`Диалог ${conversation.id}: в сообщениях нет обращения — AI молчит`);
+          this.store.logEvent('ai_no_request', conversation.id, { message: message.id });
+          return;
+        }
+        log.warn(`Диалог ${conversation.id}: модель ошибочно пометила обращение как no_request`);
+        this.store.logEvent('ai_invalid_no_request', conversation.id, { message: message.id });
+        await this.handOff(liveConversation, {
+          excerpt: clientText,
+          reason: 'модель не распознала обращение как вопрос',
+          tone,
+        });
         return;
       }
 
@@ -361,6 +414,15 @@ export class Responder {
         reason: verdict.reason,
         confidence: effectiveDraft.confidence,
       });
+
+      // skip означает именно полное отсутствие клиентского сообщения. До
+      // исправления он попадал в общую ветку «не auto» и превращался в
+      // handoff, то есть сам обходил защиту, которую должен был обеспечить.
+      if (verdict.action === 'skip') {
+        this.store.decideSuggestion(suggestion.id, 'superseded');
+        log.info(`Диалог ${conversation.id}: AI пропускает ответ (${verdict.reason})`);
+        return;
+      }
 
       // Замок перед отправкой: в тексте не должно быть внутреннего —
       // адресов, ключей, идентификаторов. Промпт об этом просит, а здесь
@@ -430,10 +492,24 @@ export class Responder {
       }
       log.error(`Диалог ${conversation.id}: AI не смог ответить`, err);
       this.store.logEvent('ai_error', conversation.id, { error: String(err) });
-      void this.notifier?.notify('ai_error', conversation, {
-        excerpt: clientText,
-        reason: (err as Error).message,
-      });
+      try {
+        await this.notifier?.notify('ai_error', conversation, {
+          excerpt: clientText,
+          reason: (err as Error).message,
+        });
+      } catch (notifyError) {
+        log.warn(`Диалог ${conversation.id}: уведомление об ошибке AI не доставлено`, notifyError);
+      }
+      // Ошибка провайдера не должна выглядеть как игнор. Если оператор не
+      // перехватил диалог, клиент получает нейтральное сообщение о передаче.
+      if (!this.claimedByOperator(conversation.id, message.created_at)
+          && !this.heldByOperator(conversation.id)) {
+        await this.handOff(conversation, {
+          excerpt: clientText,
+          reason: 'AI временно не смог подготовить ответ',
+          tone,
+        });
+      }
     }
   }
 
@@ -448,7 +524,12 @@ export class Responder {
     // Порядок важен: сперва зовём человека, потом обещаем его клиенту.
     // Иначе клиент слышит «передал специалисту», а специалист об этом
     // не знает — и вопрос повисает в пустоте.
-    const delivered = this.notifier ? await this.notifier.notify('handoff', conversation, details) : false;
+    let delivered = false;
+    try {
+      delivered = this.notifier ? await this.notifier.notify('handoff', conversation, details) : false;
+    } catch (err) {
+      log.warn(`Диалог ${conversation.id}: уведомление о передаче не доставлено`, err);
+    }
     if (!delivered) {
       const why = this.notifier?.configured
         ? `уведомление не доставлено: ${this.notifier.lastError ?? 'причина неизвестна'}`
@@ -463,15 +544,24 @@ export class Responder {
       await this.outbox.send(conversation.id, { text: service.handoffMessage }, 'ai');
       this.store.markHandoffNotified(conversation.id);
     } catch (err) {
-      log.debug(`Диалог ${conversation.id}: не удалось предупредить о передаче`, err);
+      if (err instanceof OperatorActiveError) {
+        log.info(`Диалог ${conversation.id}: оператор перехватил передачу — сообщение AI отменено`);
+      } else {
+        log.error(`Диалог ${conversation.id}: не удалось предупредить клиента о передаче`, err);
+        this.store.logEvent('handoff_send_failed', conversation.id, { error: String(err) });
+      }
     }
   }
 
   /** Напоминание клиенту, что вопрос у специалиста. Без ответа по существу. */
   private async remindWaiting(conversation: Conversation): Promise<void> {
-    const last = conversation.handoff_notified_at ?? conversation.handoff_at ?? 0;
+    // Если первая отправка не состоялась, handoff_notified_at остаётся NULL:
+    // следующий входящий должен повторить попытку сразу, а не ждать час от
+    // внутренней метки handoff_at.
+    const neverNotified = conversation.handoff_notified_at === null;
+    const last = conversation.handoff_notified_at ?? 0;
     const waitMs = runtime.handoffRepeatMinutes * 60_000;
-    if (runtime.handoffRepeatMinutes === 0 || Date.now() - last < waitMs) {
+    if (!neverNotified && (runtime.handoffRepeatMinutes === 0 || Date.now() - last < waitMs)) {
       log.debug(`Диалог ${conversation.id}: ждём человека, напоминание пока не нужно`);
       return;
     }
