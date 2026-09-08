@@ -234,6 +234,29 @@ build_image() {
   return "$rc"
 }
 
+preserve_running_image() {
+  local current_image_id="$1" rollback_image="$2"
+  [[ "$current_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
+
+  if docker image inspect "$current_image_id" >/dev/null 2>&1; then
+    docker image tag "$current_image_id" "$rollback_image"
+  else
+    # Старые версии updater могли удалить объект образа при переустановке
+    # того же тега, хотя контейнер продолжал работать из его rootfs. В этом
+    # случае восстанавливаем только неизменяемую файловую систему приложения.
+    # docker export не включает bind-mount/volume с БД и KB, а import не
+    # переносит конфигурацию контейнера и его секретные переменные окружения.
+    docker export "$CONTAINER" | docker import \
+      --change 'WORKDIR /app' \
+      --change 'ENV NODE_ENV=production' \
+      --change 'USER node' \
+      --change 'CMD ["node","dist/index.js"]' \
+      - "$rollback_image" >/dev/null
+  fi
+
+  docker image inspect "$rollback_image" >/dev/null
+}
+
 do_update() {
   local current_version="$1" tag="$2" safe_tag archive checksum source_dir
   local current_image_id stamp backup_folder
@@ -250,7 +273,8 @@ do_update() {
   [[ "$current_image_id" =~ ^sha256:[0-9a-f]{64}$ ]]
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   ROLLBACK_IMAGE="ai-support:rollback-$stamp"
-  docker image tag "$current_image_id" "$ROLLBACK_IMAGE"
+  write_status installing "Создание безопасной точки отката" 4
+  preserve_running_image "$current_image_id" "$ROLLBACK_IMAGE"
 
   write_status installing "Скачивание подписанного релиза" 8
   archive="$WORK_DIR/ai-support.tar.gz"
@@ -328,7 +352,7 @@ do_rollback() {
   rescue_db="$rescue_folder/ai-support.db"
   backup_db "$rescue_db"
   rescue_image="ai-support:rollback-${stamp}-undo"
-  docker image tag "$current_image_id" "$rescue_image"
+  preserve_running_image "$current_image_id" "$rescue_image"
 
   BACKUP_PATH="$rescue_db"
   ROLLBACK_IMAGE="$rescue_image"

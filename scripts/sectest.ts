@@ -67,10 +67,13 @@ console.log('\n[ версии обновлений ]');
   const panel = readFileSync(join(process.cwd(), 'public', 'index.html'), 'utf8');
   check('долгая Docker-сборка обновляет статус каждые 5 секунд',
     /while sleep 5; do[\s\S]*Сборка изолированного образа · \$\{elapsed\} с/u.test(hostUpdater));
-  const rollbackTagAt = hostUpdater.indexOf('docker image tag "$current_image_id" "$ROLLBACK_IMAGE"');
+  const rollbackTagAt = hostUpdater.indexOf('preserve_running_image "$current_image_id" "$ROLLBACK_IMAGE"');
   const imageBuildAt = hostUpdater.indexOf('build_image "$target_image" "$source_dir"');
   check('rollback-образ закрепляется до Docker-сборки',
     rollbackTagAt >= 0 && imageBuildAt >= 0 && rollbackTagAt < imageBuildAt);
+  check('удалённый Docker-образ восстанавливается без копирования секретов',
+    hostUpdater.includes('docker export "$CONTAINER" | docker import')
+      && !hostUpdater.includes('docker commit'));
   check('панель опрашивает ход установки чаще пяти секунд',
     /updatePoll = setInterval\(loadUpdateState, 2000\)/u.test(panel));
   check('ручная проверка обновлений обходит серверный кеш',
