@@ -5,6 +5,7 @@ import type { Conversation, Store } from './store.js';
 export type OperatorRole = 'admin' | 'lead' | 'agent' | 'viewer';
 export type Permission =
   | 'conversation:read' | 'conversation:write' | 'conversation:assign'
+  | 'bedolaga:write'
   | 'knowledge:review' | 'settings:write' | 'operators:manage'
   | 'audit:read' | 'update:manage';
 
@@ -18,10 +19,10 @@ export interface Actor {
 
 const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<Permission>> = {
   viewer: new Set(['conversation:read']),
-  agent: new Set(['conversation:read', 'conversation:write']),
-  lead: new Set(['conversation:read', 'conversation:write', 'conversation:assign', 'knowledge:review', 'audit:read']),
+  agent: new Set(['conversation:read', 'conversation:write', 'bedolaga:write']),
+  lead: new Set(['conversation:read', 'conversation:write', 'conversation:assign', 'bedolaga:write', 'knowledge:review', 'audit:read']),
   admin: new Set([
-    'conversation:read', 'conversation:write', 'conversation:assign', 'knowledge:review',
+    'conversation:read', 'conversation:write', 'conversation:assign', 'bedolaga:write', 'knowledge:review',
     'settings:write', 'operators:manage', 'audit:read', 'update:manage',
   ]),
 };

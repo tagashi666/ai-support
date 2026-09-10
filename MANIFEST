@@ -52,6 +52,7 @@ src/core/store.ts
 src/core/templates.ts
 src/core/update.ts
 src/index.ts
+src/integrations/bedolaga-customer.ts
 src/integrations/customers.ts
 src/integrations/remnawave.ts
 src/integrations/tgexport.ts

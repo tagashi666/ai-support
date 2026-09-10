@@ -31,9 +31,36 @@ export interface BedolagaTicket {
   status?: string;
   priority?: string;
   user_id?: number;
+  created_at?: string;
+  updated_at?: string;
+  closed_at?: string | null;
   messages?: BedolagaMessage[];
   user_reply_block_permanent?: boolean;
   user_reply_block_until?: string | null;
+}
+
+export interface BedolagaPage<T = Record<string, unknown>> {
+  items: T[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+function positiveId(value: unknown, label: string): number {
+  const id = Number(value);
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`${label}: нужен положительный целый ID`);
+  return id;
+}
+
+function pageLimit(value: unknown): number {
+  const limit = Number(value);
+  if (!Number.isSafeInteger(limit)) return 50;
+  return Math.max(1, Math.min(PAGE_LIMIT, limit));
+}
+
+function pageOffset(value: unknown): number {
+  const offset = Number(value);
+  return Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
 }
 
 export interface BedolagaMessage {
@@ -118,6 +145,46 @@ export class BedolagaClient {
     const response = await this.request(path, { params });
     if (!response.ok) throw new Error(`GET ${path} → HTTP ${response.status}`);
     return (await response.json()) as T;
+  }
+
+  /**
+   * В API Bedolaga старые списки возвращаются массивом, новые — объектом
+   * `{ items, total, limit, offset }`. Нормализуем оба контракта в одном
+   * месте, чтобы пустая карточка не маскировала очередное изменение формы.
+   */
+  private async collection<T extends Record<string, unknown>>(
+    path: string,
+    params: Record<string, string | number>,
+    aliases: string[] = [],
+  ): Promise<BedolagaPage<T>> {
+    const response = await this.request(path, { params });
+    if (!response.ok) throw new Error(`GET ${path} → HTTP ${response.status}`);
+    const body = (await response.json()) as unknown;
+    const limit = pageLimit(params['limit']);
+    const offset = pageOffset(params['offset']);
+    // У старого контракта массива нет `total`. Полная страница означает,
+    // что следующая страница ещё возможна: возвращаем нижнюю границу total,
+    // чтобы сборщик продолжил листать. На короткой/пустой странице граница
+    // становится точной.
+    if (Array.isArray(body)) {
+      const inferredTotal = offset + body.length + (body.length >= limit ? 1 : 0);
+      return { items: body as T[], total: inferredTotal, limit, offset };
+    }
+    const record = body && typeof body === 'object' ? body as Record<string, unknown> : {};
+    const items = ['items', ...aliases, 'data']
+      .map((key) => record[key])
+      .find(Array.isArray) as T[] | undefined;
+    if (!items) throw new Error(`GET ${path}: неожиданный формат ответа`);
+    const totalRaw = Number(record['total']);
+    const inferredTotal = offset + items.length + (items.length >= limit ? 1 : 0);
+    return {
+      items,
+      total: Number.isSafeInteger(totalRaw) && totalRaw >= 0
+        ? Math.max(totalRaw, offset + items.length)
+        : inferredTotal,
+      limit,
+      offset,
+    };
   }
 
   /** Все незакрытые тикеты. Листаем каждый живой статус до исчерпания. */
@@ -237,15 +304,70 @@ export class BedolagaClient {
 
   /** Транзакции клиента — из них видно первые платежи и активность. */
   async userTransactions(userId: number, limit = 20): Promise<Record<string, unknown>[]> {
-    const response = await this.request(`/users/${userId}/transactions`, { params: { limit } });
-    if (!response.ok) return [];
-    const body = (await response.json().catch(() => null)) as unknown;
-    if (Array.isArray(body)) return body as Record<string, unknown>[];
-    const record = body as Record<string, unknown> | null;
-    for (const key of ['items', 'transactions', 'data']) {
-      if (Array.isArray(record?.[key])) return record[key] as Record<string, unknown>[];
+    return (await this.transactions(userId, limit)).items;
+  }
+
+  /** Канонический маршрут финансовой истории Bedolaga. */
+  transactions(userId: number, limit = 50, offset = 0): Promise<BedolagaPage> {
+    return this.collection('/transactions', {
+      user_id: positiveId(userId, 'Пользователь'),
+      limit: pageLimit(limit),
+      offset: pageOffset(offset),
+    }, ['transactions']);
+  }
+
+  subscriptions(userId: number, limit = 50, offset = 0): Promise<BedolagaPage> {
+    return this.collection('/subscriptions', {
+      user_id: positiveId(userId, 'Пользователь'),
+      limit: pageLimit(limit),
+      offset: pageOffset(offset),
+    }, ['subscriptions']);
+  }
+
+  ticketsForUser(userId: number, limit = 50, offset = 0): Promise<BedolagaPage<BedolagaTicket & Record<string, unknown>>> {
+    return this.collection('/tickets', {
+      user_id: positiveId(userId, 'Пользователь'),
+      limit: pageLimit(limit),
+      offset: pageOffset(offset),
+    }, ['tickets']);
+  }
+
+  async referralDetails(userId: number, limit = 50, offset = 0): Promise<Record<string, unknown>> {
+    const id = positiveId(userId, 'Пользователь');
+    const response = await this.request(`/partners/referrers/${id}`, {
+      params: { limit: pageLimit(limit), offset: pageOffset(offset) },
+    });
+    if (response.status === 404) return {};
+    if (!response.ok) throw new Error(`GET /partners/referrers/${id} → HTTP ${response.status}`);
+    const body = await response.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      throw new Error(`GET /partners/referrers/${id}: неожиданный формат ответа`);
     }
-    return [];
+    return body as Record<string, unknown>;
+  }
+
+  /**
+   * Продление не идемпотентно: при обрыве после commit повтор удвоил бы дни.
+   * Поэтому здесь, как и у ответа в тикет, строго ноль автоматических ретраев.
+   */
+  async extendSubscription(subscriptionId: number, days: number): Promise<Record<string, unknown>> {
+    const id = positiveId(subscriptionId, 'Подписка');
+    if (!Number.isSafeInteger(days) || days <= 0 || days > 36_500) {
+      throw new Error('Количество дней должно быть целым числом от 1 до 36500');
+    }
+    const response = await this.request(`/subscriptions/${id}/extend`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ days }),
+    }, 0);
+    if (!response.ok) throw new Error(`POST /subscriptions/${id}/extend → HTTP ${response.status}`);
+    // HTTP 2xx здесь уже может означать, что неидемпотентная
+    // операция зафиксирована. Не превращаем 204, пустое тело или
+    // несовпадение формы в ложный failure: повтор из UI удвоил бы дни.
+    const body = await response.json().catch(() => null) as unknown;
+    return body && typeof body === 'object' && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : {};
   }
 
   async user(userId: number): Promise<Record<string, unknown> | null> {

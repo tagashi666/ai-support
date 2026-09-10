@@ -14,6 +14,13 @@ import { readLimitedBody } from '../core/http.js';
 import { replyWindow, type Conversation, type Store } from '../core/store.js';
 import { NoSenderError, Outbox, WindowClosedError } from '../core/outbox.js';
 import type { CustomerDirectory } from '../integrations/customers.js';
+import {
+  bedolagaSubscriptionRecords,
+  loadBedolagaCustomer,
+  normalizeBedolagaSubscription,
+  resolveVerifiedBedolagaUser,
+  collectBedolagaPages,
+} from '../integrations/bedolaga-customer.js';
 import { applySettings, runtime } from '../core/settings.js';
 import { listDocs, publishDraft, readDoc, removeDoc, slugFromTitle, writeDoc, type Area } from './kbfiles.js';
 import { runMining } from '../ai/mining.js';
@@ -107,6 +114,16 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   const updates = new UpdateManager();
   const sources = new SourceManager();
   const operations = new Operations(store);
+  const bedolagaExtensionLocks = new Set<string>();
+  const bedolagaExtensionOperations = new Map<string, {
+    actorKey: string;
+    conversationId: number;
+    subscriptionId: number;
+    days: number;
+    state: 'pending' | 'confirmed' | 'unknown';
+    response?: Record<string, unknown>;
+    updatedAt: number;
+  }>();
   const actors = new WeakMap<object, Actor>();
   const actorOf = (request: object): Actor => actors.get(request) ?? operations.rootActor();
 
@@ -321,6 +338,12 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (url.startsWith('/api/ai/try')) return 'knowledge:review';
     if (url.startsWith('/api/stats/reset')) return 'settings:write';
     if (url.startsWith('/api/inbox/folders') && method !== 'GET') return 'settings:write';
+    if (/^\/api\/conversations\/\d+\/bedolaga\/subscriptions\/\d+\/extend(?:\?|$)/.test(url)) {
+      return 'bedolaga:write';
+    }
+    if (/^\/api\/conversations\/\d+\/bedolaga\/customer(?:\?|$)/.test(url)) {
+      return 'conversation:write';
+    }
     // Subscription URL is a live credential, not ordinary conversation data.
     // A viewer may inspect the dialogue, but must not retrieve or copy it.
     // Destructive subscription actions remain admin-only.
@@ -616,6 +639,180 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
     if (!customers) return reply.code(501).send({ error: 'Источники карточки не настроены' });
     return { ok: true, customer: await customers.build(conversation) };
+  });
+
+  /**
+   * Расширенная карточка Bedolaga содержит баланс, платежи и рефералов,
+   * поэтому доступна только оператору, который вправе отвечать в диалоге.
+   * Секретные URL подписок и внешние ID платежей отсекаются нормализатором.
+   */
+  app.get<{ Params: { id: string } }>('/api/conversations/:id/bedolaga/customer', async (request, reply) => {
+    const conversation = store.getConversation(Number(request.params.id));
+    if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
+    if (!bedolaga) return reply.code(501).send({ error: 'Bedolaga не настроена' });
+    try {
+      const customer = await loadBedolagaCustomer(bedolaga, conversation);
+      if (!customer) return reply.code(404).send({ error: 'Клиент Bedolaga не найден' });
+      return {
+        customer,
+        capabilities: {
+          canExtendSubscription: customer.identityVerified
+            && operations.can(actorOf(request), 'bedolaga:write'),
+        },
+      };
+    } catch (err) {
+      log.error('Не удалось загрузить карточку клиента Bedolaga', err);
+      return reply.code(502).send({ error: 'Bedolaga временно не отдала карточку клиента' });
+    }
+  });
+
+  /**
+   * Нейдемпотентное продление подписки. Перед POST обязательно заново
+   * получаем список подписок клиента: это одновременно защита от подмены
+   * subscription id и от продления устаревшей/чужой карточки.
+   */
+  app.post<{
+    Params: { id: string; subscriptionId: string };
+    Body: { days?: unknown; operationId?: unknown };
+  }>('/api/conversations/:id/bedolaga/subscriptions/:subscriptionId/extend', async (request, reply) => {
+    const conversation = store.getConversation(Number(request.params.id));
+    if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
+    if (!bedolaga) return reply.code(501).send({ error: 'Bedolaga не настроена' });
+    const subscriptionId = Number(request.params.subscriptionId);
+    const days = Number(request.body?.days);
+    const operationId = typeof request.body?.operationId === 'string' ? request.body.operationId.trim() : '';
+    if (!Number.isSafeInteger(subscriptionId) || subscriptionId <= 0) {
+      return reply.code(400).send({ error: 'Некорректный ID подписки' });
+    }
+    if (!Number.isSafeInteger(days) || days <= 0 || days > 36_500) {
+      return reply.code(400).send({ error: 'Количество дней должно быть целым числом от 1 до 36500' });
+    }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(operationId)) {
+      return reply.code(400).send({ error: 'Некорректный ключ операции' });
+    }
+    try {
+      const actor = actorOf(request);
+      const user = await resolveVerifiedBedolagaUser(bedolaga, conversation);
+      const userId = Number(user?.['id']);
+      if (!user || !Number.isSafeInteger(userId) || userId <= 0) {
+        return reply.code(404).send({ error: 'Клиент Bedolaga не найден' });
+      }
+
+      const remote = await collectBedolagaPages((limit, offset) => bedolaga.subscriptions(userId, limit, offset));
+      const owned = bedolagaSubscriptionRecords(user, remote.items).find((item) => {
+        if (Number(item['id']) !== subscriptionId) return false;
+        const ownerId = Number(item['user_id']);
+        return Number.isSafeInteger(ownerId) && ownerId > 0 && ownerId === userId;
+      });
+      if (!owned) return reply.code(404).send({ error: 'Подписка этого клиента не найдена' });
+
+      const now = Date.now();
+      for (const [key, value] of bedolagaExtensionOperations) {
+        if (now - value.updatedAt > 86_400_000) bedolagaExtensionOperations.delete(key);
+      }
+      const prior = bedolagaExtensionOperations.get(operationId);
+      if (prior) {
+        const sameOperation = prior.actorKey === actor.key
+          && prior.conversationId === conversation.id
+          && prior.subscriptionId === subscriptionId
+          && prior.days === days;
+        if (!sameOperation) return reply.code(409).send({ error: 'Ключ операции уже использован для другого продления' });
+        if (prior.state === 'confirmed' && prior.response) return prior.response;
+        if (prior.state === 'unknown') {
+          return reply.code(202).send({
+            ok: false,
+            outcome: 'unknown',
+            warning: 'Исход запроса Bedolaga неизвестен. Проверьте срок подписки перед новой операцией.',
+          });
+        }
+        return reply.code(409).send({ error: 'Эта операция продления уже выполняется' });
+      }
+
+      // Один subscription может быть виден в нескольких диалогах/папках.
+      // Блокируем его глобально в рамках этой Bedolaga-интеграции.
+      const lockKey = String(subscriptionId);
+      if (bedolagaExtensionLocks.has(lockKey)) {
+        return reply.code(409).send({ error: 'Продление этой подписки уже выполняется' });
+      }
+      bedolagaExtensionLocks.add(lockKey);
+      bedolagaExtensionOperations.set(operationId, {
+        actorKey: actor.key,
+        conversationId: conversation.id,
+        subscriptionId,
+        days,
+        state: 'pending',
+        updatedAt: now,
+      });
+      try {
+        // Ровно один вызов: автоматический retry здесь удвоил бы начисление.
+        const result = await bedolaga.extendSubscription(subscriptionId, days);
+        const resultId = Number(result['id']);
+        const resultOwnerId = Number(result['user_id']);
+        const responseMatchesOwned = Number.isSafeInteger(resultId)
+          && resultId === subscriptionId
+          && Number.isSafeInteger(resultOwnerId)
+          && resultOwnerId === userId;
+        const warning = responseMatchesOwned
+          ? undefined
+          : 'Bedolaga приняла продление, но вернула неполный ответ. Карточка будет обновлена из Bedolaga.';
+        if (!responseMatchesOwned) {
+          // Путь и владение были проверены до POST. После 2xx нельзя
+          // возвращать failure и провоцировать повторное начисление. Поля
+          // неверной/пустой модели наружу не отдаём.
+          log.warn(`Bedolaga вернула неполный ответ для подписки #${subscriptionId}`);
+        }
+        const subscription = normalizeBedolagaSubscription({
+          ...owned,
+          ...(responseMatchesOwned ? result : {}),
+          id: subscriptionId,
+          user_id: userId,
+        });
+        try {
+          store.addNote(
+            conversation.id,
+            `Bedolaga: оператор ${actor.name} продлил подписку #${subscriptionId} на ${days} дн.`,
+          );
+        } catch (err) {
+          // Ошибка локальной заметки не отменяет уже принятый Bedolaga POST.
+          log.warn('Продление Bedolaga выполнено, но локальная заметка не сохранена', err);
+        }
+        void customers?.build(conversation).catch((err) => log.warn('Не удалось обновить сводную карточку после продления', err));
+        const response = { ok: true, subscription, warning };
+        bedolagaExtensionOperations.set(operationId, {
+          actorKey: actor.key,
+          conversationId: conversation.id,
+          subscriptionId,
+          days,
+          state: 'confirmed',
+          response,
+          updatedAt: Date.now(),
+        });
+        return response;
+      } catch (err) {
+        // После начала неидемпотентного POST сетевой сбой не доказывает, что
+        // Bedolaga отклонила запрос. Помечаем исход неопределённым и не даём
+        // повторить тот же ключ операции как новый POST.
+        bedolagaExtensionOperations.set(operationId, {
+          actorKey: actor.key,
+          conversationId: conversation.id,
+          subscriptionId,
+          days,
+          state: 'unknown',
+          updatedAt: Date.now(),
+        });
+        log.error('Исход продления подписки Bedolaga неизвестен', err);
+        return reply.code(202).send({
+          ok: false,
+          outcome: 'unknown',
+          warning: 'Исход запроса Bedolaga неизвестен. Проверьте срок подписки перед новой операцией.',
+        });
+      } finally {
+        bedolagaExtensionLocks.delete(lockKey);
+      }
+    } catch (err) {
+      log.error('Не удалось продлить подписку Bedolaga', err);
+      return reply.code(502).send({ error: 'Bedolaga не подтвердила продление подписки' });
+    }
   });
 
   // --- единый клиент и совместная работа -------------------------------

@@ -105,6 +105,23 @@ console.log('\n[ только чтение ]');
   (config.remnawave as { readOnly: boolean }).readOnly = wasReadOnly;
 }
 
+console.log('\n[ AI: Bedolaga только чтение ]');
+{
+  const { bedolagaCustomerReader } = await import('../src/integrations/customers.js');
+  const reader = bedolagaCustomerReader({
+    userByTelegramId: async () => null,
+    searchUsers: async () => [],
+    userTransactions: async () => [],
+    extendSubscription: async () => ({}),
+  } as never);
+
+  check('Bedolaga-reader заморожен', Object.isFrozen(reader));
+  check('AI получает только методы чтения Bedolaga',
+    Object.keys(reader).sort().join(',') === 'searchUsers,userByTelegramId,userTransactions'
+      && !('extendSubscription' in reader),
+    Object.keys(reader));
+}
+
 console.log('\n[ предел вложений ]');
 {
   const { readLimitedBody } = await import('../src/core/http.js');

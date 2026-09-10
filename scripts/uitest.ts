@@ -43,7 +43,7 @@ const script = html.slice(html.indexOf('<script type="module">'));
 const referenced = [...script.matchAll(/\$\('([A-Za-z0-9_-]+)'\)/g)].map((m) => m[1]!);
 // Элементы, которые скрипт создаёт сам внутри листов и карточек.
 const dynamic = new Set(['sheetX','cancel','save','create','run','no','yes','sgSend','sgEdit','sgNo',
-  'refreshCust','copySub','resetDev','revoke','logBox','docText','nTitle','nText','mSource','mLimit','mDry']);
+  'refreshCust','bedolagaCardBtn','bedCardBody','copySub','resetDev','revoke','logBox','docText','nTitle','nText','mSource','mLimit','mDry']);
 const missing = [...new Set(referenced)].filter((id) => !declared.has(id) && !dynamic.has(id));
 check('скрипт не обращается к несуществующим id', missing.length === 0, missing);
 
@@ -322,6 +322,41 @@ check('ошибка аватара повторяется, а не удаляе�
     /box\.style\.aspectRatio/.test(html) && /a\.width && a\.height/.test(html));
   check('переписка не спорит с автоподкруткой', /overflow-anchor:none/.test(html));
   check('пузыри не анимируются по одному при открытии', !/animationDelay/.test(html));
+}
+
+// 38. Карточка Bedolaga: сервер определяет право изменения, а UI защищён
+// от повторного клика и честно показывает недоступные разделы.
+check('продление Bedolaga показывается по серверному capability',
+  html.includes('bedolagaCapabilities.canExtendSubscription ? `<div class="bed-extend"')
+    && !html.includes('canAdmin() ? `<div class="bed-extend"'));
+check('двойное продление Bedolaga блокируется в UI',
+  /bedolagaExtensionPending\.has\(subscriptionId\)/u.test(html)
+    && /bedolagaExtensionPending\.add\(subscriptionId\)/u.test(html)
+    && /crypto\.randomUUID\(\)/u.test(html)
+    && /bedolagaExtensionUncertain\.add\(subscriptionId\)/u.test(html));
+check('недоступные подарки объясняются честно',
+  /card\.gifts\?\.available === false/u.test(html)
+    && /card\.gifts\.reason/u.test(html));
+check('активность Bedolaga показывает связанные тикеты',
+  html.includes("'Тикет','Сумма','Дата'")
+    && /ticketId/u.test(html));
+
+// Запрос карточки A может завершиться после того, как оператор уже открыл
+// карточку B. Результат A нельзя записывать в общие state/DOM: нужен либо
+// conversation guard, либо отдельный монотонный request token.
+{
+  const start = html.indexOf('async function openBedolagaCard');
+  const end = html.indexOf('\nfunction renderCollaboration', start);
+  const body = html.slice(start, end);
+  const guardedByConversation = /bedolagaCardConversation\s*!==\s*conversationId/u.test(body);
+  const tokenDeclaration = body.match(/(?:const|let)\s+([A-Za-z_$][\w$]*(?:token|ticket|request)[\w$]*)\s*=\s*\+\+([A-Za-z_$][\w$]*)/iu);
+  const guardedByToken = Boolean(tokenDeclaration
+    && new RegExp(`${tokenDeclaration[1]}\\s*!==\\s*${tokenDeclaration[2]}`, 'u').test(body));
+  check('запоздалый ответ карточки Bedolaga не перезаписывает новый диалог',
+    start >= 0 && end > start && (guardedByConversation || guardedByToken), {
+      guardedByConversation,
+      guardedByToken,
+    });
 }
 
 console.log(failures === 0 ? '\nВсе проверки прошли' : `\nПровалено: ${failures}`);

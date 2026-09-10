@@ -12,7 +12,7 @@ import { Outbox } from './core/outbox.js';
 import { SlaWatcher } from './core/sla.js';
 import { Notifier } from './core/notify.js';
 import { NodeWatch } from './core/nodes.js';
-import { CustomerDirectory } from './integrations/customers.js';
+import { bedolagaCustomerReader, CustomerDirectory } from './integrations/customers.js';
 import { RemnawaveClient } from './integrations/remnawave.js';
 import { loadSettings, runtime } from './core/settings.js';
 import { seedTemplates } from './core/templates.js';
@@ -58,7 +58,11 @@ async function main(): Promise<void> {
     store.syncSource({ id: panel.id, kind: 'remnawave', name: panel.name });
   }
   const remnawave = remnawaves[0]?.client;
-  const customers = new CustomerDirectory(store, bedolaga, remnawaves);
+  const customers = new CustomerDirectory(
+    store,
+    bedolaga ? bedolagaCustomerReader(bedolaga) : undefined,
+    remnawaves,
+  );
   const media = new MediaFetcher(store, bot ? bots : undefined, bedolaga);
   const notifier = bot ? new Notifier(store, bot) : undefined;
   const sla = notifier ? new SlaWatcher(store, notifier) : undefined;

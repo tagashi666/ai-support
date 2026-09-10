@@ -5,6 +5,22 @@ import { displayNodeName, type RemnawaveClient } from './remnawave.js';
 import { detectSubLink } from '../ai/sublink.js';
 
 /**
+ * Минимальная read-only поверхность Bedolaga, которую разрешено передавать
+ * сборщику контекста для AI. Даже если в клиенте появятся новые mutation-
+ * методы, они не окажутся доступны через этот объект автоматически.
+ */
+export type BedolagaCustomerReader = Pick<BedolagaClient,
+  'userByTelegramId' | 'searchUsers' | 'userTransactions'>;
+
+export function bedolagaCustomerReader(client: BedolagaClient): BedolagaCustomerReader {
+  return Object.freeze({
+    userByTelegramId: client.userByTelegramId.bind(client),
+    searchUsers: client.searchUsers.bind(client),
+    userTransactions: client.userTransactions.bind(client),
+  });
+}
+
+/**
  * Карточка клиента: кто он, что у него с подпиской и чем он пользуется.
  *
  * Источников три, и они дополняют друг друга: собственный Support API,
@@ -60,7 +76,7 @@ export class CustomerDirectory {
 
   constructor(
     private readonly store: Store,
-    private readonly bedolaga?: BedolagaClient,
+    private readonly bedolaga?: BedolagaCustomerReader,
     remnawave?: RemnawaveClient | { id: string; name: string; client: RemnawaveClient }[],
   ) {
     this.remnawaves = Array.isArray(remnawave)

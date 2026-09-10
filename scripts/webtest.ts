@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,11 +21,92 @@ const { startWeb } = await import('../src/panel/server.js');
 const db = openDatabase(); const store = new Store(db);
 const outbox = new Outbox(store);
 const bedolagaCalls: Array<{ id: number; status: string }> = [];
+const bedolagaExtendCalls: Array<{ id: number; days: number }> = [];
+const bedolagaTransactionPageCalls: Array<{ userId: number; limit: number; offset: number }> = [];
 let failBedolagaStatus = false;
+let useLargeBedolagaTransactionPage = false;
+let useIncompleteBedolagaExtensionResponse = false;
+let failBedolagaExtensionAfterCommit = false;
+const secretSubscriptionUrl = 'https://subscription.invalid/live-private-token';
+const secretTunnelUrl = 'vless://private-user-id@vpn.invalid:443?security=tls';
+const secretTelegramUrl = 'tg://resolve?domain=private-support';
+const secretJwt = 'eyJhbGciOiJIUzI1NiJ9.c2VjcmV0LXBheWxvYWQ.c2lnbmF0dXJl';
+const secretExternalPaymentId = 'gateway-secret-payment-id';
+const secretRawMetadata = 'raw-secret-metadata';
+const bedolagaUser = {
+  id: 42, telegram_id: 555, username: 'client', first_name: 'Клиент', last_name: 'Тестовый',
+  email: 'client@example.invalid', status: 'active', language: 'ru', balance_kopeks: 12_345,
+  referral_code: 'TEST42', has_had_paid_subscription: true, has_made_first_topup: true,
+  created_at: '2026-01-01T10:00:00Z', last_activity: '2026-09-08T10:00:00Z',
+  subscription: {
+    id: 900, user_id: 42, status: 'active', actual_status: 'active', is_trial: false,
+    start_date: '2026-08-01T10:00:00Z', end_date: '2026-10-01T10:00:00Z',
+    traffic_limit_gb: 100, traffic_used_gb: 12.5, device_limit: 5,
+    subscription_url: secretSubscriptionUrl, autopay_enabled: true,
+  },
+};
+const staleTelegramUser = { ...bedolagaUser, id: 99, telegram_id: 999, username: 'stale-client' };
+const subscriptionWithoutOwner = {
+  id: 902, status: 'active', actual_status: 'active', is_trial: false,
+  start_date: '2026-08-02T10:00:00Z', end_date: '2026-10-02T10:00:00Z',
+};
 const bedolaga = {
   setStatus: async (id: number, status: string) => {
     if (failBedolagaStatus) throw new Error('remote rejected');
     bedolagaCalls.push({ id, status });
+  },
+  userByTelegramId: async (telegramId: number) => telegramId === 555
+    ? bedolagaUser
+    : (telegramId === 999 ? staleTelegramUser : null),
+  searchUsers: async () => [bedolagaUser],
+  user: async (userId: number) => userId === 42 ? bedolagaUser : null,
+  ticket: async (ticketId: number) => ({ id: ticketId, user_id: 42, title: 'Тестовый тикет', status: 'open', messages: [] }),
+  subscriptions: async (userId: number, limit = 50, offset = 0) => ({
+    items: userId === 42 ? [bedolagaUser.subscription, subscriptionWithoutOwner] : [],
+    total: userId === 42 ? 2 : 0, limit, offset,
+  }),
+  transactions: async (userId: number, limit = 50, offset = 0) => {
+    bedolagaTransactionPageCalls.push({ userId, limit, offset });
+    if (userId !== 42) return { items: [], total: 0, limit, offset };
+    if (useLargeBedolagaTransactionPage) {
+      const total = 101;
+      const count = Math.max(0, Math.min(limit, total - offset));
+      return {
+        items: Array.from({ length: count }, (_, index) => ({
+          id: 10_000 + offset + index, user_id: 42, type: 'payment', amount_kopeks: 100,
+          payment_method: 'card', is_completed: true, created_at: '2026-09-01T10:00:00Z',
+        })),
+        total, limit, offset,
+      };
+    }
+    return {
+      items: [{
+        id: 701, user_id: 42, type: 'payment', amount_kopeks: 25_000,
+        description: `Оплата ${secretSubscriptionUrl} ${secretTunnelUrl} Bearer ${secretJwt}`,
+        payment_method: 'card', is_completed: true,
+        external_id: secretExternalPaymentId, metadata: secretRawMetadata,
+        created_at: '2026-09-01T10:00:00Z', completed_at: '2026-09-01T10:01:00Z',
+      }],
+      total: 1, limit, offset,
+    };
+  },
+  ticketsForUser: async (userId: number, limit = 50, offset = 0) => ({
+    items: userId === 42 ? [{
+      id: 77, user_id: 42, title: `Не подключается ${secretTelegramUrl}`, status: 'open', priority: 'normal', messages_count: 2,
+      created_at: '2026-09-02T10:00:00Z', updated_at: '2026-09-03T10:00:00Z',
+    }] : [],
+    total: userId === 42 ? 1 : 0, limit, offset,
+  }),
+  referralDetails: async (userId: number, limit = 50, offset = 0) => userId === 42 ? ({
+    referrer: { invited_count: 1, active_referrals: 1, total_earned_kopeks: 5000, referral_commission_percent: 10 },
+    referrals: { items: [{ id: 43, username: 'referral', status: 'active' }], total: 1, limit, offset },
+  }) : {},
+  extendSubscription: async (subscriptionId: number, days: number) => {
+    bedolagaExtendCalls.push({ id: subscriptionId, days });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    if (failBedolagaExtensionAfterCommit) throw new Error('connection reset after commit');
+    if (useIncompleteBedolagaExtensionResponse) return {};
+    return { ...bedolagaUser.subscription, id: subscriptionId, user_id: 42, end_date: '2026-10-08T10:00:00Z' };
   },
 };
 outbox.register('tg_dm', { send: async () => ({ externalMsgId: '1' }) });
@@ -48,6 +130,7 @@ const B = 'http://127.0.0.1:8099'; const T = process.env.PANEL_TOKEN!;
 const h = { authorization: `Bearer ${T}` };
 let fails = 0;
 const ok = (l:string,c:boolean,d?:unknown)=>{ c?console.log('  ok   '+l):(fails++,console.error('  FAIL '+l,d??'')); };
+const extensionBody = (days: number, operationId = randomUUID()) => JSON.stringify({ days, operationId });
 
 ok('без токена 401', (await fetch(`${B}/api/conversations`)).status === 401);
 ok('неверный токен 401', (await fetch(`${B}/api/conversations`,{headers:{authorization:'Bearer nope'}})).status === 401);
@@ -268,6 +351,12 @@ ok('viewer не получает внутренний id Telegram Business',
   && viewerSettings.businessConnectionLive?.id === undefined
   && !JSON.stringify({ viewerSettings, viewerHealth }).includes('"b1"'));
 ok('viewer не получает credential подписки', (await fetch(`${B}/api/conversations/${id}/subscription`, { headers: viewerH })).status === 403);
+ok('viewer не получает финансовую карточку Bedolaga',
+  (await fetch(`${B}/api/conversations/${id}/bedolaga/customer`, { headers: viewerH })).status === 403);
+ok('viewer не может начислять дни Bedolaga',
+  (await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+    method: 'POST', headers: { ...viewerH, 'content-type': 'application/json' }, body: extensionBody(7),
+  })).status === 403 && bedolagaExtendCalls.length === 0);
 ok('viewer не меняет диалог', (await fetch(`${B}/api/conversations/${id}/note`, {
   method: 'POST', headers: { ...viewerH, 'content-type': 'application/json' }, body: JSON.stringify({ text: 'нет' }),
 })).status === 403);
@@ -302,6 +391,208 @@ ok('agent не меняет SLA и не читает аудит', (await Promise
   fetch(`${B}/api/sla/normal`, { method: 'PUT', headers: { ...agentH, 'content-type': 'application/json' }, body: JSON.stringify({ firstResponseMinutes: 15, resolutionMinutes: 120 }) }),
   fetch(`${B}/api/audit`, { headers: agentH }),
 ])).every((response) => response.status === 403));
+
+const bedolagaCardResponse = await fetch(`${B}/api/conversations/${id}/bedolaga/customer`, { headers: agentH });
+const bedolagaCardText = await bedolagaCardResponse.text();
+const bedolagaCard = JSON.parse(bedolagaCardText) as any;
+ok('agent получает полную карточку Bedolaga', bedolagaCardResponse.status === 200
+  && bedolagaCard.customer.user.id === 42
+  && bedolagaCard.customer.subscriptions.items[0]?.id === 900
+  && bedolagaCard.customer.transactions.items[0]?.id === 701
+  && bedolagaCard.customer.tickets.items[0]?.id === 77
+  && bedolagaCard.customer.referrals.items[0]?.id === 43
+  && bedolagaCard.customer.activity.items.some((item: any) => item.eventType === 'transaction_completed')
+  && bedolagaCard.customer.activity.items.some((item: any) => item.eventType === 'subscription_started')
+  && bedolagaCard.customer.activity.items.some((item: any) => item.eventType === 'ticket_opened')
+  && bedolagaCard.customer.gifts.available === false
+  && bedolagaCard.customer.gifts.total === 0
+  && bedolagaCard.capabilities.canExtendSubscription === true, bedolagaCard);
+ok('карточка не раскрывает ссылку подписки, внешний платёжный ID и сырые метаданные',
+  !bedolagaCardText.includes(secretSubscriptionUrl)
+  && !bedolagaCardText.includes(secretTunnelUrl)
+  && !bedolagaCardText.includes(secretTelegramUrl)
+  && !bedolagaCardText.includes(secretJwt)
+  && !bedolagaCardText.includes(secretExternalPaymentId)
+  && !bedolagaCardText.includes(secretRawMetadata));
+const forbiddenBedolagaKeys = new Set([
+  'subscription_url', 'subscription_crypto_link', 'external_id', 'provider_payment_id', 'metadata',
+]);
+const containsForbiddenBedolagaKey = (value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some(containsForbiddenBedolagaKey);
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value as Record<string, unknown>).some(([key, child]) =>
+    forbiddenBedolagaKeys.has(key.toLowerCase()) || containsForbiddenBedolagaKey(child));
+};
+ok('карточка рекурсивно не содержит сырых credential-полей Bedolaga',
+  !containsForbiddenBedolagaKey(bedolagaCard));
+
+const staleBedolagaConversation = store.upsertConversation({
+  channel: 'bedolaga', externalId: '77', tgUserId: 999, username: 'stale-client', subject: 'Тикет со старым Telegram ID',
+});
+const authoritativeCardResponse = await fetch(
+  `${B}/api/conversations/${staleBedolagaConversation.id}/bedolaga/customer`,
+  { headers: agentH },
+);
+const authoritativeCard = await authoritativeCardResponse.json() as any;
+ok('владелец Bedolaga-тикета определяется по ticket.user_id, а не по устаревшему tg_user_id',
+  authoritativeCardResponse.status === 200
+    && authoritativeCard.customer?.user?.id === 42,
+  authoritativeCard);
+
+// API Bedolaga сообщает total отдельно от текущей страницы. Карточка не
+// должна выдавать первые 100 строк за полную историю: допустимы либо
+// последовательная догрузка всех страниц, либо явный признак/предупреждение
+// о неполной выборке, на основании которого UI сможет показать пагинацию.
+useLargeBedolagaTransactionPage = true;
+bedolagaTransactionPageCalls.length = 0;
+const largeCardResponse = await fetch(`${B}/api/conversations/${id}/bedolaga/customer`, { headers: agentH });
+const largeCardPayload = await largeCardResponse.json() as any;
+useLargeBedolagaTransactionPage = false;
+const largeTransactions = largeCardPayload.customer?.transactions ?? {};
+const loadedTransactions = Array.isArray(largeTransactions.items) ? largeTransactions.items.length : 0;
+const explicitlyPartial = largeTransactions.hasMore === true
+  || largeTransactions.truncated === true
+  || largeTransactions.complete === false
+  || Number(largeTransactions.loaded) === loadedTransactions
+  || (largeCardPayload.customer?.warnings ?? []).some((warning: unknown) =>
+    /(?:непол|част|первые|показан|страниц|101)/iu.test(String(warning)));
+ok('карточка не выдаёт страницу из 100 записей за полную историю',
+  largeCardResponse.status === 200
+    && Number(largeTransactions.total) === 101
+    && (loadedTransactions === 101 || explicitlyPartial), {
+      loadedTransactions,
+      total: largeTransactions.total,
+      explicitlyPartial,
+      pageCalls: bedolagaTransactionPageCalls,
+    });
+
+ok('некорректное число дней отклоняется до Bedolaga', (await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: JSON.stringify({ days: 0 }),
+})).status === 400 && bedolagaExtendCalls.length === 0);
+ok('чужую подписку нельзя продлить подменой ID', (await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/901/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(7),
+})).status === 404 && bedolagaExtendCalls.length === 0);
+ok('подписка без подтверждённого владельца не продлевается',
+  (await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/902/extend`, {
+    method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(7),
+  })).status === 404 && bedolagaExtendCalls.length === 0);
+
+// Совпадение username не доказывает личность: ник можно сменить или занять.
+// Такой fallback годится для read-only карточки, но не для денежной мутации.
+const usernameOnly = store.recordInbound({
+  channel: 'tg_bot', externalId: 'username-only', sourceId: 'bot-username-only',
+  username: 'client', displayName: 'Совпадение только по username',
+  text: 'проверка', externalMsgId: 'username-only-1', sentAt: Date.now(),
+})!.conversation;
+const usernameFallbackBefore = bedolagaExtendCalls.length;
+const usernameFallbackExtension = await fetch(
+  `${B}/api/conversations/${usernameOnly.id}/bedolaga/subscriptions/900/extend`,
+  { method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(7) },
+);
+ok('совпадение только по username не разрешает мутацию Bedolaga',
+  usernameFallbackExtension.status >= 400
+    && usernameFallbackExtension.status < 500
+    && bedolagaExtendCalls.length === usernameFallbackBefore,
+  { status: usernameFallbackExtension.status, body: await usernameFallbackExtension.text() });
+
+// Одна подписка может быть видна из нескольких связанных диалогов. Lock
+// обязан быть глобальным для subscription id, иначе два оператора начислят
+// дни дважды через разные conversations.
+const sameCustomerOtherConversation = store.recordInbound({
+  channel: 'tg_bot', externalId: 'same-customer-second-dialog', sourceId: 'bot-second',
+  tgUserId: 555, username: 'client', displayName: 'Клиент',
+  text: 'ещё один диалог', externalMsgId: 'same-customer-second-dialog-1', sentAt: Date.now(),
+})!.conversation;
+const globalLockBefore = bedolagaExtendCalls.length;
+const globalLockResponses = await Promise.all([
+  fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+    method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(3),
+  }),
+  fetch(`${B}/api/conversations/${sameCustomerOtherConversation.id}/bedolaga/subscriptions/900/extend`, {
+    method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(3),
+  }),
+]);
+const globalLockBodies = await Promise.all(globalLockResponses.map((response) => response.text()));
+const globalLockStatuses = globalLockResponses.map((response) => response.status).sort((left, right) => left - right);
+ok('одна подписка блокируется глобально между разными диалогами',
+  globalLockStatuses[0] === 200
+    && globalLockStatuses[1] === 409
+    && bedolagaExtendCalls.length === globalLockBefore + 1,
+  { globalLockStatuses, globalLockBodies, calls: bedolagaExtendCalls.slice(globalLockBefore) });
+
+const extendBefore = bedolagaExtendCalls.length;
+const duplicateOperationId = randomUUID();
+const concurrentExtensions = await Promise.all([
+  fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+    method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(7, duplicateOperationId),
+  }),
+  fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+    method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(7, duplicateOperationId),
+  }),
+]);
+const extensionBodies = await Promise.all(concurrentExtensions.map((response) => response.text()));
+const extensionStatuses = concurrentExtensions.map((response) => response.status).sort((left, right) => left - right);
+ok('оператор начисляет дни, а одновременный дубль блокируется', extensionStatuses[0] === 200
+  && extensionStatuses[1] === 409
+  && bedolagaExtendCalls.length === extendBefore + 1
+  && bedolagaExtendCalls[extendBefore]?.id === 900
+  && bedolagaExtendCalls[extendBefore]?.days === 7, { extensionStatuses, extensionBodies });
+const successfulExtensionBody = extensionBodies[concurrentExtensions.findIndex((response) => response.status === 200)] ?? '';
+ok('ответ продления также не раскрывает credential', !successfulExtensionBody.includes(secretSubscriptionUrl));
+const replayBefore = bedolagaExtendCalls.length;
+const confirmedReplay = await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(7, duplicateOperationId),
+});
+ok('повтор подтверждённого operationId не выполняет второй POST Bedolaga',
+  confirmedReplay.status === 200 && bedolagaExtendCalls.length === replayBefore,
+  { status: confirmedReplay.status, body: await confirmedReplay.text() });
+
+// После успешного неидемпотентного POST пустая/изменённая
+// форма ответа не должна показать failure и подтолкнуть оператора
+// начислить те же дни ещё раз.
+useIncompleteBedolagaExtensionResponse = true;
+const incompleteBefore = bedolagaExtendCalls.length;
+const incompleteExtension = await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(2),
+});
+const incompleteBody = await incompleteExtension.json() as { warning?: string; subscription?: { id?: number; userId?: number } };
+useIncompleteBedolagaExtensionResponse = false;
+ok('неполный 2xx-ответ Bedolaga считается принятым и не раскрывает чужие поля',
+  incompleteExtension.status === 200
+    && typeof incompleteBody.warning === 'string'
+    && incompleteBody.subscription?.id === 900
+    && incompleteBody.subscription?.userId === 42
+    && bedolagaExtendCalls.length === incompleteBefore + 1,
+  { status: incompleteExtension.status, incompleteBody, calls: bedolagaExtendCalls.slice(incompleteBefore) });
+
+const originalAddNote = store.addNote.bind(store);
+(store as unknown as { addNote: typeof store.addNote }).addNote = (() => { throw new Error('audit unavailable'); }) as typeof store.addNote;
+const auditFailureBefore = bedolagaExtendCalls.length;
+const auditFailureExtension = await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(1),
+});
+(store as unknown as { addNote: typeof store.addNote }).addNote = originalAddNote;
+ok('ошибка локальной audit-заметки не превращает уже выполненное продление в failure',
+  auditFailureExtension.status === 200 && bedolagaExtendCalls.length === auditFailureBefore + 1,
+  { status: auditFailureExtension.status, body: await auditFailureExtension.text() });
+
+const unknownOperationId = randomUUID();
+failBedolagaExtensionAfterCommit = true;
+const unknownBefore = bedolagaExtendCalls.length;
+const unknownExtension = await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(4, unknownOperationId),
+});
+failBedolagaExtensionAfterCommit = false;
+const unknownReplay = await fetch(`${B}/api/conversations/${id}/bedolaga/subscriptions/900/extend`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: extensionBody(4, unknownOperationId),
+});
+const unknownPayload = await unknownExtension.json() as any;
+ok('неопределённый исход не провоцирует повторный POST с тем же operationId',
+  unknownExtension.status === 202
+    && unknownReplay.status === 202
+    && unknownPayload.outcome === 'unknown'
+    && bedolagaExtendCalls.length === unknownBefore + 1,
+  { first: unknownExtension.status, replay: unknownReplay.status, unknownPayload });
 const leadSla = await fetch(`${B}/api/sla/normal`, {
   method: 'PUT', headers: { ...leadH, 'content-type': 'application/json' },
   body: JSON.stringify({ firstResponseMinutes: 15, resolutionMinutes: 120 }),

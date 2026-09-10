@@ -14,6 +14,7 @@ process.env.KB_DIR = join(dir, 'kb');
 
 const { parseTelegramExport } = await import('../src/integrations/tgexport.js');
 const { BedolagaClient } = await import('../src/channels/bedolaga.js');
+const { collectBedolagaPages } = await import('../src/integrations/bedolaga-customer.js');
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: unknown): void => {
@@ -67,9 +68,54 @@ const tickets = [
     { id: 6, message_text: 'Количество устройств зависит от тарифа, лишние отключаются в боте в разделе Устройства.', is_from_admin: true, created_at: '2026-01-03T10:05:00Z' },
   ]},
 ];
+let transactionRequest = '';
+const legacyTransactionOffsets: number[] = [];
+const exactLegacyTransactionOffsets: number[] = [];
+let extendRequests = 0;
+let extendBody = '';
 const server = createServer((req, res) => {
   const url = new URL(req.url!, 'http://localhost');
-  res.writeHead(req.headers['x-api-key'] === 'k' ? 200 : 401, { 'content-type': 'application/json' });
+  if (req.headers['x-api-key'] !== 'k') {
+    res.writeHead(401, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ detail: 'unauthorized' }));
+  }
+  if (url.pathname === '/transactions') {
+    transactionRequest = url.search;
+    if (url.searchParams.get('user_id') === '43') {
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      legacyTransactionOffsets.push(offset);
+      const items = [801, 802, 803].slice(offset, offset + 2).map((id) => ({ id, user_id: 43 }));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(items));
+    }
+    if (url.searchParams.get('user_id') === '44') {
+      const offset = Number(url.searchParams.get('offset') ?? 0);
+      exactLegacyTransactionOffsets.push(offset);
+      const items = [811, 812].slice(offset, offset + 2).map((id) => ({ id, user_id: 44 }));
+      res.writeHead(200, { 'content-type': 'application/json' });
+      return res.end(JSON.stringify(items));
+    }
+    res.writeHead(200, { 'content-type': 'application/json' });
+    return res.end(JSON.stringify({ items: [{ id: 701, user_id: 42 }], total: 1, limit: 25, offset: 10 }));
+  }
+  if (url.pathname === '/subscriptions/900/extend' && req.method === 'POST') {
+    extendRequests += 1;
+    let raw = '';
+    req.on('data', (chunk) => { raw += chunk; });
+    req.on('end', () => {
+      extendBody = raw;
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ id: 900, user_id: 42, status: 'active', end_date: '2026-10-01T00:00:00Z' }));
+    });
+    return;
+  }
+  if (url.pathname === '/subscriptions/901/extend' && req.method === 'POST') {
+    extendRequests += 1;
+    req.resume();
+    res.writeHead(204);
+    return res.end();
+  }
+  res.writeHead(200, { 'content-type': 'application/json' });
   if (url.pathname === '/tickets') return res.end(JSON.stringify(url.searchParams.get('status') === 'closed' ? tickets : []));
   const match = /^\/tickets\/(\d+)$/.exec(url.pathname);
   if (match) return res.end(JSON.stringify(tickets.find((t) => t.id === Number(match[1]))));
@@ -81,6 +127,43 @@ const client = new BedolagaClient(`http://127.0.0.1:${port}`, 'k');
 const closed = await client.ticketsByStatus('closed', 100);
 check('закрытые тикеты забираются', closed.length === 3, closed.length);
 check('живые статусы отдельно', (await client.ticketsByStatus('open', 100)).length === 0);
+const transactions = await client.transactions(42, 25, 10);
+check('транзакции идут через канонический /transactions',
+  transactionRequest.includes('user_id=42')
+    && transactionRequest.includes('limit=25')
+    && transactionRequest.includes('offset=10'),
+  transactionRequest);
+check('страница транзакций нормализована и total не меньше offset с данными',
+  transactions.total === 11 && Number(transactions.items[0]?.['id']) === 701);
+const legacyTransactions = await collectBedolagaPages((limit, offset) => client.transactions(43, Math.min(limit, 2), offset));
+check('старый массивный контракт листается до короткой страницы',
+  legacyTransactions.items.length === 3
+    && legacyTransactions.total === 3
+    && legacyTransactions.truncated === false
+    && legacyTransactionOffsets.join(',') === '0,2',
+  { legacyTransactions, legacyTransactionOffsets });
+const exactLegacyTransactions = await collectBedolagaPages((limit, offset) => client.transactions(44, Math.min(limit, 2), offset));
+check('ровно полная старая страница завершается пустой без ложного truncated',
+  exactLegacyTransactions.items.length === 2
+    && exactLegacyTransactions.total === 2
+    && exactLegacyTransactions.truncated === false
+    && exactLegacyTransactionOffsets.join(',') === '0,2',
+  { exactLegacyTransactions, exactLegacyTransactionOffsets });
+const extended = await client.extendSubscription(900, 7);
+check('продление отправляет число дней ровно один раз',
+  extendRequests === 1 && JSON.parse(extendBody)['days'] === 7 && Number(extended['id']) === 900,
+  { extendRequests, extendBody });
+const acceptedWithoutBody = await client.extendSubscription(901, 7);
+check('HTTP 204 после продления не провоцирует повторное начисление',
+  extendRequests === 2 && Object.keys(acceptedWithoutBody).length === 0,
+  { extendRequests, acceptedWithoutBody });
+let rejectedInvalidDays = false;
+try {
+  await client.extendSubscription(900, 0);
+} catch {
+  rejectedInvalidDays = true;
+}
+check('некорректные дни отсекаются до Bedolaga', rejectedInvalidDays && extendRequests === 2);
 server.close();
 
 console.log('\n[ кластеризация ]');

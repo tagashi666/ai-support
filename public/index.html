@@ -565,6 +565,45 @@ tr:last-child td { border-bottom:0; }
 .sheet textarea { min-height:288px; font-family:var(--mono); font-size:12px; }
 .frow { display:grid; gap:var(--sp-1); }
 .frow label { font-size:11.5px; color:var(--fg-3); }
+.sheet.wide { width:min(980px,100%); }
+.bed-shell { display:grid; gap:var(--sp-4); }
+.bed-summary { display:flex; align-items:center; gap:var(--sp-3); padding:var(--sp-4);
+  border:1px solid var(--line); border-radius:var(--r-box); background:var(--bg-2); }
+.bed-summary .avatar { width:44px; height:44px; flex:none; border-radius:14px; display:grid; place-items:center;
+  color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,var(--bg-3)); font:590 15px/1 var(--sans); }
+.bed-summary .identity { min-width:0; display:grid; gap:2px; }
+.bed-summary .identity b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font:590 15px/1.3 var(--sans); }
+.bed-summary .identity span { color:var(--fg-3); font:400 11px/1.45 var(--mono); overflow-wrap:anywhere; }
+.bed-summary .balance { margin-left:auto; text-align:right; flex:none; }
+.bed-summary .balance b { display:block; font:590 17px/1.2 var(--sans); }
+.bed-summary .balance span { color:var(--fg-3); font-size:11px; }
+.bed-tabs { display:flex; gap:var(--sp-1); overflow-x:auto; padding-bottom:2px; scrollbar-width:thin; }
+.bed-tabs button { height:30px; padding:0 var(--sp-3); flex:none; border:1px solid transparent;
+  border-radius:var(--r-ctl); color:var(--fg-3); font-size:11.5px; }
+.bed-tabs button:hover { color:var(--fg); background:var(--tint); }
+.bed-tabs button[aria-pressed="true"] { color:var(--fg); background:var(--bg-3); border-color:var(--line-2); }
+.bed-kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(145px,1fr)); gap:var(--sp-2); }
+.bed-kpi { min-width:0; padding:var(--sp-3); border:1px solid var(--line); border-radius:var(--r-ctl); background:var(--bg-2); }
+.bed-kpi span { display:block; color:var(--fg-3); font-size:10.5px; }
+.bed-kpi b { display:block; margin-top:4px; font:510 13px/1.35 var(--sans); overflow-wrap:anywhere; }
+.bed-section { display:grid; gap:var(--sp-2); }
+.bed-section > h3 { margin:0; font:590 13px/1.4 var(--sans); }
+.bed-table-wrap { overflow:auto; border:1px solid var(--line); border-radius:var(--r-box); }
+.bed-table { width:100%; border-collapse:collapse; font-size:11.5px; min-width:620px; }
+.bed-table th,.bed-table td { padding:10px 11px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+.bed-table th { color:var(--fg-3); background:var(--bg-2); font-weight:510; white-space:nowrap; }
+.bed-table tr:last-child td { border-bottom:0; }
+.bed-table td { overflow-wrap:anywhere; }
+.bed-table .num { text-align:right; font-family:var(--mono); white-space:nowrap; }
+.bed-stack { display:grid; gap:var(--sp-2); }
+.bed-sub { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--sp-3); align-items:center;
+  padding:var(--sp-3); border:1px solid var(--line); border-radius:var(--r-box); background:var(--bg-2); }
+.bed-sub .meta { display:flex; flex-wrap:wrap; gap:var(--sp-2); margin-top:6px; color:var(--fg-3); font-size:11px; }
+.bed-extend { display:flex; gap:var(--sp-2); align-items:center; }
+.bed-extend input { width:88px; height:var(--ctl); }
+.bed-warning { padding:var(--sp-3); border:1px solid color-mix(in srgb,var(--warn) 35%,var(--line));
+  border-radius:var(--r-ctl); color:var(--warn); font-size:11.5px; }
+.bed-empty { padding:var(--sp-6); text-align:center; color:var(--fg-3); border:1px dashed var(--line-2); border-radius:var(--r-box); }
 .toast { position:fixed; bottom:var(--sp-6); left:50%; transform:translateX(-50%); z-index:60;
   background:var(--glass); backdrop-filter:blur(20px) saturate(180%); -webkit-backdrop-filter:blur(20px) saturate(180%);
   border:1px solid var(--glass-edge); padding:var(--sp-2) var(--sp-5); border-radius:var(--r-pill);
@@ -572,7 +611,15 @@ tr:last-child td { border-bottom:0; }
 
 @media (max-width:1240px) { .app { grid-template-columns:clamp(184px,15vw,220px) minmax(0,1fr); } .context { display:none; } }
 @media (max-width:900px) { .split { grid-template-columns:1fr; } .col.left { display:none; } }
-@media (max-width:720px) { .app, .app[data-context="off"] { grid-template-columns:1fr; } .sidebar { display:none; } }
+@media (max-width:720px) {
+  .app, .app[data-context="off"] { grid-template-columns:1fr; } .sidebar { display:none; }
+  .backdrop { padding:0; place-items:stretch; }
+  .sheet.wide { width:100%; max-height:100dvh; border-radius:0; }
+  .bed-summary { align-items:flex-start; flex-wrap:wrap; }
+  .bed-summary .balance { margin-left:0; }
+  .bed-sub { grid-template-columns:1fr; }
+  .bed-extend { justify-content:flex-start; }
+}
 </style>
 <link rel="stylesheet" href="/ui.css">
 </head>
@@ -1178,8 +1225,9 @@ function toast(text) {
   clearTimeout(toast.t); toast.t = setTimeout(() => { el.hidden = true; }, 2600);
 }
 let sheetReturn = null;
-function sheet(title, body, foot) {
+function sheet(title, body, foot, variant = '') {
   sheetReturn = document.activeElement;
+  $('sheet').className = variant ? `sheet ${variant}` : 'sheet';
   $('sheet').innerHTML = `<header><b>${esc(title)}</b><button class="btn quiet" style="margin-left:auto" id="sheetX">Закрыть</button></header>
     <div class="body">${body}</div><div class="foot">${foot ?? ''}</div>`;
   $('backdrop').hidden = false;
@@ -1189,6 +1237,7 @@ function sheet(title, body, foot) {
 const closeSheet = () => {
   if ($('backdrop').hidden) return;
   $('backdrop').hidden = true;
+  $('sheet').className = 'sheet';
   sheetReturn?.focus?.();
   sheetReturn = null;
 };
@@ -1641,6 +1690,9 @@ function renderCustomer(profile) {
         ? `<div class="item col-item"><span class="lbl">Клиент прислал ключ</span>
              <span class="mono" style="overflow-wrap:anywhere">${esc(current.sub_link.slice(0, 120))}</span></div>`
         : '')
+    + (canWrite() && settings?.channels?.bedolaga
+        ? `<div class="item"><button class="btn primary wide" id="bedolagaCardBtn">Полная карточка Bedolaga</button></div>`
+        : '')
     + (canWrite() ? `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>` : '')
     + (profile?.found
         ? `<div class="item"><span class="hint">Источники: ${esc((profile.sources ?? []).join(', ') || '—')}</span></div>`
@@ -1649,12 +1701,205 @@ function renderCustomer(profile) {
         ? `<div class="item col-item"><span class="hint">${(profile.trace).map((t) => esc(t)).join('<br>')}</span></div>` : '');
 
   if (!canWrite()) return;
+  if ($('bedolagaCardBtn')) $('bedolagaCardBtn').onclick = () => openBedolagaCard();
   $('refreshCust').onclick = async () => {
     $('refreshCust').disabled = true;
     const data = await mutate(`/api/conversations/${current.id}/customer/refresh`, { method:'POST' }, 'Карточка обновлена');
     $('refreshCust').disabled = false;
     if (data) renderCustomer(data.customer);
   };
+}
+
+const bedMoney = (value) => value !== undefined && value !== null && Number.isFinite(Number(value))
+  ? new Intl.NumberFormat('ru-RU', { style:'currency', currency:'RUB', maximumFractionDigits:2 }).format(Number(value))
+  : '—';
+const bedDate = (value) => value ? fmtDate(value) : '—';
+const bedValue = (value, fallback = '—') => value === undefined || value === null || value === '' ? fallback : value;
+const bedStatus = (value) => {
+  if (value === 'active') return 'Активна';
+  if (value === 'disabled') return 'Отключена';
+  if (value === 'blocked') return 'Заблокирован';
+  if (value === 'open') return 'Открыт';
+  if (value === 'answered') return 'Ждём клиента';
+  if (value === 'pending') return 'В ожидании';
+  if (value === 'closed') return 'Закрыт';
+  if (value === 'completed') return 'Завершён';
+  return bedValue(value);
+};
+const bedEvent = (value) => ({
+  user_registered:'Регистрация',
+  user_updated:'Профиль обновлён',
+  user_activity:'Последняя активность',
+  subscription_started:'Подписка началась',
+  transaction_completed:'Платёж завершён',
+  transaction_created:'Платёж создан',
+  ticket_opened:'Тикет открыт',
+  ticket_updated:'Тикет обновлён',
+  ticket_closed:'Тикет закрыт',
+}[value] ?? bedValue(value));
+let bedolagaCard = null, bedolagaCardTab = 'overview', bedolagaCardConversation = null;
+let bedolagaCardRequest = 0;
+let bedolagaCapabilities = { canExtendSubscription:false };
+const bedolagaExtensionPending = new Set();
+const bedolagaExtensionUncertain = new Set();
+
+function bedKpi(label, value) {
+  return `<div class="bed-kpi"><span>${esc(label)}</span><b>${esc(bedValue(value))}</b></div>`;
+}
+
+function bedTable(headers, rows) {
+  if (!rows.length) return '<div class="bed-empty">В этом разделе пока нет данных.</div>';
+  return `<div class="bed-table-wrap"><table class="bed-table"><thead><tr>${headers.map((header) => `<th>${esc(header)}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((cells) => `<tr>${cells.map((cell) => `<td>${esc(bedValue(cell))}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+function bedTabLabel(label, section) {
+  const total = section?.total ?? 0;
+  return section?.truncated ? `${label} · ${(section.items ?? []).length} из ${total}` : `${label} · ${total}`;
+}
+
+function bedolagaTabBody(card, tab) {
+  const user = card.user ?? {};
+  if (tab === 'overview') {
+    const promo = user.promoGroup;
+    return `<section class="bed-section"><h3>Клиент</h3><div class="bed-kpis">
+      ${bedKpi('Статус', bedStatus(user.status))}${bedKpi('Язык', user.language)}${bedKpi('Регистрация', bedDate(user.createdAt))}
+      ${bedKpi('Последняя активность', bedDate(user.lastActivity))}${bedKpi('Платная подписка', user.hasHadPaidSubscription ? 'Была' : 'Не было')}
+      ${bedKpi('Первое пополнение', user.hasMadeFirstTopup ? 'Есть' : 'Нет')}${bedKpi('Реферальный код', user.referralCode)}
+      ${bedKpi('Приглашён пользователем', user.referredById ? `#${user.referredById}` : '—')}
+    </div></section>
+    ${promo ? `<section class="bed-section"><h3>Промо-группа</h3><div class="bed-kpis">
+      ${bedKpi('Название', promo.name)}${bedKpi('Скидка сервера', promo.serverDiscountPercent == null ? '—' : `${promo.serverDiscountPercent}%`)}
+      ${bedKpi('Скидка трафика', promo.trafficDiscountPercent == null ? '—' : `${promo.trafficDiscountPercent}%`)}
+      ${bedKpi('Скидка устройств', promo.deviceDiscountPercent == null ? '—' : `${promo.deviceDiscountPercent}%`)}
+    </div></section>` : ''}`;
+  }
+  if (tab === 'subscriptions') {
+    const items = card.subscriptions?.items ?? [];
+    if (!items.length) return '<div class="bed-empty">Подписки не найдены.</div>';
+    return `<div class="bed-stack">${items.map((sub) => {
+      const pending = bedolagaExtensionPending.has(Number(sub.id));
+      const uncertain = bedolagaExtensionUncertain.has(Number(sub.id));
+      return `<article class="bed-sub">
+      <div><b>Подписка #${esc(sub.id)} · ${esc(bedStatus(sub.actualStatus ?? sub.status))}</b>
+        <div class="meta"><span>${sub.isTrial ? 'Пробная' : 'Обычная'}</span><span>до ${esc(bedDate(sub.endDate))}</span>
+        <span>трафик ${esc(bedValue(sub.trafficUsedGb))} / ${esc(bedValue(sub.trafficLimitGb))} ГБ</span>
+        <span>устройств: ${esc(bedValue(sub.deviceLimit))}</span><span>сквадов: ${esc(sub.connectedSquadsCount)}</span>
+        <span>${sub.autopayEnabled ? 'автопродление включено' : 'автопродление выключено'}</span>
+        <span>${sub.hasAccessLink ? 'ссылка выпущена' : 'ссылки нет'}</span></div></div>
+      ${bedolagaCapabilities.canExtendSubscription ? `<div class="bed-extend"><input type="number" min="1" max="36500" value="7" aria-label="Дополнительные дни для подписки ${esc(sub.id)}" data-bed-days="${esc(sub.id)}" ${pending || uncertain ? 'disabled' : ''}><button class="btn primary" data-bed-extend="${esc(sub.id)}" ${pending || uncertain ? 'disabled' : ''}>${pending ? 'Продлеваю…' : (uncertain ? 'Сначала проверьте срок' : 'Добавить дни')}</button></div>` : ''}
+    </article>`;
+    }).join('')}</div>`;
+  }
+  if (tab === 'transactions') return bedTable(['ID','Тип','Сумма','Описание','Метод','Статус','Дата'],
+    (card.transactions?.items ?? []).map((item) => [item.id, item.type, bedMoney(item.amountRubles), item.description, item.paymentMethod, item.isCompleted ? 'Завершён' : 'Не завершён', bedDate(item.completedAt ?? item.createdAt)]));
+  if (tab === 'tickets') return bedTable(['ID','Тема','Статус','Приоритет','Сообщений','Создан','Закрыт'],
+    (card.tickets?.items ?? []).map((item) => [item.id, item.title, bedStatus(item.status), item.priority, item.messageCount, bedDate(item.createdAt), bedDate(item.closedAt)]));
+  if (tab === 'referrals') return `<div class="bed-kpis">
+      ${bedKpi('Приглашено', card.referrals?.invitedCount)}${bedKpi('Активных', card.referrals?.activeReferrals)}
+      ${bedKpi('Заработано', bedMoney(card.referrals?.totalEarnedRubles))}${bedKpi('За месяц', bedMoney(card.referrals?.monthEarnedRubles))}
+      ${bedKpi('Комиссия', card.referrals?.commissionPercent == null ? '—' : `${card.referrals.commissionPercent}%`)}</div>
+    ${bedTable(['ID','Клиент','Username','Статус','Баланс','Заработано','Пополнений','Активность'],
+      (card.referrals?.items ?? []).map((item) => [item.id, item.fullName, item.username ? `@${item.username}` : '—', bedStatus(item.status), bedMoney(item.balanceRubles), bedMoney(item.totalEarnedRubles), item.topupsCount, bedDate(item.lastActivity)]))}`;
+  if (tab === 'activity') return bedTable(['ID','Событие','Подписка','Транзакция','Тикет','Сумма','Дата'],
+    (card.activity?.items ?? []).map((item) => [item.id, bedEvent(item.eventType), item.subscriptionId ? `#${item.subscriptionId}` : '—', item.transactionId ? `#${item.transactionId}` : '—', item.ticketId ? `#${item.ticketId}` : '—', bedMoney(item.amountRubles), bedDate(item.occurredAt ?? item.createdAt)]));
+  if (card.gifts?.available === false) {
+    return `<div class="bed-empty">${esc(card.gifts.reason ?? 'История подарков недоступна для этой интеграции.')}</div>`;
+  }
+  return bedTable(['ID','Тип','Подписка','Эффект','Скидка','Бонус','Истекает','Статус'],
+    (card.gifts?.items ?? []).map((item) => [item.id, item.notificationType, item.subscriptionId ? `#${item.subscriptionId}` : '—', item.effectType, item.discountPercent == null ? '—' : `${item.discountPercent}%`, bedMoney(item.bonusAmountRubles), bedDate(item.expiresAt), item.isActive ? 'Активен' : (item.claimedAt ? 'Получен' : 'Неактивен')]));
+}
+
+function renderBedolagaCard() {
+  const box = $('bedCardBody');
+  if (!box || !bedolagaCard) return;
+  const card = bedolagaCard, user = card.user ?? {};
+  const tabs = [
+    ['overview','Обзор'], ['subscriptions',bedTabLabel('Подписки', card.subscriptions)],
+    ['transactions',bedTabLabel('Платежи', card.transactions)], ['tickets',bedTabLabel('Тикеты', card.tickets)],
+    ['referrals',bedTabLabel('Рефералы', card.referrals)], ['activity',`Активность · ${card.activity?.total ?? 0}`],
+    ['gifts',`Подарки · ${card.gifts?.total ?? 0}`],
+  ];
+  const display = user.fullName || (user.username ? `@${user.username}` : `#${user.id}`);
+  box.className = '';
+  box.innerHTML = `<div class="bed-shell">
+    <div class="bed-summary"><span class="avatar">${esc(initials(display))}</span><div class="identity"><b>${esc(display)}</b>
+      <span>${user.username ? `@${esc(user.username)} · ` : ''}Telegram ${esc(bedValue(user.telegramId))} · Bedolaga #${esc(user.id)}${user.email ? ` · ${esc(user.email)}` : ''}</span></div>
+      <div class="balance"><b>${esc(bedMoney(user.balanceRubles))}</b><span>баланс</span></div></div>
+    ${(card.warnings ?? []).map((warning) => `<div class="bed-warning">${esc(warning)}</div>`).join('')}
+    <nav class="bed-tabs" aria-label="Разделы карточки">${tabs.map(([id,label]) => `<button data-bed-tab="${id}" aria-pressed="${id === bedolagaCardTab}">${esc(label)}</button>`).join('')}</nav>
+    <div id="bedTabBody">${bedolagaTabBody(card, bedolagaCardTab)}</div>
+    <span class="hint">Обновлено: ${esc(fmtTime(card.loadedAt))}. Секретная ссылка подписки и служебные идентификаторы платежей скрыты.</span>
+  </div>`;
+  for (const button of box.querySelectorAll('[data-bed-tab]')) button.onclick = () => {
+    bedolagaCardTab = button.dataset.bedTab;
+    renderBedolagaCard();
+  };
+  for (const button of box.querySelectorAll('[data-bed-extend]')) button.onclick = () => {
+    const subscriptionId = Number(button.dataset.bedExtend);
+    if (bedolagaExtensionPending.has(subscriptionId) || bedolagaExtensionUncertain.has(subscriptionId)) return;
+    const input = box.querySelector(`[data-bed-days="${subscriptionId}"]`);
+    const days = Number(input?.value);
+    if (!Number.isSafeInteger(days) || days < 1 || days > 36500) return toast('Введите целое число дней от 1 до 36500');
+    const conversationId = bedolagaCardConversation;
+    confirmAction('Начислить дополнительные дни?', `Подписка #${subscriptionId} будет продлена на ${days} дн. Действие сразу уйдёт в Bedolaga.`, async () => {
+      if (bedolagaExtensionPending.has(subscriptionId)) return null;
+      bedolagaExtensionPending.add(subscriptionId);
+      const operationId = crypto.randomUUID();
+      let result = null;
+      try {
+        let response;
+        try {
+          response = await api(`/api/conversations/${conversationId}/bedolaga/subscriptions/${subscriptionId}/extend`,
+            { method:'POST', body:JSON.stringify({ days, operationId }) });
+        } catch (err) {
+          bedolagaExtensionUncertain.add(subscriptionId);
+          renderBedolagaCard();
+          toast(`Связь оборвалась после отправки. Проверьте срок подписки перед повтором: ${err.message}`);
+          return null;
+        }
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) { toast(payload.error ?? `Ошибка ${response.status}`); return null; }
+        result = payload;
+        if (result.outcome === 'unknown') bedolagaExtensionUncertain.add(subscriptionId);
+        toast(result.warning || `Добавлено ${days} дн.`);
+        return result;
+      } finally {
+        bedolagaExtensionPending.delete(subscriptionId);
+        // Не открываем старую карточку поверх другого диалога и не создаём
+        // впечатление успеха повторным открытием после отказа Bedolaga.
+        if (result && current?.id === conversationId) {
+          await openBedolagaCard(conversationId, 'subscriptions');
+        }
+      }
+    });
+  };
+}
+
+async function openBedolagaCard(conversationId = current?.id, tab = bedolagaCardTab) {
+  if (!conversationId) return;
+  const requestId = ++bedolagaCardRequest;
+  bedolagaCardConversation = conversationId;
+  bedolagaCardTab = tab;
+  bedolagaCard = null;
+  bedolagaCapabilities = { canExtendSubscription:false };
+  sheet('Карточка клиента Bedolaga', '<div id="bedCardBody" class="bed-empty">Загружаю данные Bedolaga…</div>', '', 'wide');
+  let response;
+  try { response = await api(`/api/conversations/${conversationId}/bedolaga/customer`); }
+  catch (err) {
+    if (requestId !== bedolagaCardRequest || bedolagaCardConversation !== conversationId || current?.id !== conversationId) return;
+    const box = $('bedCardBody');
+    if (box) box.textContent = `Нет связи с сервером: ${err.message}`;
+    return;
+  }
+  const payload = await response.json().catch(() => ({}));
+  if (requestId !== bedolagaCardRequest || bedolagaCardConversation !== conversationId || current?.id !== conversationId) return;
+  const box = $('bedCardBody');
+  if (!box) return;
+  if (!response.ok) { box.textContent = payload.error ?? `Ошибка ${response.status}`; return; }
+  bedolagaCapabilities = payload.capabilities ?? { canExtendSubscription:false };
+  bedolagaCard = payload.customer;
+  renderBedolagaCard();
 }
 
 function renderCollaboration(value = current?.collaboration) {
