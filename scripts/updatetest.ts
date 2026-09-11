@@ -37,25 +37,25 @@ try {
   console.log('\n[ центр обновлений ]');
   globalThis.fetch = async () => reply([
     completeRelease('v2.1.2'),
-    completeRelease('v2.5.0-rc.1', true),
-    completeRelease('v2.4.0'),
+    completeRelease('v2.6.0-rc.1', true),
+    completeRelease('v2.5.0'),
   ]);
   const manager = new UpdateManager();
   const state = await manager.state(true);
-  check('выбран самый новый стабильный релиз независимо от порядка API', state.tag === 'v2.4.0', state.tag);
+  check('выбран самый новый стабильный релиз независимо от порядка API', state.tag === 'v2.5.0', state.tag);
   check('релиз с обоими файлами доступен для установки', state.available && state.assets.length === 2, state);
 
   const queued = await manager.request('update');
   const request = JSON.parse(await readFile(config.update.requestFile, 'utf8')) as Record<string, unknown>;
   check('полная установка атомарно поставлена в очередь', queued.queued === true && request['schema'] === 2);
-  check('в запросе закреплён проверенный тег', request['tag'] === 'v2.4.0' && request['current'] === version, request);
+  check('в запросе закреплён проверенный тег', request['tag'] === 'v2.5.0' && request['current'] === version, request);
   await manager.request('update');
   const repeated = JSON.parse(await readFile(config.update.requestFile, 'utf8')) as Record<string, unknown>;
   check('повторный клик не перезаписывает активный запрос', repeated['requestedAt'] === request['requestedAt']);
 
   await unlink(config.update.requestFile);
   globalThis.fetch = async () => reply([{
-    ...completeRelease('v2.4.0'), assets: [asset('ai-support.tar.gz')],
+    ...completeRelease('v2.5.0'), assets: [asset('ai-support.tar.gz')],
   }]);
   const incomplete = await new UpdateManager().state(true);
   check('неполный релиз нельзя установить', !incomplete.available && /обязательных файлов/u.test(incomplete.error ?? ''), incomplete);

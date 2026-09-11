@@ -628,11 +628,6 @@ tr:last-child td { border-bottom:0; }
 <div class="gate" id="gate" hidden>
   <div class="gate-shell">
     <form class="gate-card" id="gateForm">
-      <div class="gate-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
-        </svg>
-      </div>
       <div>
         <span class="eyebrow">AI Support</span>
         <h2>Вход в панель</h2>
@@ -654,12 +649,7 @@ tr:last-child td { border-bottom:0; }
 
   <aside class="sidebar"><div class="grip" id="gripSide" style="right:-4px"></div>
     <div class="brand">
-      <span class="brand-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
-        </svg>
-      </span>
-      <span class="brand-copy"><b>AI Support</b><small>Служба поддержки</small></span>
+      <span class="brand-copy"><b>AI Support</b></span>
       <span class="pulse" id="pulse" title="Соединение с сервером"></span>
     </div>
     <div class="side-cap">Работа</div>
@@ -676,8 +666,8 @@ tr:last-child td { border-bottom:0; }
     <button class="nav" id="globalSearch" aria-label="Глобальный поиск">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></span><span class="nav-label">Поиск</span><span class="count" id="globalShortcut">Ctrl+K</span>
     </button>
-    <button class="nav" data-view="lab" aria-label="Песочница AI">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 1.4 4.1L17.5 8l-4.1 1.4L12 13.5l-1.4-4.1L6.5 8l4.1-.9L12 3ZM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg></span><span class="nav-label">Песочница AI</span>
+    <button class="nav" data-view="lab" aria-label="Тестирование AI">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M8 14h8"/></svg></span><span class="nav-label">Тестирование AI</span>
     </button>
     <button class="nav" data-view="nodes" aria-label="Серверы">
       <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"/></svg></span><span class="nav-label">Серверы</span><span class="count" id="cntNodes"></span>
@@ -790,7 +780,7 @@ tr:last-child td { border-bottom:0; }
             <button data-tab="learning" aria-pressed="false">На проверке</button>
           </div>
           <button class="btn" id="newDoc"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>Статья</button>
-          <button class="btn primary" id="mineBtn"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m10 3 1.1 3.4L14.5 7l-3.4 1.1L10 11.5 8.9 8.1 5.5 7l3.4-.6L10 3ZM15 12l.7 2.3L18 15l-2.3.7L15 18l-.7-2.3L12 15l2.3-.7L15 12Z"/></svg>Собрать из чатов</button>
+          <button class="btn" id="mineBtn">Собрать из чатов</button>
         </div>
       </div>
       <div class="page"><div class="page-inner"><div class="grid" id="docs"></div><div id="mineLog"></div></div></div>
@@ -807,8 +797,8 @@ tr:last-child td { border-bottom:0; }
     <section class="view" id="view-lab" hidden>
       <div class="bar">
         <div class="bar-title">
-          <span class="page-icon ai" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 1.4 4.1L17.5 8l-4.1 1.4L12 13.5l-1.4-4.1L6.5 8l4.1-.9L12 3ZM18 14l.8 2.2L21 17l-2.2.8L18 20l-.8-2.2L15 17l2.2-.8L18 14Z"/></svg></span>
-          <div><span class="bar-kicker">Без отправки клиенту</span><h1>Песочница AI</h1></div>
+          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M8 14h8"/></svg></span>
+          <div><span class="bar-kicker">Без отправки клиенту</span><h1>Тестирование AI</h1></div>
         </div>
         <div class="right"><span class="note">Тот же промпт и база, что в бою</span><button class="btn" id="pingBtn">Проверить связь</button></div>
       </div>
@@ -1207,7 +1197,7 @@ let sheetReturn = null;
 function sheet(title, body, foot, variant = '') {
   sheetReturn = document.activeElement;
   $('sheet').className = variant ? `sheet ${variant}` : 'sheet';
-  $('sheet').innerHTML = `<header><b>${esc(title)}</b><button class="btn quiet" style="margin-left:auto" id="sheetX">Закрыть</button></header>
+  $('sheet').innerHTML = `<header><b>${esc(title)}</b><button class="btn quiet sheet-close" id="sheetX">Закрыть</button></header>
     <div class="body">${body}</div><div class="foot">${foot ?? ''}</div>`;
   $('backdrop').hidden = false;
   $('sheetX').onclick = closeSheet;
@@ -1259,6 +1249,15 @@ async function runGlobalSearch(q) {
 $('globalSearch').onclick = openGlobalSearch;
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') { closeSheet(); closeInspector(); clearQuote(); }
+  if (e.key === 'Tab' && !$('backdrop').hidden) {
+    const focusable = [...$('sheet').querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),a[href],[tabindex]:not([tabindex="-1"])')]
+      .filter((element) => element.offsetParent !== null);
+    if (focusable.length) {
+      const first = focusable[0], last = focusable.at(-1);
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); openGlobalSearch(); }
   if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName ?? '')) {
     e.preventDefault();
@@ -2867,25 +2866,36 @@ const fmtDur = (ms) => {
   return `${Math.floor(h / 24)} д ${h % 24} ч`;
 };
 
-/** Столбчатый график входящих и исходящих по дням. */
+/** График входящих и исходящих по дням, нарисованный без внешней библиотеки. */
 function barChart(rows) {
   if (!rows.length) return '<p class="empty">Пока нет данных.</p>';
   const peak = Math.max(1, ...rows.map((r) => Math.max(r.incoming, r.outgoing)));
-  return `<div class="bars">${rows.map((r) => `
-    <div class="col2" title="${esc(r.day)}: входящих ${r.incoming}, исходящих ${r.outgoing}">
-      <i class="in" style="height:${Math.round(r.incoming / peak * 78)}%"></i>
-      <i class="out" style="height:${Math.round(r.outgoing / peak * 78)}%"></i>
-      <span>${esc(r.day.slice(5))}</span>
-    </div>`).join('')}</div>
-    <div class="legend"><span><i style="background:var(--accent)"></i>входящие</span>
-      <span><i style="background:var(--fg-3)"></i>исходящие</span></div>`;
+  const width = 960, height = 260, left = 42, right = 18, top = 18, bottom = 34;
+  const plotW = width - left - right, plotH = height - top - bottom;
+  const x = (index) => left + (rows.length === 1 ? plotW / 2 : index * plotW / (rows.length - 1));
+  const y = (value) => top + plotH - value / peak * plotH;
+  const points = (key) => rows.map((row,index) => `${x(index).toFixed(1)},${y(row[key]).toFixed(1)}`).join(' ');
+  const every = Math.max(1, Math.ceil(rows.length / 7));
+  const grid = [0,.25,.5,.75,1].map((ratio) => {
+    const gy = top + plotH - ratio * plotH;
+    return `<line x1="${left}" y1="${gy}" x2="${width-right}" y2="${gy}"/><text x="${left-9}" y="${gy+4}" text-anchor="end">${Math.round(peak*ratio)}</text>`;
+  }).join('');
+  const labels = rows.map((row,index) => index % every === 0 || index === rows.length - 1
+    ? `<text x="${x(index)}" y="${height-9}" text-anchor="middle">${esc(row.day.slice(5))}</text>` : '').join('');
+  const dots = (key, klass) => rows.map((row,index) => `<circle class="${klass}" cx="${x(index)}" cy="${y(row[key])}" r="3"><title>${esc(row.day)} · ${key === 'incoming' ? 'входящие' : 'исходящие'}: ${row[key]}</title></circle>`).join('');
+  return `<div class="chart-wrap"><svg class="volume-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Входящие и исходящие сообщения по дням">
+    <g class="chart-grid">${grid}${labels}</g>
+    <polyline class="series secondary" points="${points('outgoing')}"/>
+    <polyline class="series primary" points="${points('incoming')}"/>
+    <g class="chart-dots">${dots('outgoing','secondary')}${dots('incoming','primary')}</g>
+  </svg></div>`;
 }
 
 /** Ряд «подпись — полоса — число»: нагляднее таблицы из двух колонок. */
 function meters(rows, unit = '') {
   if (!rows.length) return '<div class="item"><span class="hint">Пока пусто.</span></div>';
   const peak = Math.max(1, ...rows.map(([, n]) => n));
-  return rows.map(([label, n]) => `<div class="meter"><span style="min-width:118px">${esc(label)}</span>
+  return rows.map(([label, n]) => `<div class="meter"><span>${esc(label)}</span>
     <span class="track"><i style="width:${Math.round(n / peak * 100)}%"></i></span>
     <b>${n}${unit}</b></div>`).join('');
 }
@@ -2908,28 +2918,23 @@ async function loadStats() {
   $('stats').innerHTML = `
     <div class="stats-tools"><div><b>Честный период</b><p class="hint">Импортированная история не входит в метрики.${s.resetAt ? ` Новый отсчёт начат ${fmtDate(s.resetAt)}.` : ' Можно начать новый отсчёт без удаления диалогов.'}</p></div>
       ${currentActor?.role === 'admin' ? '<button class="btn danger" data-reset-stats>Начать отсчёт заново</button>' : ''}</div>
-    <div class="kpis">
-      <div class="kpi"><b>${incoming}</b><span>сообщений от клиентов</span>
-        <span class="sub">${perDay} в день · ${outgoing} ответов</span></div>
-      <div class="kpi"><b>${fmtDur(s.medianFirstResponseMs)}</b><span>первый ответ, медиана</span>
-        <span class="sub">оператор · p90 ${fmtDur(s.p90FirstResponseMs)} · ${s.answered} диалогов</span></div>
-      <div class="kpi"><b>${share}</b><span>автоматизация ответов</span>
-        <span class="sub">AI ${s.aiReplies ?? 0} · оператор ${s.humanReplies ?? 0} · предложки ${acc}</span></div>
-      <div class="kpi"><b>${s.totals.waiting ?? 0}</b><span>ждут ответа сейчас</span>
-        <span class="sub">открыто ${s.totals.open ?? 0} из ${s.totals.total ?? 0}</span></div>
-    </div>
+    <section class="stats-overview" aria-label="Ключевые показатели">
+      <div class="metric-lead"><span>Медиана первого ответа</span><strong>${fmtDur(s.medianFirstResponseMs)}</strong><small>p90 ${fmtDur(s.p90FirstResponseMs)} · ${s.answered} диалогов с ответом</small></div>
+      <div class="metric-list">
+        <div><span>Ждут ответа</span><b>${s.totals.waiting ?? 0}</b><small>${s.totals.open ?? 0} открыто</small></div>
+        <div><span>Сообщения клиентов</span><b>${incoming}</b><small>${perDay} в день · ${outgoing} ответов</small></div>
+        <div><span>Автоматизация</span><b>${share}</b><small>AI ${s.aiReplies ?? 0} · оператор ${s.humanReplies ?? 0}</small></div>
+        <div><span>Решено</span><b>${s.period.resolved ?? 0}</b><small>из ${s.period.conversations ?? 0} новых диалогов</small></div>
+      </div>
+    </section>
 
-    <div class="kpis compact-kpis">
-      <div class="kpi"><b>${s.period.conversations ?? 0}</b><span>новых диалогов</span><span class="sub">за выбранный период</span></div>
-      <div class="kpi"><b>${s.period.resolved ?? 0}</b><span>решено</span><span class="sub">решены после живого обращения</span></div>
-      <div class="kpi"><b>${fmtDur(s.medianResolutionMs)}</b><span>время решения, медиана</span><span class="sub">среднее ${fmtDur(s.avgResolutionMs)}</span></div>
-      <div class="kpi"><b>${s.kb ?? 0}</b><span>статей базы знаний</span><span class="sub">источники для AI</span></div>
-    </div>
+    <section class="chart-section">
+      <header><div><h2>Поток сообщений</h2><p>Входящие и ответы за ${s.days} дней</p></div><div class="legend"><span><i class="primary"></i>Входящие</span><span><i class="secondary"></i>Ответы</span></div></header>
+      ${barChart(s.volume)}
+      <div class="chart-foot"><span>Медиана решения <b>${fmtDur(s.medianResolutionMs)}</b></span><span>Среднее <b>${fmtDur(s.avgResolutionMs)}</b></span><span>Принято предложок <b>${acc}</b></span><span>База знаний <b>${s.kb ?? 0}</b></span></div>
+    </section>
 
-    <div class="cap">Объём за ${s.days} дней</div>
-    ${barChart(s.volume)}
-
-    <div class="split2" style="margin-top:var(--sp-6)">
+    <div class="split2">
       <div>
         <div class="cap">Когда пишут</div>
         <div class="group">${meters(hourRows)}</div>
@@ -2991,7 +2996,7 @@ function renderSavedFilters() {
   box.innerHTML = savedQueueFilters.length ? `<div class="ops-head"><div><b>Мои фильтры</b><span class="hint">Быстрые представления очереди</span></div></div>
     <div class="ops-actions" style="justify-content:flex-start">${savedQueueFilters.map((f) => {
       const query = parseFilter(f.query);
-      return `<span class="ops-card" style="display:inline-flex;align-items:center;gap:8px;padding:7px 9px">
+      return `<span class="saved-filter">
         <button class="btn quiet" data-filter-open="${Number(f.id)}">${esc(f.name)}</button>
         ${canWrite() ? `<button class="btn quiet danger" data-filter-delete="${Number(f.id)}" aria-label="Удалить фильтр ${esc(f.name)}">×</button>` : ''}
         <span class="sr-only">${esc(JSON.stringify(query))}</span></span>`;
@@ -3014,13 +3019,13 @@ function renderSlaPolicies() {
   const box = $('slaPolicies');
   if (!box) return;
   const editable = currentActor?.role === 'admin' || currentActor?.role === 'lead';
-  box.innerHTML = `<details class="sla-panel"><summary><div><b>Сроки обслуживания</b><p>SLA — внутренние цели команды. Они подсвечивают просрочки в очереди и не меняют статусы в Telegram или Bedolaga.</p></div><span class="badge">Настроить</span></summary>
-    <div class="sla-panel-body"><div class="ops-grid">${queuePolicies.map((p) => `<article class="ops-card sla-card">
-      <header><b>${esc(PRIORITY_LABELS[p.priority] ?? p.priority)}</b><span class="badge ${p.priority === 'urgent' ? 'danger' : ''}">${esc(p.priority)}</span></header>
-      <div class="frow"><label for="sla-first-${p.priority}">До первого ответа <span class="sla-unit">мин</span></label><input id="sla-first-${p.priority}" type="number" min="1" max="10080" value="${Number(p.first_response_minutes)}" ${editable ? '' : 'disabled'}></div>
-      <div class="frow"><label for="sla-resolution-${p.priority}">До решения <span class="sla-unit">мин</span></label><input id="sla-resolution-${p.priority}" type="number" min="1" max="10080" value="${Number(p.resolution_minutes)}" ${editable ? '' : 'disabled'}></div>
-      ${editable ? `<button class="btn" data-sla-save="${esc(p.priority)}">Сохранить</button>` : '<span class="hint">Изменяют lead и admin.</span>'}
-    </article>`).join('')}</div></div></details>`;
+  box.innerHTML = `<details class="sla-panel"><summary><div><b>Сроки обслуживания</b><p>Внутренние цели команды; статусы каналов не меняются.</p></div><span class="summary-action">Настроить</span></summary>
+    <div class="sla-panel-body"><div class="sla-policy-list">${queuePolicies.map((p) => `<div class="sla-policy-row">
+      <div class="sla-priority"><span class="status-dot ${p.priority === 'urgent' ? 'danger' : ''}"></span><b>${esc(PRIORITY_LABELS[p.priority] ?? p.priority)}</b></div>
+      <div class="frow"><label for="sla-first-${p.priority}">Первый ответ, мин</label><input id="sla-first-${p.priority}" type="number" min="1" max="10080" value="${Number(p.first_response_minutes)}" ${editable ? '' : 'disabled'}></div>
+      <div class="frow"><label for="sla-resolution-${p.priority}">Решение, мин</label><input id="sla-resolution-${p.priority}" type="number" min="1" max="10080" value="${Number(p.resolution_minutes)}" ${editable ? '' : 'disabled'}></div>
+      ${editable ? `<button class="btn" data-sla-save="${esc(p.priority)}">Сохранить</button>` : '<span class="hint">Только lead и admin</span>'}
+    </div>`).join('')}</div></div></details>`;
   for (const button of box.querySelectorAll('[data-sla-save]')) button.onclick = async () => {
     const priority = button.dataset.slaSave;
     const result = await mutate(`/api/sla/${priority}`, { method:'PUT', body:JSON.stringify({
@@ -3094,7 +3099,7 @@ function renderOperators(rows) {
       <p class="hint">Управление учётными записями доступно только администратору.</p></article>`;
     return;
   }
-  box.innerHTML = `<article class="ops-card team-intro"><div><b>Доступ для команды</b><p>Владелец создаёт отдельную учётную запись, назначает роль и один раз передаёт сотруднику его токен.</p></div><button class="btn primary" data-create-operator>Добавить сотрудника</button></article>
+  box.innerHTML = `<div class="team-note">Для каждого сотрудника создаётся отдельная учётная запись. Токен показывается один раз и хранится только в виде хеша.</div>
     <div class="ops-head"><div><b>Операторы и роли</b><span class="hint">Токены хранятся только в виде хеша и повторно не показываются</span></div></div>
     ${rows.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Имя</th><th>Роль</th><th>Состояние</th><th>Создан</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr>
       <td><b>${esc(row.name)}</b></td><td>${esc(ROLE_LABELS[row.role] ?? row.role)}</td><td><span class="badge ${row.active ? 'ok' : 'danger'}">${row.active ? 'Активен' : 'Отключён'}</span></td>
@@ -3110,7 +3115,6 @@ function renderOperators(rows) {
       const result = await mutate(`/api/operators/${button.dataset.opActive}`, { method:'POST', body:JSON.stringify({ active:button.dataset.opNext === '1' }) }, 'Доступ изменён');
       if (result) loadTeam();
     });
-  box.querySelector('[data-create-operator]')?.addEventListener('click', openOperatorSheet);
 }
 
 function renderAudit(events) {
@@ -3158,11 +3162,11 @@ async function loadDiagnostics() {
   const channelRows = Object.entries(data.channels).map(([key,on]) => `<div class="item"><span>${esc(channelLabel({channel:key}))}</span><span class="badge ${on ? 'ok' : ''}">${on ? 'Подключён' : 'Не подключён'}</span></div>`).join('');
   const integrationRows = Object.entries(data.integrations).map(([key,on]) => `<div class="item"><span>${esc(key)}</span><span class="badge ${on ? 'ok' : ''}">${on ? 'Готов' : 'Не настроен'}</span></div>`).join('');
   const jobs = data.database.jobs ?? [];
-  box.innerHTML = `<div class="ops-grid">
-    <article class="ops-card"><header><b>Приложение v${esc(data.application.version)}</b><span class="badge ok">Работает</span></header><div class="meta"><span>Аптайм ${fmtLeft(data.application.uptime*1000)}</span><span>RSS ${mb(data.application.memory.rss)}</span><span>Heap ${mb(data.application.memory.heapUsed)}</span></div></article>
-    <article class="ops-card"><header><b>База данных</b><span class="badge ${data.database.integrity === 'ok' ? 'ok' : 'danger'}">${esc(data.database.integrity)}</span></header><div class="meta"><span>Схема ${Number(data.database.schema)}</span>${Object.entries(data.database.counts).map(([key,n]) => `<span>${esc(key)}: ${Number(n)}</span>`).join('')}</div></article>
-    <article class="ops-card"><header><b>Каналы</b><span class="badge ok">Голый режим допустим</span></header><div class="group">${channelRows}</div><p class="hint">Отсутствие каналов не мешает запустить и настроить панель.</p></article>
-    <article class="ops-card"><header><b>Интеграции</b><span class="badge">Опциональны</span></header><div class="group">${integrationRows}</div></article>
+  box.innerHTML = `<div class="diagnostic-sections">
+    <section class="diagnostic-section"><header><div><b>Приложение <span class="mono">v${esc(data.application.version)}</span></b><span>Процесс и память</span></div><span class="badge ok">Работает</span></header><div class="diagnostic-facts"><span>Аптайм <b>${fmtLeft(data.application.uptime*1000)}</b></span><span>RSS <b>${mb(data.application.memory.rss)}</b></span><span>Heap <b>${mb(data.application.memory.heapUsed)}</b></span></div></section>
+    <section class="diagnostic-section"><header><div><b>База данных</b><span>Целостность и схема</span></div><span class="badge ${data.database.integrity === 'ok' ? 'ok' : 'danger'}">${esc(data.database.integrity)}</span></header><div class="diagnostic-facts"><span>Схема <b>${Number(data.database.schema)}</b></span>${Object.entries(data.database.counts).map(([key,n]) => `<span>${esc(key)} <b>${Number(n)}</b></span>`).join('')}</div></section>
+    <section class="diagnostic-section"><header><div><b>Каналы</b><span>Голый режим допустим</span></div></header><div class="group">${channelRows}</div></section>
+    <section class="diagnostic-section"><header><div><b>Интеграции</b><span>Необязательные подключения</span></div></header><div class="group">${integrationRows}</div></section>
   </div>
   <div class="ops-head"><div><b>Фоновые задания</b><span class="hint">Последние ${jobs.length}; ошибки видны явно</span></div></div>
   ${jobs.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Тип</th><th>Статус</th><th>Прогресс</th><th>Завершено</th></tr></thead><tbody>${jobs.map((job) => `<tr><td>${esc(job.kind)}</td><td><span class="badge ${job.status === 'failed' ? 'danger' : job.status === 'done' ? 'ok' : ''}">${esc(job.status)}</span></td><td>${esc(job.error || job.progress || '—')}</td><td>${job.ended_at ? fmtTime(Number(job.ended_at)) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Фоновых заданий пока не было.</p>'}`;
