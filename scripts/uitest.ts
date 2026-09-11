@@ -340,6 +340,10 @@ check('недоступные подарки объясняются честно
 check('активность Bedolaga показывает связанные тикеты',
   html.includes("'Тикет','Сумма','Дата'")
     && /ticketId/u.test(html));
+check('карточка Bedolaga оформлена активным stylesheet, а не отключённым legacy-ui',
+  uiCss.includes('.sheet.wide { width:min(980px,100%); }')
+    && uiCss.includes('.bed-tabs button[aria-pressed="true"]')
+    && uiCss.includes('.bed-sub { display:grid;'));
 
 // Запрос карточки A может завершиться после того, как оператор уже открыл
 // карточку B. Результат A нельзя записывать в общие state/DOM: нужен либо
