@@ -8,6 +8,7 @@ kb/10-подписка.md
 kb/20-устройства.md
 kb/30-скорость.md
 public/index.html
+public/ui-v2.css
 public/ui.css
 scripts/aitest.ts
 scripts/baretest.ts

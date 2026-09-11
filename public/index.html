@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="ru" data-theme="graphite" data-accent="lavender">
+<html lang="ru" data-theme="system" data-accent="system-blue">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<title>ai-support</title>
+<title>AI Support — рабочее место оператора</title>
 <style media="not all" id="legacy-ui">
 /* Скрытие обязано побеждать любой display у класса — иначе экраны
    рисуются друг под другом. Правило первое и с !important. */
@@ -621,30 +621,12 @@ tr:last-child td { border-bottom:0; }
   .bed-extend { justify-content:flex-start; }
 }
 </style>
-<link rel="stylesheet" href="/ui.css">
+<link rel="stylesheet" href="/ui-v2.css">
 </head>
 <body>
 
 <div class="gate" id="gate" hidden>
   <div class="gate-shell">
-    <section class="gate-story" aria-label="ai-support">
-      <div class="gate-brand">
-        <span class="brand-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
-          </svg>
-        </span>
-        <span>ai-support</span>
-      </div>
-      <div>
-        <span class="eyebrow">Рабочее пространство поддержки</span>
-        <h1>Помогать людям — спокойно.</h1>
-        <p>Диалоги, знания и AI-помощник в одном быстром пространстве для команды.</p>
-      </div>
-      <div class="gate-points" aria-label="Возможности">
-        <span>Живая очередь</span><span>Ответы с AI</span><span>Контекст клиента</span>
-      </div>
-    </section>
     <form class="gate-card" id="gateForm">
       <div class="gate-mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
@@ -652,9 +634,9 @@ tr:last-child td { border-bottom:0; }
         </svg>
       </div>
       <div>
-        <span class="eyebrow">Защищённый вход</span>
-        <h2>С возвращением</h2>
-        <p>Введите токен панели, чтобы продолжить работу.</p>
+        <span class="eyebrow">AI Support</span>
+        <h2>Вход в панель</h2>
+        <p>Введите токен доступа оператора.</p>
       </div>
       <label class="sr-only" for="gateToken">Токен панели</label>
       <input type="password" id="gateToken" placeholder="Токен панели" autocomplete="current-password" autofocus>
@@ -677,7 +659,7 @@ tr:last-child td { border-bottom:0; }
           <path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/><path d="m9 12 2 2 4-5"/>
         </svg>
       </span>
-      <span class="brand-copy"><b>ai-support</b><small>operator desk</small></span>
+      <span class="brand-copy"><b>AI Support</b><small>Служба поддержки</small></span>
       <span class="pulse" id="pulse" title="Соединение с сервером"></span>
     </div>
     <div class="side-cap">Работа</div>
@@ -902,7 +884,7 @@ tr:last-child td { border-bottom:0; }
       </div>
       <div class="page"><div class="page-inner">
         <div class="narrow">
-          <section class="settings-section"><div class="section-copy"><span class="cap">Оформление</span><h2>Рабочая среда</h2><p>Выберите спокойную тему и акцент под себя.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Пять палитр нового интерфейса</span></header><div class="themes" id="themePick"></div></div><div class="appearance-panel"><header><b>Акцент</b><span>Цвет действий и выделений</span></header><div class="swatches" id="accentPick"></div></div></div></section>
+          <section class="settings-section"><div class="section-copy"><span class="cap">Оформление</span><h2>Рабочая среда</h2><p>Светлая, тёмная или системная схема. Единый акцент сохраняет визуальную иерархию.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Настройка действует только в этом браузере</span></header><div class="themes" id="themePick"></div></div><div id="accentPick" hidden></div></div></section>
           <section class="settings-section"><div class="section-copy"><span class="cap">Инбокс</span><h2>Источники и папки</h2><p>Несколько ботов, Business-аккаунтов и панелей можно объединять в пересекающиеся папки.</p></div><div class="source-folders" id="sourceFolders"><span class="hint">Загружаю источники…</span></div></section>
           <section class="settings-section"><div class="section-copy"><span class="cap">Поведение AI</span><h2>Помощник оператора</h2><p>Как AI предлагает и отправляет ответы.</p></div><div><div class="settings-content" id="aiSettings"></div><p class="hint settings-hint">Ключи, адреса и токены живут в <span class="mono">.env</span> на сервере — из панели они не меняются.</p></div></section>
           <section class="settings-section"><div class="section-copy"><span class="cap">Версия</span><h2>Обновление</h2><p>Проверка релизов и безопасная заявка на установку.</p></div><div class="update-panel" id="updatePanel"><span class="hint">Проверяю обновления…</span></div></section>
@@ -1040,14 +1022,11 @@ function applyRoleUi() {
 
 /* ═══ оформление ═══ */
 const THEMES = [
-  ['graphite','Аврора','Мягкая тёмная'],
-  ['obsidian','Полночь','Контрастная тёмная'],
-  ['abyss','Фьорд','Холодная тёмная'],
-  ['daylight','Облако','Чистая светлая'],
-  ['sand','Рассвет','Тёплая светлая'],
+  ['system','Автоматически','Как в системе'],
+  ['light','Светлая','Для яркого окружения'],
+  ['dark','Тёмная','Для слабого освещения'],
 ];
-const ACCENTS = [['lavender','#9298FF','Лаванда'],['azure','#5BADFF','Небо'],['teal','#3BC5C7','Лагуна'],['mint','#55CD96','Мята'],
-  ['amber','#F3BC52','Солнце'],['coral','#FF7B91','Коралл'],['orchid','#CC8AF6','Орхидея'],['steel','#8B9CB4','Туман']];
+const ACCENTS = [['system-blue','#0A84FF','Системный синий']];
 
 $('themePick').innerHTML = THEMES.map(([id, name, description]) =>
   `<button type="button" class="theme-card" data-theme="${id}" title="${name}" aria-label="Тема: ${name} — ${description}">
@@ -1059,9 +1038,9 @@ $('accentPick').innerHTML = ACCENTS.map(([n,hex,label]) =>
 
 function applyLook() {
   const savedTheme = localStorage.getItem('theme');
-  const savedAccent = localStorage.getItem('accent');
-  const theme = THEMES.some(([id]) => id === savedTheme) ? savedTheme : 'graphite';
-  const accent = ACCENTS.some(([id]) => id === savedAccent) ? savedAccent : 'lavender';
+  const theme = THEMES.some(([id]) => id === savedTheme) ? savedTheme : 'system';
+  const accent = 'system-blue';
+  localStorage.setItem('accent', accent);
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.accent = accent;
   for (const b of $('themePick').children) b.setAttribute('aria-pressed', String(b.dataset.theme === theme));
@@ -1073,12 +1052,7 @@ $('themePick').onclick = (e) => {
   if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(change);
   else change();
 };
-$('accentPick').onclick = (e) => {
-  const b = e.target.closest('button'); if (!b) return;
-  const change = () => { localStorage.setItem('accent', b.dataset.accent); applyLook(); };
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(change);
-  else change();
-};
+$('accentPick').onclick = () => {};
 applyLook();
 
 /* ═══ вход ═══

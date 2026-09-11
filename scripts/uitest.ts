@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-const uiCss = readFileSync(new URL('../public/ui.css', import.meta.url), 'utf8');
+const uiCss = readFileSync(new URL('../public/ui-v2.css', import.meta.url), 'utf8');
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: unknown): void => {
