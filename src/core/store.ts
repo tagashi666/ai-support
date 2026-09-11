@@ -78,6 +78,9 @@ export interface Attachment {
   media_type: string | null;
   width: number | null;
   height: number | null;
+  original_name: string | null;
+  mime_type: string | null;
+  bytes: number | null;
 }
 
 export interface Message {
@@ -975,6 +978,20 @@ export class Store extends EventEmitter<StoreEvents> {
     return Number(result.lastInsertRowid);
   }
 
+  addLocalAttachment(
+    messageId: number,
+    input: { fileRef: string; localPath: string; mediaType: string; mimeType: string; originalName: string;
+      bytes: number; sha256: string; width?: number; height?: number },
+  ): number {
+    const id = this.addAttachment(messageId, input.mediaType, input.fileRef, {
+      width: input.width, height: input.height,
+    });
+    this.db.prepare(
+      `UPDATE attachment SET local_path=?, bytes=?, downloaded_at=?, original_name=?, mime_type=?, sha256=? WHERE id=?`,
+    ).run(input.localPath, input.bytes, Date.now(), input.originalName, input.mimeType, input.sha256, id);
+    return id;
+  }
+
   findMessageByExternalId(
     conversationId: number,
     externalMsgId: string,
@@ -1013,9 +1030,13 @@ export class Store extends EventEmitter<StoreEvents> {
     this.db.prepare('UPDATE attachment SET attempts = attempts + 1 WHERE id = ?').run(id);
   }
 
-  getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null; file_ref: string } | undefined {
-    return this.db.prepare('SELECT id, local_path, media_type, file_ref FROM attachment WHERE id = ?').get(id) as
-      | { id: number; local_path: string | null; media_type: string | null; file_ref: string }
+  getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null; file_ref: string;
+    original_name: string | null; mime_type: string | null; bytes: number | null } | undefined {
+    return this.db.prepare(
+      'SELECT id, local_path, media_type, file_ref, original_name, mime_type, bytes FROM attachment WHERE id = ?',
+    ).get(id) as
+      | { id: number; local_path: string | null; media_type: string | null; file_ref: string;
+          original_name: string | null; mime_type: string | null; bytes: number | null }
       | undefined;
   }
 
@@ -1023,7 +1044,7 @@ export class Store extends EventEmitter<StoreEvents> {
     if (!messageIds.length) return {};
     const rows = this.db
       .prepare(
-        `SELECT id, message_id, media_type, width, height
+        `SELECT id, message_id, media_type, width, height, original_name, mime_type, bytes
            FROM attachment WHERE message_id IN (${messageIds.map(() => '?').join(',')})`,
       )
       .all(...messageIds) as (Attachment & { message_id: number })[];
@@ -1031,6 +1052,7 @@ export class Store extends EventEmitter<StoreEvents> {
     for (const row of rows) {
       (grouped[row.message_id] ??= []).push({
         id: row.id, media_type: row.media_type, width: row.width, height: row.height,
+        original_name: row.original_name, mime_type: row.mime_type, bytes: row.bytes,
       });
     }
     return grouped;

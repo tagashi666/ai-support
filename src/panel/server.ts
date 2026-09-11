@@ -34,7 +34,7 @@ import type { BedolagaClient, BedolagaTicketStatus } from '../channels/bedolaga.
 import { UpdateManager } from '../core/update.js';
 import { SourceManager } from '../core/sources.js';
 import { Operations, type Actor, type Permission } from '../core/operations.js';
-import { openMediaFile } from '../core/media.js';
+import { inspectUpload, openMediaFile, readMediaFile, removeMediaFile, saveUploadedMedia } from '../core/media.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Панель лежит в корне проекта, а этот файл — в src/panel и dist/panel.
@@ -111,9 +111,13 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   // бы оператора вместе с атакующим. Доверять произвольным адресам нельзя —
   // подделать заголовок может кто угодно.
   const app = Fastify({ logger: false, bodyLimit: 1_048_576, trustProxy: 'loopback' });
+  // JSON остаётся под маленьким глобальным лимитом. Только этот media type
+  // передаётся обработчику потоком и имеет собственный жёсткий предел 45 МБ.
+  app.addContentTypeParser('application/vnd.ai-support.attachment', (_request, payload, done) => done(null, payload));
   const updates = new UpdateManager();
   const sources = new SourceManager();
   const operations = new Operations(store);
+  const uploadBatches = new Map<string, { seen: Set<number>; at: number }>();
   const bedolagaExtensionLocks = new Set<string>();
   const bedolagaExtensionOperations = new Map<string, {
     actorKey: string;
@@ -138,7 +142,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
    */
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('content-security-policy',
-      "default-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; " +
+      "default-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
       `script-src 'self' ${PANEL_SCRIPT_HASH}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`);
     reply.header('x-content-type-options', 'nosniff');
     reply.header('x-frame-options', 'DENY');
@@ -180,7 +184,8 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (!actor) return;
     const path = request.url.split('?')[0] ?? request.url;
     const parts = path.split('/').filter(Boolean);
-    operations.audit(actor, `${request.method} ${path}`, parts[1] ?? 'api', parts[2], request.body, request.ip);
+    operations.audit(actor, `${request.method} ${path}`, parts[1] ?? 'api', parts[2],
+      path.endsWith('/attachments') ? undefined : request.body, request.ip);
   });
 
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
@@ -546,6 +551,86 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         if (err instanceof NoSenderError) return reply.code(501).send({ error: err.message });
         log.error('Отправка не удалась', err);
         return reply.code(502).send({ error: `Отправить не удалось: ${(err as Error).message}` });
+      }
+    },
+  );
+
+  app.post<{ Params: { id: string }; Body: AsyncIterable<Uint8Array> }>(
+    '/api/conversations/:id/attachments',
+    async (request, reply) => {
+      const conversationId = Number(request.params.id);
+      const conversation = store.getConversation(conversationId);
+      if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
+      if (!outbox.supportsAttachments(conversation.channel)) {
+        return reply.code(501).send({ error: 'Этот канал принимает только текстовые ответы' });
+      }
+      const actor = actorOf(request);
+      const claimed = operations.claim(conversationId, actor);
+      if (!claimed.ok) return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}` });
+
+      const decodeHeader = (name: string, fallback = ''): string => {
+        const raw = request.headers[name];
+        if (typeof raw !== 'string') return fallback;
+        try { return decodeURIComponent(raw); } catch { return fallback; }
+      };
+      const original = decodeHeader('x-file-name', 'attachment.bin')
+        .replace(/[\u0000-\u001f\u007f/\\]/g, '_').trim().slice(0, 160) || 'attachment.bin';
+      const declaredMime = decodeHeader('x-file-type', 'application/octet-stream').slice(0, 120);
+      const caption = decodeHeader('x-caption').trim().slice(0, 1024) || undefined;
+      const batchId = String(request.headers['x-upload-batch'] ?? '').slice(0, 80);
+      const batchSize = Number(request.headers['x-upload-batch-size']);
+      const batchIndex = Number(request.headers['x-upload-index']);
+      if (!/^[A-Za-z0-9_-]{8,80}$/.test(batchId) || !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 10
+          || !Number.isInteger(batchIndex) || batchIndex < 0 || batchIndex >= batchSize) {
+        return reply.code(400).send({ error: 'В одной отправке разрешено от 1 до 10 файлов' });
+      }
+      const batchKey = `${actor.key}:${batchId}`;
+      const now = Date.now();
+      if (uploadBatches.size > 500) {
+        for (const [key, value] of uploadBatches) if (now - value.at > 30 * 60_000) uploadBatches.delete(key);
+      }
+      const batch = uploadBatches.get(batchKey) ?? { seen: new Set<number>(), at: now };
+      if (batch.seen.has(batchIndex)) return reply.code(409).send({ error: 'Этот файл уже был принят' });
+      batch.seen.add(batchIndex); batch.at = now; uploadBatches.set(batchKey, batch);
+
+      const declaredBytes = Number(request.headers['content-length']);
+      if (Number.isFinite(declaredBytes) && declaredBytes > config.mediaMaxFileBytes) {
+        return reply.code(413).send({ error: 'Максимальный размер файла — 45 МБ' });
+      }
+      if (store.mediaBytes() >= config.mediaMaxTotalBytes) {
+        return reply.code(507).send({ error: 'Хранилище вложений заполнено' });
+      }
+
+      let saved: Awaited<ReturnType<typeof saveUploadedMedia>> | undefined;
+      try {
+        saved = await saveUploadedMedia(request.body, config.mediaMaxFileBytes);
+        if (store.mediaBytes() + saved.bytes > config.mediaMaxTotalBytes) {
+          await removeMediaFile(saved.fileRef);
+          return reply.code(507).send({ error: 'Хранилище вложений заполнено' });
+        }
+        const inspected = inspectUpload(saved.prefix, declaredMime, original);
+        if (inspected.dangerous && request.headers['x-dangerous-confirmed'] !== 'yes') {
+          await removeMediaFile(saved.fileRef);
+          return reply.code(409).send({ error: 'Для потенциально исполняемого файла требуется явное подтверждение' });
+        }
+        const bytes = await readMediaFile(saved.fileRef);
+        const sent = await outbox.sendAttachment(
+          conversationId,
+          { bytes, fileName: original, mimeType: inspected.mimeType, mediaType: inspected.mediaType,
+            caption, replyToExternalId: decodeHeader('x-reply-to') || undefined },
+          saved,
+        );
+        store.logEvent('attachment_sent', conversationId, {
+          actor: actor.name, name: original, bytes: saved.bytes, mime: inspected.mimeType,
+          sha256: saved.sha256, dangerous: inspected.dangerous,
+        });
+        return { ok: true, message: sent.message };
+      } catch (err) {
+        if (saved) await removeMediaFile(saved.fileRef);
+        if (err instanceof WindowClosedError) return reply.code(409).send({ error: err.message });
+        if ((err as Error).message.includes('больше')) return reply.code(413).send({ error: (err as Error).message });
+        log.error('Отправка вложения не удалась', err);
+        return reply.code(502).send({ error: `Файл не отправлен: ${(err as Error).message}` });
       }
     },
   );
@@ -965,9 +1050,23 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (!attachment?.local_path) return reply.code(404).send({ error: 'Вложение ещё не скачано' });
     try {
       const handle = await openMediaFile(attachment.file_ref);
+      const mime = attachment.mime_type ?? MEDIA_MIME[attachment.media_type ?? ''] ?? 'application/octet-stream';
+      const inline = (
+        ['photo', 'sticker'].includes(attachment.media_type ?? '')
+          && /^image\/(?:jpeg|png|webp|gif)$/.test(mime)
+      ) || (
+        ['video', 'video_note'].includes(attachment.media_type ?? '') && /^video\/(?:mp4|webm)$/.test(mime)
+      ) || (
+        attachment.media_type === 'animation' && /^(?:image\/gif|video\/mp4)$/.test(mime)
+      ) || (
+        ['voice', 'audio'].includes(attachment.media_type ?? '') && /^audio\//.test(mime)
+      );
+      const safeName = encodeURIComponent(attachment.original_name ?? 'attachment.bin').replace(/'/g, '%27');
       return reply
         .header('cache-control', 'private, no-store')
-        .type(MEDIA_MIME[attachment.media_type ?? ''] ?? 'application/octet-stream')
+        .header('x-content-type-options', 'nosniff')
+        .header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${safeName}`)
+        .type(inline ? mime : 'application/octet-stream')
         .send(handle.createReadStream({ autoClose: true }));
     } catch {
       // Путь и file_ref могут содержать чувствительные данные, поэтому в

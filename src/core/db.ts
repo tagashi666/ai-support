@@ -505,8 +505,17 @@ const MIGRATIONS: string[] = [
            (SELECT NULLIF(p.display_name, '') FROM customer_profile p
              WHERE p.id = conversation.customer_profile_id)
          )
-   WHERE channel IN ('tg_dm', 'tg_bot')
+  WHERE channel IN ('tg_dm', 'tg_bot')
      AND customer_profile_id IS NOT NULL;
+  `,
+
+  // 017 — исходящие вложения 2.2. Оригинальное имя и фактический MIME нужны
+  // для безопасного скачивания и корректного предпросмотра; SHA-256 позволяет
+  // идентифицировать сохранённый оригинал без доверия имени файла.
+  `
+  ALTER TABLE attachment ADD COLUMN original_name TEXT;
+  ALTER TABLE attachment ADD COLUMN mime_type     TEXT;
+  ALTER TABLE attachment ADD COLUMN sha256        TEXT;
   `,
 ];
 

@@ -203,6 +203,18 @@ check('можно ответить на конкретное сообщение'
 // 24. Вложение в переписке — превью, а не полотно. Вертикальный скриншот
 // с телефона без ограничения занимает весь экран.
 check('вложение ограничено по высоте', /\.bubble \.shot\s*\{[^}]*max-height:\s*\d+px/.test(html));
+check('композер принимает выбор, drop и вставку файлов', html.includes('id="filePicker"')
+  && html.includes("'dragenter','dragover'") && html.includes("addEventListener('paste'"));
+check('клиентский предел отправки — 10 файлов по 45 МБ', html.includes('pendingFiles.length + incoming.length > 10')
+  && html.includes('45 * 1024 * 1024'));
+check('загрузка показывает фактический прогресс', html.includes('xhr.upload.onprogress') && uiCss.includes('.upload-meter'));
+check('редактор создаёт PNG-копию и сохраняет оригинал', html.includes("`${base}-edited.png`")
+  && html.includes('originalFile:file') && html.includes("'image/png'"));
+check('редактор содержит полный набор инструментов', ['draw','line','arrow','rect','ellipse','text','pixel','crop']
+  .every((tool) => html.includes(`data-tool="${tool}"`)) && html.includes('data-action="resize"'));
+check('ранее отправленное изображение можно править копией', html.includes('openImageEditorFromUrl(mediaUrl'));
+check('есть горячие клавиши загрузки и снимка', html.includes("event.key.toLowerCase()==='u'")
+  && html.includes("event.key.toLowerCase()==='s'") && html.includes('getDisplayMedia'));
 check('полный размер открывается по клику', /function openImage\(/.test(html) && /className = 'lightbox'/.test(html));
 check('просмотр картинки всегда можно закрыть', /lightbox-close/.test(uiCss)
   && /closeButton\.onclick\s*=/.test(html)

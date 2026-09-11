@@ -40,6 +40,85 @@ export async function saveMediaFile(fileRef: string, bytes: Buffer): Promise<str
   }
 }
 
+export interface SavedUpload {
+  fileRef: string;
+  localPath: string;
+  bytes: number;
+  sha256: string;
+  prefix: Buffer;
+}
+
+/**
+ * Потоковая загрузка не держит 45 МБ в памяти. Лимит проверяется и по
+ * Content-Length в HTTP-слое, и здесь по реально прочитанным байтам.
+ */
+export async function saveUploadedMedia(source: AsyncIterable<Uint8Array>, maxBytes: number): Promise<SavedUpload> {
+  await mkdir(config.mediaDir, { recursive: true });
+  const fileRef = `local:${randomBytes(24).toString('hex')}`;
+  const target = mediaPath(fileRef);
+  const temporary = join(config.mediaDir, `.upload-${process.pid}-${randomBytes(12).toString('hex')}.tmp`);
+  const handle = await open(temporary, 'wx', 0o600);
+  const hash = createHash('sha256');
+  const prefix: Buffer[] = [];
+  let prefixBytes = 0;
+  let bytes = 0;
+  try {
+    for await (const raw of source) {
+      const chunk = Buffer.from(raw);
+      bytes += chunk.byteLength;
+      if (bytes > maxBytes) throw new Error(`Файл больше ${Math.floor(maxBytes / 1024 / 1024)} МБ`);
+      if (prefixBytes < 512) {
+        const part = chunk.subarray(0, 512 - prefixBytes);
+        prefix.push(part); prefixBytes += part.byteLength;
+      }
+      hash.update(chunk);
+      await handle.write(chunk);
+    }
+    if (!bytes) throw new Error('Пустой файл');
+    await handle.sync();
+    await handle.close();
+    await rename(temporary, target);
+    return { fileRef, localPath: target, bytes, sha256: hash.digest('hex'), prefix: Buffer.concat(prefix) };
+  } catch (err) {
+    await handle.close().catch(() => undefined);
+    await unlink(temporary).catch(() => undefined);
+    throw err;
+  }
+}
+
+export async function removeMediaFile(fileRef: string): Promise<void> {
+  await unlink(mediaPath(fileRef)).catch(() => undefined);
+}
+
+export interface InspectedUpload { mimeType: string; mediaType: 'photo' | 'animation' | 'video' | 'document'; dangerous: boolean }
+
+/** MIME из браузера — только подсказка. Для активного inline-контента
+ * доверяем сигнатуре; всё неизвестное скачивается как octet-stream. */
+export function inspectUpload(prefix: Buffer, declaredMime: string, name: string): InspectedUpload {
+  let mimeType = 'application/octet-stream';
+  let mediaType: InspectedUpload['mediaType'] = 'document';
+  if (prefix.length >= 3 && prefix[0] === 0xff && prefix[1] === 0xd8 && prefix[2] === 0xff) {
+    mimeType = 'image/jpeg'; mediaType = 'photo';
+  } else if (prefix.length >= 8 && prefix.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) {
+    mimeType = 'image/png'; mediaType = 'photo';
+  } else if (prefix.length >= 12 && prefix.subarray(0, 4).toString('ascii') === 'RIFF'
+      && prefix.subarray(8, 12).toString('ascii') === 'WEBP') {
+    mimeType = 'image/webp'; mediaType = 'photo';
+  } else if (prefix.length >= 6 && ['GIF87a','GIF89a'].includes(prefix.subarray(0, 6).toString('ascii'))) {
+    mimeType = 'image/gif'; mediaType = 'animation';
+  } else if (prefix.length >= 12 && prefix.subarray(4, 8).toString('ascii') === 'ftyp') {
+    mimeType = 'video/mp4'; mediaType = 'video';
+  } else if (prefix.length >= 4 && prefix.subarray(0, 4).equals(Buffer.from([0x1a,0x45,0xdf,0xa3]))) {
+    mimeType = declaredMime.toLowerCase() === 'video/webm' ? 'video/webm' : 'application/webm';
+    mediaType = mimeType === 'video/webm' ? 'video' : 'document';
+  } else if (/^[\w.+-]+\/[\w.+-]+$/.test(declaredMime) && !/^(text\/html|image\/svg\+xml)$/i.test(declaredMime)) {
+    mimeType = declaredMime.toLowerCase();
+  }
+  const dangerous = /\.(?:exe|msi|com|scr|bat|cmd|ps1|vbs|js|jar|apk|appimage)$/i.test(name)
+    || (prefix.length >= 2 && prefix[0] === 0x4d && prefix[1] === 0x5a);
+  return { mimeType, mediaType, dangerous };
+}
+
 /**
  * Открывает только обычный файл с ожидаемым хеш-именем. O_NOFOLLOW закрывает
  * финальную гонку с симлинком между проверкой и open(). Размер сверяется уже

@@ -152,7 +152,7 @@ export const config = {
   dbPath: env('DB_PATH', './data/ai-support.db'),
   mediaDir: env('MEDIA_DIR', './data/media'),
   // Ограничения защищают память и диск от бесконечного потока вложений.
-  mediaMaxFileBytes: megabytes('MEDIA_MAX_FILE_MB', 25),
+  mediaMaxFileBytes: megabytes('MEDIA_MAX_FILE_MB', 45),
   mediaMaxTotalBytes: megabytes('MEDIA_MAX_TOTAL_MB', 1024),
   kbDir: env('KB_DIR', './kb'),
   // Черновики намеренно лежат ВНЕ kb: опубликованные статьи и результаты

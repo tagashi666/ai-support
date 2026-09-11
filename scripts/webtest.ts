@@ -9,6 +9,7 @@ process.env.PANEL_PORT = '8099';
 process.env.LOG_LEVEL = 'error';
 const dir = mkdtempSync(join(tmpdir(), 'web-'));
 process.env.DB_PATH = join(dir, 'w.db');
+process.env.MEDIA_DIR = join(dir, 'media');
 const sourceRequestPath = join(dir, 'source-request.json');
 process.env.SOURCE_REQUEST_FILE = sourceRequestPath;
 process.env.SOURCE_STATUS_FILE = join(dir, 'source-status.json');
@@ -109,7 +110,13 @@ const bedolaga = {
     return { ...bedolagaUser.subscription, id: subscriptionId, user_id: 42, end_date: '2026-10-08T10:00:00Z' };
   },
 };
-outbox.register('tg_dm', { send: async () => ({ externalMsgId: '1' }) });
+const attachmentCalls: any[] = [];
+outbox.register('tg_dm', {
+  send: async () => ({ externalMsgId: '1' }),
+  sendAttachment: async (_conversation: any, payload: any) => {
+    attachmentCalls.push(payload); return { externalMsgId: `file-${attachmentCalls.length}` };
+  },
+});
 const firstInbound = store.recordInbound({ channel:'tg_dm', externalId:'555', tgUserId:555, businessConnectionId:'b1',
   username:'client', displayName:'Клиент', text:'привет, не работает', externalMsgId:'1', sentAt: Date.now() });
 store.setConversationAvatar(firstInbound!.conversation.id, 'avatar-file');
@@ -194,6 +201,38 @@ const presence = await fetch(`${B}/api/conversations/${id}/presence`, {
 ok('простой просмотр диалога не глушит AI', presence.status === 200 && !store.operatorIsActive(id));
 const engaged = await fetch(`${B}/api/conversations/${id}/engage`, { method: 'POST', headers: h });
 ok('явно взятый оператором диалог ставит AI на паузу', engaged.status === 200 && store.operatorIsActive(id));
+
+const png = Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]), Buffer.from('test-image')]);
+const uploadHeaders = {
+  ...h, 'content-type':'application/vnd.ai-support.attachment', 'x-file-name':encodeURIComponent('screen.png'),
+  'x-file-type':encodeURIComponent('image/png'), 'x-upload-batch':'batch_test_01',
+  'x-upload-batch-size':'1', 'x-upload-index':'0', 'x-caption':encodeURIComponent('Смотрите'),
+};
+const upload = await fetch(`${B}/api/conversations/${id}/attachments`, { method:'POST', headers:uploadHeaders, body:png });
+const uploadBody = await upload.json() as any;
+ok('PNG загружается и отправляется именно как фото', upload.status === 200
+  && attachmentCalls[0]?.mediaType === 'photo' && attachmentCalls[0]?.caption === 'Смотрите', uploadBody);
+const withUpload = await (await fetch(`${B}/api/conversations/${id}`, { headers:h })).json() as any;
+const uploadedAttachment = Object.values(withUpload.attachments).flat().find((item:any) => item.original_name === 'screen.png') as any;
+ok('исходный файл и метаданные сохранены в истории', uploadedAttachment?.mime_type === 'image/png'
+  && uploadedAttachment?.bytes === png.length, uploadedAttachment);
+const downloadUpload = await fetch(`${B}/api/attachments/${uploadedAttachment.id}`, { headers:h });
+ok('проверенное изображение отдаётся inline с nosniff', downloadUpload.status === 200
+  && downloadUpload.headers.get('content-type')?.startsWith('image/png') === true
+  && downloadUpload.headers.get('x-content-type-options') === 'nosniff');
+ok('сервер запрещает пакет больше 10 файлов', (await fetch(`${B}/api/conversations/${id}/attachments`, {
+  method:'POST', headers:{...uploadHeaders,'x-upload-batch':'batch_too_many','x-upload-batch-size':'11'}, body:png,
+})).status === 400);
+const exeHeaders = {...uploadHeaders,'x-file-name':encodeURIComponent('tool.exe'),'x-file-type':encodeURIComponent('application/x-msdownload'),
+  'x-upload-batch':'batch_exe_01'};
+ok('исполняемый файл требует отдельного подтверждения', (await fetch(`${B}/api/conversations/${id}/attachments`, {
+  method:'POST', headers:exeHeaders, body:Buffer.from('MZdanger'),
+})).status === 409);
+const confirmedExe = await fetch(`${B}/api/conversations/${id}/attachments`, {
+  method:'POST', headers:{...exeHeaders,'x-upload-batch':'batch_exe_02','x-dangerous-confirmed':'yes'}, body:Buffer.from('MZdanger'),
+});
+ok('после подтверждения произвольный файл отправляется документом', confirmedExe.status === 200
+  && attachmentCalls.at(-1)?.mediaType === 'document');
 
 const WS = (await import('ws')).default;
 const ticket = await (await fetch(`${B}/api/ticket`,{headers:h})).json() as { ticket:string };

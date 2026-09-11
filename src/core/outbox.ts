@@ -12,10 +12,21 @@ export interface SendPayload {
 
 export interface SendResult {
   externalMsgId?: string;
+  mediaType?: AttachmentPayload['mediaType'];
+}
+
+export interface AttachmentPayload {
+  bytes: Buffer;
+  fileName: string;
+  mimeType: string;
+  mediaType: 'photo' | 'animation' | 'video' | 'document';
+  caption?: string;
+  replyToExternalId?: string;
 }
 
 export interface ChannelSender {
   send(conversation: Conversation, payload: SendPayload): Promise<SendResult>;
+  sendAttachment?(conversation: Conversation, payload: AttachmentPayload): Promise<SendResult>;
 }
 
 export class WindowClosedError extends Error {
@@ -62,6 +73,10 @@ export class Outbox {
     return this.senders.has(channel);
   }
 
+  supportsAttachments(channel: Channel): boolean {
+    return typeof this.senders.get(channel)?.sendAttachment === 'function';
+  }
+
   async send(conversationId: number, payload: SendPayload, author: Author = 'agent', suggestionId?: number) {
     const conversation = this.store.getConversation(conversationId);
     if (!conversation) throw new Error(`Диалог ${conversationId} не найден`);
@@ -106,6 +121,31 @@ export class Outbox {
       replyExcerpt: payload.replyExcerpt,
     });
     if (!recorded) throw new Error('Сообщение отправлено, но не записано в историю');
+    return recorded;
+  }
+
+
+  async sendAttachment(
+    conversationId: number,
+    payload: AttachmentPayload,
+    stored: { fileRef: string; localPath: string; bytes: number; sha256: string; width?: number; height?: number },
+  ) {
+    const conversation = this.store.getConversation(conversationId);
+    if (!conversation) throw new Error(`Диалог ${conversationId} не найден`);
+    if (!replyWindow(conversation).open) throw new WindowClosedError();
+    const sender = this.senders.get(conversation.channel);
+    if (!sender) throw new NoSenderError(conversation.channel);
+    if (!sender.sendAttachment) throw new Error(`Канал ${conversation.channel} не поддерживает отправку файлов`);
+    this.store.markOperatorActive(conversationId);
+    const result = await sender.sendAttachment(conversation, payload);
+    const recorded = this.store.recordOutbound({
+      conversationId, author: 'agent', text: payload.caption, mediaType: result.mediaType ?? payload.mediaType,
+      externalMsgId: result.externalMsgId, replyToExternalId: payload.replyToExternalId,
+    });
+    if (!recorded) throw new Error('Файл отправлен, но не записан в историю');
+    this.store.addLocalAttachment(recorded.message.id, {
+      ...stored, mediaType: result.mediaType ?? payload.mediaType, mimeType: payload.mimeType, originalName: payload.fileName,
+    });
     return recorded;
   }
 }

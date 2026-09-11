@@ -1,8 +1,8 @@
-import { Bot, type Context } from 'grammy';
+import { Bot, InputFile, type Context } from 'grammy';
 import type { Message as TgMessage, UserFromGetMe } from 'grammy/types';
 import { log } from '../config.js';
 import type { Conversation, Store } from '../core/store.js';
-import type { ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
+import type { AttachmentPayload, ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
 
 /** Достаёт из сообщения тип вложения и file_id. Скачивание — этап P2. */
 function extractMedia(msg: TgMessage): { mediaType?: string; mediaFileId?: string; mediaWidth?: number; mediaHeight?: number } {
@@ -340,6 +340,12 @@ export class TelegramDmSender implements ChannelSender {
     });
     return { externalMsgId: String(sent.message_id) };
   }
+
+  async sendAttachment(conversation: Conversation, payload: AttachmentPayload): Promise<SendResult> {
+    if (!conversation.business_connection_id) throw new Error('Не сохранён business_connection_id');
+    const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;
+    return sendTelegramAttachment(bot, conversation, payload, conversation.business_connection_id);
+  }
 }
 
 export class TelegramBotSender implements ChannelSender {
@@ -354,6 +360,41 @@ export class TelegramBotSender implements ChannelSender {
     });
     return { externalMsgId: String(sent.message_id) };
   }
+
+  async sendAttachment(conversation: Conversation, payload: AttachmentPayload): Promise<SendResult> {
+    const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;
+    return sendTelegramAttachment(bot, conversation, payload);
+  }
+}
+
+async function sendTelegramAttachment(
+  bot: Bot,
+  conversation: Conversation,
+  payload: AttachmentPayload,
+  businessConnectionId?: string,
+): Promise<SendResult> {
+  const chatId = Number(conversation.remote_external_id ?? conversation.external_id);
+  const file = new InputFile(payload.bytes, payload.fileName);
+  const options = {
+    ...(payload.caption ? { caption: payload.caption.slice(0, 1024) } : {}),
+    ...(businessConnectionId ? { business_connection_id: businessConnectionId } : {}),
+    ...(payload.replyToExternalId
+      ? { reply_parameters: { message_id: Number(payload.replyToExternalId), allow_sending_without_reply: true } }
+      : {}),
+  };
+  // Bot API принимает photo только до 10 МБ; общий лимит файлов — 50 МБ.
+  // Наш предел 45 МБ оставляет запас multipart, а крупная картинка всё равно
+  // доставляется без потери качества как документ.
+  const sentAs = payload.mediaType === 'photo' && payload.bytes.byteLength > 10 * 1024 * 1024
+    ? 'document' : payload.mediaType;
+  const sent = sentAs === 'photo'
+    ? await bot.api.sendPhoto(chatId, file, options)
+    : sentAs === 'animation'
+      ? await bot.api.sendAnimation(chatId, file, options)
+      : sentAs === 'video'
+        ? await bot.api.sendVideo(chatId, file, options)
+        : await bot.api.sendDocument(chatId, file, options);
+  return { externalMsgId: String(sent.message_id), mediaType: sentAs };
 }
 
 /** Помечает входящие прочитанными от имени аккаунта (право can_read_messages). */
