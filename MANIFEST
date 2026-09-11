@@ -21,6 +21,7 @@ scripts/sectest.ts
 scripts/smoke.ts
 scripts/source-updater.sh
 scripts/uitest.ts
+scripts/updatetest.ts
 scripts/webtest.ts
 src/ai/cluster.ts
 src/ai/gate.ts

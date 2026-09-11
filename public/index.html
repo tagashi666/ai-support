@@ -3135,9 +3135,24 @@ async function loadUpdateState(force = false) {
     return;
   }
   if (panel && !panel.querySelector('.ops-head, .ops-card')) panel.innerHTML = '<span class="hint">Проверяю обновления…</span>';
-  const state = await json(`/api/update${force === true ? '?force=1' : ''}`);
-  if (!state) { panel.innerHTML = '<span class="hint">Центр обновлений сейчас недоступен.</span>'; return; }
-  paintUpdate(state);
+  const retry = $('updateRetry');
+  if (retry) retry.disabled = true;
+  try {
+    const response = await api(`/api/update${force === true ? '?force=1' : ''}`);
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error ?? `HTTP ${response.status}`);
+    }
+    const state = await response.json();
+    paintUpdate(state);
+    if (force === true) toast(state.error ? `Проверка завершилась с ошибкой: ${state.error}` : 'Проверка обновлений завершена');
+  } catch (err) {
+    panel.innerHTML = `<div><b>Центр обновлений недоступен</b><span class="hint">${esc(err instanceof Error ? err.message : String(err))}</span></div><button class="btn" id="updateRetry">Повторить проверку</button>`;
+    $('updateRetry').onclick = () => loadUpdateState(true);
+  } finally {
+    const currentRetry = $('updateRetry');
+    if (currentRetry) currentRetry.disabled = false;
+  }
 }
 
 const SOURCE_APPLY_STATUS = {

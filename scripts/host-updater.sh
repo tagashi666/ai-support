@@ -34,7 +34,7 @@ require_command() {
   }
 }
 
-for command in curl docker flock install nginx node python3 readlink sha256sum tar; do
+for command in curl docker flock install node python3 readlink sha256sum tar; do
   require_command "$command"
 done
 docker compose version >/dev/null 2>&1 || {
@@ -173,7 +173,9 @@ wait_for_health() {
       })
       .catch((error) => { console.error(error.message); process.exit(1); });
   '
-  nginx -t
+  if command -v nginx >/dev/null 2>&1; then
+    nginx -t
+  fi
 }
 
 on_error() {

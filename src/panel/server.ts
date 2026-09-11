@@ -1258,13 +1258,28 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   app.post<{ Body: { action?: string; force?: boolean } }>('/api/update/request', async (request, reply) => {
     const actor = actorOf(request);
-    const action = request.body?.action === 'rollback' ? 'rollback' : 'update';
+    const requestedAction = request.body?.action;
+    if (requestedAction !== 'update' && requestedAction !== 'rollback') {
+      return reply.code(400).send({ error: 'Допустимые действия: update или rollback' });
+    }
+    const action = requestedAction;
     try {
       const update = await updates.request(action, { force: request.body?.force === true });
-      operations.recordUpdate(action, action === 'update' ? update.latest : update.current, 'queued', actor, {
-        safety: update.compatibility,
-      });
-      return { ok: true, update: { ...update, history: operations.updateHistory() } };
+      // Запрос уже атомарно передан host-updater. Локальный журнал не должен
+      // превращать успешную постановку в ошибку и провоцировать повторный запуск.
+      try {
+        operations.recordUpdate(action, action === 'update' ? update.latest : update.current, 'queued', actor, {
+          safety: update.compatibility,
+        });
+      } catch (err) {
+        log.warn(`Не удалось записать локальный аудит обновления: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      let history: ReturnType<typeof operations.updateHistory> = [];
+      try { history = operations.updateHistory(); }
+      catch (err) {
+        log.warn(`Не удалось прочитать локальную историю обновлений: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return { ok: true, update: { ...update, history } };
     } catch (err) {
       return reply.code(409).send({ error: err instanceof Error ? err.message : String(err) });
     }

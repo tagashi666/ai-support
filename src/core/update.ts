@@ -13,6 +13,8 @@ interface GithubRelease {
   assets?: Array<{ name?: string; browser_download_url?: string; size?: number }>;
 }
 
+const REQUIRED_RELEASE_ASSETS = ['ai-support.tar.gz', 'ai-support.tar.gz.sha256'] as const;
+
 export interface UpdateProgress {
   action: 'update' | 'rollback';
   status: 'queued' | 'backing_up' | 'installing' | 'checking' | 'completed' | 'rolled_back' | 'failed';
@@ -93,8 +95,18 @@ export function isSameVersion(candidate: string, current: string): boolean {
   return Boolean(a && b && a.every((part, index) => part === b[index]));
 }
 
+function compareVersions(left: string, right: string): number {
+  if (isSameVersion(left, right)) return 0;
+  return isNewer(left, right) ? 1 : -1;
+}
+
+function releaseAssetsReady(release: GithubRelease): boolean {
+  const names = new Set((release.assets ?? []).map((asset) => asset.name));
+  return REQUIRED_RELEASE_ASSETS.every((name) => names.has(name));
+}
+
 export class UpdateManager {
-  private cached?: { at: number; release: GithubRelease | null; error?: string };
+  private cached?: { at: number; release: GithubRelease | null; usable: boolean; error?: string };
 
   private async requestQueued(): Promise<boolean> {
     try {
@@ -152,13 +164,32 @@ export class UpdateManager {
           signal: AbortSignal.timeout(8_000),
         });
         if (!response.ok) throw new Error(`GitHub вернул HTTP ${response.status}`);
-        const releases = await response.json() as GithubRelease[];
-        const release = releases.find((item) => !item.draft && item.tag_name && TAG_RE.test(item.tag_name)
-          && (config.update.channel === 'prerelease' || !item.prerelease)) ?? null;
-        this.cached = { at: Date.now(), release };
+        const payload = await response.json();
+        if (!Array.isArray(payload)) throw new Error('GitHub вернул некорректный список релизов');
+        const releases = (payload as GithubRelease[])
+          .filter((item) => !item.draft && item.tag_name && TAG_RE.test(item.tag_name)
+            && (config.update.channel === 'prerelease' || !item.prerelease))
+          .sort((left, right) => compareVersions(right.tag_name!, left.tag_name!));
+        const release = releases[0] ?? null;
+        const usable = Boolean(release && releaseAssetsReady(release));
+        this.cached = {
+          at: Date.now(),
+          release,
+          usable,
+          ...(release && !usable
+            ? { error: `В релизе ${release.tag_name} нет обязательных файлов установки` }
+            : {}),
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        this.cached = { at: Date.now(), release: null, error: message };
+        // Последний уже проверенный релиз безопасно сохраняем: краткий сбой
+        // GitHub не должен убирать кнопку, которая только что была доступна.
+        this.cached = {
+          at: Date.now(),
+          release: this.cached?.release ?? null,
+          usable: this.cached?.usable ?? false,
+          error: message,
+        };
         log.warn(`Проверка обновлений не удалась: ${message}`);
       }
     }
@@ -170,10 +201,10 @@ export class UpdateManager {
     return {
       enabled: true,
       current: version,
-      available: Boolean(tag && isNewer(tag, version)),
+      available: Boolean(this.cached.usable && tag && isNewer(tag, version)),
       // Переустанавливать можно только тот же самый тег. Иначе локальная
       // сборка, которая новее GitHub Release, могла «переустановиться» назад.
-      reinstallable: Boolean(tag && isSameVersion(tag, version)),
+      reinstallable: Boolean(this.cached.usable && tag && isSameVersion(tag, version)),
       // Host-updater первым делом забирает request-файл в root-only каталог.
       // Поэтому одного наличия файла недостаточно: пока status активен, кнопку
       // нельзя показывать повторно и создавать второй запрос.

@@ -74,6 +74,9 @@ console.log('\n[ версии обновлений ]');
   check('удалённый Docker-образ восстанавливается без копирования секретов',
     hostUpdater.includes('docker export "$CONTAINER" | docker import')
       && !hostUpdater.includes('docker commit'));
+  check('nginx необязателен для голой панели',
+    !/for command in[^\n]*nginx/u.test(hostUpdater)
+      && /if command -v nginx[^\n]*; then[\s\S]*nginx -t/u.test(hostUpdater));
   check('панель опрашивает ход установки чаще пяти секунд',
     /updatePoll = setInterval\(loadUpdateState, 2000\)/u.test(panel));
   check('ручная проверка обновлений обходит серверный кеш',
@@ -186,6 +189,11 @@ console.log('\n[ доступ к панели ]');
   check('запрет угадывания типа', headers.get('x-content-type-options') === 'nosniff');
   check('панель нельзя встроить в рамку', csp.includes("frame-ancestors 'none'"));
   check('API нельзя кешировать', headers.get('cache-control')?.includes('no-store') === true);
+
+  const invalidUpdateAction = await fetch(`${B}/api/update/request`, {
+    method: 'POST', headers: { ...H, 'content-type': 'application/json' }, body: JSON.stringify({ action: 'erase' }),
+  });
+  check('неизвестное действие обновления отвергается', invalidUpdateAction.status === 400, invalidUpdateAction.status);
 
   const { ticket } = await (await fetch(`${B}/api/ticket`, { headers: H })).json() as { ticket: string };
   check('билет выдаётся', /^\d+\.[A-Za-z0-9_-]+$/.test(ticket), ticket);

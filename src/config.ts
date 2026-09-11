@@ -167,7 +167,7 @@ export const config = {
   update: {
     enabled: bool('UPDATE_ENABLED', true),
     repository: env('UPDATE_REPOSITORY', 'tagashi666/ai-support'),
-    channel: (optional('UPDATE_CHANNEL') === 'stable' ? 'stable' : 'prerelease') as 'stable' | 'prerelease',
+    channel: env('UPDATE_CHANNEL', 'stable') as 'stable' | 'prerelease',
     checkMinutes: num('UPDATE_CHECK_MINUTES', 15),
     // Файл находится в bind-mounted data. Веб-процесс не получает доступ
     // ни к Docker socket, ни к systemd. Применение возможно только если
@@ -302,6 +302,9 @@ if (config.panelToken.length < 16) {
 
 if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(config.update.repository)) {
   throw new Error('UPDATE_REPOSITORY должен иметь вид owner/repository');
+}
+if (config.update.channel !== 'stable' && config.update.channel !== 'prerelease') {
+  throw new Error('UPDATE_CHANNEL должен быть stable или prerelease');
 }
 
 // Заголовок Authorization — ByteString: кириллица и эмодзи в нём физически
