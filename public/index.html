@@ -1511,6 +1511,7 @@ function quoteBlock(m) {
 function bubble(m, attachments = {}) {
   const wrap = document.createElement('div');
   wrap.className = `msg ${m.direction === 'in' ? 'in' : m.direction === 'note' ? 'note' : 'out'}`;
+  wrap.dataset.messageId = String(m.id);
   if (m.external_msg_id) wrap.dataset.mid = m.external_msg_id;
 
   const quote = quoteBlock(m);
@@ -1556,9 +1557,12 @@ function bubble(m, attachments = {}) {
         actions.append(edit); box.append(actions);
       }
       el.append(box);
-    } else if (a.media_type === 'video' || a.media_type === 'video_note' || a.media_type === 'animation') {
+    } else if (a.media_type === 'video' || a.media_type === 'video_note' || a.media_type === 'animation' || a.media_type === 'video_sticker') {
       const video = document.createElement('video'); video.className = 'media-video'; video.controls = true;
-      if (a.media_type === 'animation') { video.autoplay = true; video.loop = true; video.muted = true; }
+      if (a.media_type === 'animation' || a.media_type === 'video_sticker') {
+        video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
+        if (a.media_type === 'video_sticker') video.controls = false;
+      }
       video.preload = 'metadata'; video.src = mediaUrl; el.append(video);
     } else {
       const link = document.createElement('a');
@@ -2225,6 +2229,7 @@ async function open(id) {
   for (const m of data.messages) inner.append(bubble(m, data.attachments));
   inner.classList.add('enter');
   $('thread').replaceChildren(inner);
+  $('thread').dataset.conversationId = String(id);
   // Прокрутку ставим тем же кадром, до отрисовки: перенос в rAF давал
   // видимый прыжок от верха к низу.
   $('thread').scrollTop = $('thread').scrollHeight;
@@ -2247,14 +2252,68 @@ async function open(id) {
 let refreshTimer = null;
 const refreshSoon = () => { if (!refreshTimer) refreshTimer = setTimeout(() => { refreshTimer = null; refresh(); }, 400); };
 let refreshPromise = null, refreshAgain = false;
+let currentSyncPromise = null, currentSyncId = null;
+
+/**
+ * HTTP-reconciliation открытой переписки. WebSocket остаётся быстрым путём,
+ * но краткий сетевой разрыв больше не требует закрывать и открывать диалог.
+ */
+async function syncCurrentMessages(id = current?.id) {
+  if (!id) return;
+  if (currentSyncPromise) {
+    if (currentSyncId === id) return currentSyncPromise;
+    await currentSyncPromise;
+    return current?.id === id ? syncCurrentMessages(id) : undefined;
+  }
+  currentSyncId = id;
+  currentSyncPromise = (async () => {
+    const data = await json(`/api/conversations/${id}`);
+    if (!data || current?.id !== id) return;
+    const thread = $('thread');
+    let inner = thread.dataset.conversationId === String(id) ? thread.querySelector('.thread-inner') : null;
+    if (!inner) {
+      inner = document.createElement('div');
+      inner.className = 'thread-inner';
+      thread.replaceChildren(inner);
+      thread.dataset.conversationId = String(id);
+    }
+    const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 140;
+    const known = new Set([...inner.querySelectorAll('.msg[data-message-id]')]
+      .map((node) => Number(node.dataset.messageId)));
+    if (inner.querySelector('.empty') && data.messages.length) inner.innerHTML = '';
+    let appended = 0;
+    for (const message of data.messages) {
+      if (known.has(message.id)) continue;
+      inner.append(bubble(message, data.attachments));
+      known.add(message.id);
+      appended += 1;
+    }
+    current = data.conversation;
+    suggestion = data.suggestion;
+    paintHeader(current); renderWindow(); renderSuggestion(); renderAiNote();
+    renderCollaboration(current.collaboration);
+    if (appended && nearBottom) requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
+    else if (appended) toast('Новые сообщения ниже по переписке');
+  })();
+  try { await currentSyncPromise; }
+  finally { currentSyncPromise = null; currentSyncId = null; }
+}
+
 async function refresh() {
   if (refreshPromise) { refreshAgain = true; return refreshPromise; }
   refreshPromise = (async () => {
     const data = await json('/api/conversations');
     if (!data) return;
+    const openId = current?.id;
+    const previousLastMessageAt = Number(current?.last_message_at ?? 0);
     conversations = data.conversations;
     if (current) current = conversations.find(c => c.id === current.id) ?? current;
     renderList();
+    // Контрольный опрос раньше обновлял только левый список. Если push-кадр
+    // потерялся, открытая переписка оставалась старой до повторного входа.
+    if (openId && Number(current?.last_message_at ?? 0) > previousLastMessageAt) {
+      void syncCurrentMessages(openId);
+    }
   })();
   try { await refreshPromise; }
   catch (error) { console.warn('Conversation refresh failed; the live connection or next poll will retry.', error); }
@@ -3799,12 +3858,17 @@ function connect() {
     if (frame.type === 'message' && current?.id === frame.conversation.id) {
       const nearBottom = $('thread').scrollHeight - $('thread').scrollTop - $('thread').clientHeight < 140;
       current = frame.conversation;
-      const inner = $('thread').querySelector('.thread-inner');
+      const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
+        ? $('thread').querySelector('.thread-inner') : null;
       if (inner) {
         if (inner.querySelector('.empty')) inner.innerHTML = '';
-        const el = bubble(frame.message, frame.attachments ?? {});
-        el.classList.add('fresh');
-        inner.append(el);
+        if (!inner.querySelector(`.msg[data-message-id="${frame.message.id}"]`)) {
+          const el = bubble(frame.message, frame.attachments ?? {});
+          el.classList.add('fresh');
+          inner.append(el);
+        }
+      } else {
+        void syncCurrentMessages(frame.conversation.id);
       }
       if (nearBottom || frame.message.direction === 'out') requestAnimationFrame(() => { $('thread').scrollTop = $('thread').scrollHeight; });
       else toast('Новое сообщение ниже по переписке');

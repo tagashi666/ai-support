@@ -3,6 +3,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+version="$(node -p "require('./package.json').version")"
+if ! grep -Fq "## [$version]" CHANGELOG.md; then
+  printf 'CHANGELOG.md не содержит секцию текущей версии %s.\n' "$version" >&2
+  exit 1
+fi
+
 before="$(sha256sum MANIFEST | cut -d' ' -f1)"
 bash scripts/pack.sh >/dev/null
 after="$(sha256sum MANIFEST | cut -d' ' -f1)"

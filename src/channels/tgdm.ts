@@ -19,9 +19,49 @@ function extractMedia(msg: TgMessage): { mediaType?: string; mediaFileId?: strin
   if (msg.audio) return { mediaType: 'audio', mediaFileId: msg.audio.file_id };
   if (msg.document) return { mediaType: 'document', mediaFileId: msg.document.file_id };
   if (msg.video_note) return { mediaType: 'video_note', mediaFileId: msg.video_note.file_id };
-  if (msg.sticker) return { mediaType: 'sticker', mediaFileId: msg.sticker.file_id };
+  if (msg.sticker) {
+    // Telegram использует три разных формата под одним update-полем:
+    // WebP, WebM и gzipped Lottie (.tgs). Браузер не умеет показывать TGS
+    // напрямую, поэтому для него берём статичную WebP-миниатюру Telegram.
+    // Видео-стикер сохраняем отдельным типом, чтобы панель создала <video>,
+    // а сервер отдал корректный video/webm вместо image/webp.
+    if (msg.sticker.is_video) {
+      return {
+        mediaType: 'video_sticker',
+        mediaFileId: msg.sticker.file_id,
+        mediaWidth: msg.sticker.width,
+        mediaHeight: msg.sticker.height,
+      };
+    }
+    if (msg.sticker.is_animated) {
+      return {
+        mediaType: 'sticker',
+        mediaFileId: msg.sticker.thumbnail?.file_id,
+        mediaWidth: msg.sticker.thumbnail?.width ?? msg.sticker.width,
+        mediaHeight: msg.sticker.thumbnail?.height ?? msg.sticker.height,
+      };
+    }
+    return {
+      mediaType: 'sticker',
+      mediaFileId: msg.sticker.file_id,
+      mediaWidth: msg.sticker.width,
+      mediaHeight: msg.sticker.height,
+    };
+  }
   if (msg.animation) return { mediaType: 'animation', mediaFileId: msg.animation.file_id };
   return {};
+}
+
+function messageText(msg: TgMessage): string | undefined {
+  if (msg.text !== undefined) return msg.text;
+  if (msg.caption !== undefined) return msg.caption;
+  // У очень старых/редких animated sticker миниатюры может не быть. Не
+  // регистрируем .tgs как картинку: вместо вечной битой загрузки оставляем
+  // понятный текстовый след с emoji стикера.
+  if (msg.sticker?.is_animated && !msg.sticker.thumbnail) {
+    return msg.sticker.emoji ? `[анимированный стикер ${msg.sticker.emoji}]` : '[анимированный стикер]';
+  }
+  return undefined;
 }
 
 /**
@@ -171,7 +211,7 @@ export function createBot(store: Store, tokenOrOptions: string | BotOptions = {}
       businessConnectionId: msg.business_connection_id,
       username: peer && 'username' in peer ? peer.username : undefined,
       displayName: displayName(peer),
-      text: msg.text ?? msg.caption ?? undefined,
+      text: messageText(msg),
       mediaType: media.mediaType,
       mediaFileId: media.mediaFileId,
       mediaWidth: media.mediaWidth,
@@ -226,7 +266,7 @@ export function createBot(store: Store, tokenOrOptions: string | BotOptions = {}
       senderTgUserId: msg.from?.id,
       username: msg.from?.username,
       displayName: displayName(msg.from),
-      text: msg.text ?? msg.caption ?? undefined,
+      text: messageText(msg),
       mediaType: media.mediaType,
       mediaFileId: media.mediaFileId,
       mediaWidth: media.mediaWidth,

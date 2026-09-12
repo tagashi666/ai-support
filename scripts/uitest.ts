@@ -349,6 +349,13 @@ check('отметка о прочтении не блокирует отрисо
 check('быстрое переключение не путает диалоги', /ticket !== openToken/.test(html));
 check('подписка грузится по раскрытию раздела', /if \(!wrap\.open\)/.test(html));
 check('новые диалоги сразу сливаются из WebSocket в список', /mergeLiveConversation\(frame\.conversation\)/.test(html));
+check('пропущенные WS-сообщения догружаются в открытый диалог',
+  /function syncCurrentMessages/.test(html) && /last_message_at/.test(html)
+  && /void syncCurrentMessages\(openId\)/.test(html));
+check('live-сообщения не дублируются', /data-message-id/.test(html)
+  && /inner\.querySelector\(`\.msg\[data-message-id=/.test(html));
+check('видео-стикеры показываются зацикленным WebM-видео',
+  /a\.media_type === 'video_sticker'/.test(html) && /video\.playsInline = true/.test(html));
 check('список имеет резервный опрос не реже пяти секунд',
   /setInterval\(\(\) => \{ if \(document\.visibilityState === 'visible'\) void refresh\(\); \}, 5000\)/.test(html));
 check('ошибка аватара повторяется, а не удаляет картинку навсегда',

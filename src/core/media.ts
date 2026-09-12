@@ -12,6 +12,21 @@ import { readLimitedBody } from './http.js';
 
 const VOICE_TYPES = new Set(['voice', 'audio', 'video_note']);
 
+/** MIME удалённого файла нельзя надёжно вывести из Telegram file_id. */
+function downloadedMediaMime(bytes: Buffer, mediaType: string | null): string | undefined {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && bytes.subarray(0, 8).equals(Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]))) return 'image/png';
+  if (bytes.length >= 12 && bytes.subarray(0, 4).toString('ascii') === 'RIFF'
+      && bytes.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (bytes.length >= 6 && ['GIF87a','GIF89a'].includes(bytes.subarray(0, 6).toString('ascii'))) return 'image/gif';
+  if (bytes.length >= 4 && bytes.subarray(0, 4).equals(Buffer.from([0x1a,0x45,0xdf,0xa3]))) {
+    return ['video', 'video_sticker'].includes(mediaType ?? '') ? 'video/webm' : 'application/webm';
+  }
+  if (bytes.length >= 12 && bytes.subarray(4, 8).toString('ascii') === 'ftyp') return 'video/mp4';
+  if (bytes.length >= 4 && bytes.subarray(0, 4).toString('ascii') === 'OggS') return 'audio/ogg';
+  return undefined;
+}
+
 /**
  * Имя на диске никогда не берётся из БД или удалённого API. Даже если запись
  * вложения будет повреждена, наружу можно открыть только один из файлов с
@@ -196,7 +211,12 @@ export class MediaFetcher {
             throw new Error(`Каталог вложений достиг лимита ${config.mediaMaxTotalBytes} байт`);
           }
           const path = await saveMediaFile(item.file_ref, bytes);
-          this.store.markAttachmentDownloaded(item.id, path, bytes.byteLength);
+          this.store.markAttachmentDownloaded(
+            item.id,
+            path,
+            bytes.byteLength,
+            downloadedMediaMime(bytes, item.media_type),
+          );
           saved += 1;
 
           if (config.transcribe.enabled && VOICE_TYPES.has(item.media_type ?? '')) {

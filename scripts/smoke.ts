@@ -186,6 +186,40 @@ const photoAttachment = store.attachmentsFor([photoMessage.id])[photoMessage.id]
 check('ширина картинки сохранена', photoAttachment?.width === 100, photoAttachment);
 check('высота картинки сохранена', photoAttachment?.height === 100, photoAttachment);
 
+// Sticker в Bot API бывает WebP, WebM или TGS. Видео нельзя отдавать как
+// image/webp, а TGS браузер напрямую не рисует — для него сохраняем thumbnail.
+await bot.handleUpdate({
+  update_id: 501,
+  business_message: {
+    message_id: 78, date: now,
+    chat: { id: PEER, type: 'private' as const, first_name: 'Клиент' },
+    from: { id: PEER, is_bot: false, first_name: 'Клиент' },
+    business_connection_id: CONNECTION,
+    sticker: { file_id: 'video-sticker', file_unique_id: 'vs1', type: 'regular', width: 512, height: 512,
+      is_animated: false, is_video: true },
+  },
+} as never);
+const videoSticker = store.listMessages(conversation.id).at(-1)!;
+check('видео-стикер распознан как WebM-видео', videoSticker.media_type === 'video_sticker', videoSticker);
+check('размер видео-стикера сохранён', store.attachmentsFor([videoSticker.id])[videoSticker.id]?.[0]?.width === 512);
+
+await bot.handleUpdate({
+  update_id: 502,
+  business_message: {
+    message_id: 79, date: now,
+    chat: { id: PEER, type: 'private' as const, first_name: 'Клиент' },
+    from: { id: PEER, is_bot: false, first_name: 'Клиент' },
+    business_connection_id: CONNECTION,
+    sticker: { file_id: 'animated-tgs', file_unique_id: 'as1', type: 'regular', width: 512, height: 512,
+      is_animated: true, is_video: false,
+      thumbnail: { file_id: 'animated-preview', file_unique_id: 'asp1', width: 320, height: 320 } },
+  },
+} as never);
+const animatedSticker = store.listMessages(conversation.id).at(-1)!;
+check('для TGS сохраняется браузерная миниатюра',
+  store.pendingAttachments().some((item) => item.message_id === animatedSticker.id
+    && item.file_ref === 'tg:telegram-default:animated-preview'));
+
 // Ответ на конкретное сообщение: без цитаты «Да» и «Вот что выходит»
 // повисают в воздухе — непонятно, к чему они относятся.
 await bot.handleUpdate({

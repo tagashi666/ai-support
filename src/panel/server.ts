@@ -57,6 +57,7 @@ const MEDIA_MIME: Record<string, string> = {
   video_note: 'video/mp4',
   animation: 'video/mp4',
   sticker: 'image/webp',
+  video_sticker: 'video/webm',
 };
 
 /**
@@ -1055,7 +1056,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         ['photo', 'sticker'].includes(attachment.media_type ?? '')
           && /^image\/(?:jpeg|png|webp|gif)$/.test(mime)
       ) || (
-        ['video', 'video_note'].includes(attachment.media_type ?? '') && /^video\/(?:mp4|webm)$/.test(mime)
+        ['video', 'video_note', 'video_sticker'].includes(attachment.media_type ?? '') && /^video\/(?:mp4|webm)$/.test(mime)
       ) || (
         attachment.media_type === 'animation' && /^(?:image\/gif|video\/mp4)$/.test(mime)
       ) || (

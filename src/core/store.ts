@@ -1004,10 +1004,10 @@ export class Store extends EventEmitter<StoreEvents> {
         .get(conversationId, externalMsgId)) as Message | undefined;
   }
 
-  markAttachmentDownloaded(id: number, localPath: string, bytes: number): void {
+  markAttachmentDownloaded(id: number, localPath: string, bytes: number, mimeType?: string): void {
     this.db
-      .prepare('UPDATE attachment SET local_path = ?, bytes = ?, downloaded_at = ? WHERE id = ?')
-      .run(localPath, bytes, Date.now(), id);
+      .prepare('UPDATE attachment SET local_path = ?, bytes = ?, downloaded_at = ?, mime_type = COALESCE(?, mime_type) WHERE id = ?')
+      .run(localPath, bytes, Date.now(), mimeType ?? null, id);
   }
 
   mediaBytes(): number {
