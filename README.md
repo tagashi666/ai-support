@@ -1,4 +1,4 @@
-# AI Support 2.4.1
+# AI Support 2.4.2
 
 [![Версия](https://img.shields.io/github/v/release/tagashi666/ai-support?label=версия)](https://github.com/tagashi666/ai-support/releases/latest)
 [![CI](https://github.com/tagashi666/ai-support/actions/workflows/ci.yml/badge.svg)](https://github.com/tagashi666/ai-support/actions/workflows/ci.yml)
@@ -9,9 +9,17 @@
 и тикетов Bedolaga. Панель объединяет переписки, операторов, шаблоны, базу
 знаний, SLA, статистику, серверы Remnawave и безопасного AI-помощника.
 
-Текущая стабильная версия — **2.4.1**. Заметки о выпуске находятся в
+Текущая стабильная версия — **2.4.2**. Заметки о выпуске находятся в
 [CHANGELOG.md](CHANGELOG.md), готовые сборки — в разделе
 [Releases](https://github.com/tagashi666/ai-support/releases).
+
+## Главное в версии 2.4.2
+
+- **Надёжные аватары.** Фотографии любого исходного разрешения изолированы в
+  общем avatar-container и не могут растянуть либо перекрыть рабочую область.
+- **Регрессия закрыта тестом.** Проверка UI теперь анализирует активный
+  stylesheet и контролирует containing block и размеры аватаров списка и
+  шапки обращения.
 
 ## Главное в версии 2.4.1
 

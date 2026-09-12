@@ -355,9 +355,10 @@ button:active:not(:disabled) { transform:translateY(1px); }
 }
 .row:hover { background:color-mix(in srgb,var(--canvas) 55%,transparent); }
 .row[aria-selected="true"] { background:var(--selection); box-shadow:inset 3px 0 0 var(--accent); }
-.row-avatar { position:relative; width:36px; height:36px; max-width:36px; overflow:hidden; display:grid; place-items:center; border-radius:50%; background:var(--canvas-muted); color:var(--text-secondary); font-size:12px; font-weight:600; }
-.avatar-photo { position:absolute; inset:0; width:100%!important; height:100%!important; max-width:100%!important; max-height:100%!important; object-fit:cover; }
-.avatar-initials { font-size:11px; }
+.avatar-frame { position:relative; overflow:hidden; isolation:isolate; contain:layout paint; }
+.row-avatar { width:36px; min-width:36px; max-width:36px; height:36px; min-height:36px; max-height:36px; display:grid; place-items:center; border-radius:50%; background:var(--canvas-muted); color:var(--text-secondary); font-size:12px; font-weight:600; }
+.avatar-photo { position:absolute; z-index:1; inset:0; width:100%!important; height:100%!important; max-width:100%!important; max-height:100%!important; display:block; object-fit:cover; }
+.avatar-initials { position:relative; z-index:0; font-size:11px; }
 .row-avatar.unread::after { width:7px; height:7px; border:2px solid var(--workspace); background:var(--accent); }
 .row-main { min-width:0; display:grid; gap:3px; }
 .who { min-width:0; display:flex; align-items:baseline; justify-content:space-between; gap:8px; }
@@ -399,7 +400,7 @@ button:active:not(:disabled) { transform:translateY(1px); }
   border-bottom:1px solid var(--separator);
   background:var(--canvas);
 }
-.title-avatar { width:38px; height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:50%; color:var(--text-secondary); background:var(--canvas-muted); font-size:12px; }
+.title-avatar { width:38px; min-width:38px; max-width:38px; height:38px; min-height:38px; max-height:38px; flex:0 0 38px; display:grid; place-items:center; border-radius:50%; color:var(--text-secondary); background:var(--canvas-muted); font-size:12px; }
 .title-stack { min-width:160px; display:grid; gap:1px; }
 .title-stack { width:170px; flex:0 1 170px; }
 .title-stack h1 { margin:0; overflow:hidden; color:var(--text); font-size:16px; font-weight:600; line-height:1.25; letter-spacing:-.015em; text-overflow:ellipsis; white-space:nowrap; }

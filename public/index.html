@@ -1300,7 +1300,7 @@ const channelLabel = (c) => c.source?.name || (c.channel === 'tg_dm' ? 'Telegram
 const gb = (b) => b == null ? '—' : `${(b / 1073741824).toFixed(1)} ГБ`;
 const initials = (value) => value.replace(/^@/, '').trim().split(/\s+/).slice(0, 2)
   .map((part) => Array.from(part)[0] ?? '').join('').toUpperCase() || '•';
-const avatarMarkup = (c, className, unread = false, id = '') => `<span class="${className}"${id ? ` id="${id}"` : ''} aria-hidden="true">
+const avatarMarkup = (c, className, unread = false, id = '') => `<span class="avatar-frame ${className}"${id ? ` id="${id}"` : ''} aria-hidden="true">
   <span class="avatar-initials">${esc(initials(nameOf(c)))}</span>
   ${c.avatar_file_id ? `<img class="avatar-photo" src="/api/conversations/${Number(c.id)}/avatar?token=${encodeURIComponent(ticket)}&v=${encodeURIComponent(c.updated_at ?? c.avatar_file_id)}" alt="" width="38" height="38" loading="lazy" decoding="async" draggable="false">` : ''}
   ${unread ? '<span class="dot"></span>' : ''}</span>`;

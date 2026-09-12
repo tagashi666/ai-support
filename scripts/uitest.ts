@@ -8,7 +8,14 @@
 import { readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
-const uiCss = readFileSync(new URL('../public/ui-v2.css', import.meta.url), 'utf8');
+// Проверки компонентов должны читать реально подключённые stylesheets. Иначе
+// неактивный файл может сохранять старое правило и маскировать регрессию UI.
+const activeStylesheets = [...html.matchAll(/<link\b[^>]*>/g)]
+  .map(([tag]) => ({ rel:tag.match(/\brel="([^"]+)"/)?.[1], href:tag.match(/\bhref="\/([^"]+)"/)?.[1] }))
+  .filter((link): link is { rel:string; href:string } => link.rel === 'stylesheet' && Boolean(link.href));
+const uiCss = activeStylesheets
+  .map(({ href }) => readFileSync(new URL(`../public/${href}`, import.meta.url), 'utf8'))
+  .join('\n');
 
 let failures = 0;
 const check = (label: string, ok: boolean, detail?: unknown): void => {
@@ -219,8 +226,12 @@ check('полный размер открывается по клику', /funct
 check('просмотр картинки всегда можно закрыть', /lightbox-close/.test(uiCss)
   && /closeButton\.onclick\s*=/.test(html)
   && /e\.key === 'Escape'/.test(html));
-check('аватар не может растянуть раскладку', /\.avatar-photo\s*\{[^}]*position:absolute[^}]*max-width:100%\s*!important[^}]*max-height:100%\s*!important/s.test(uiCss)
-  && /\.row-avatar[^}]*max-width:38px/s.test(uiCss));
+check('аватар ограничен собственным containing block',
+  /class="avatar-frame \$\{className\}"/.test(html)
+  && /\.avatar-frame\s*\{[^}]*position:relative[^}]*overflow:hidden[^}]*contain:layout paint/s.test(uiCss)
+  && /\.avatar-photo\s*\{[^}]*position:absolute[^}]*max-width:100%\s*!important[^}]*max-height:100%\s*!important/s.test(uiCss)
+  && /\.row-avatar\s*\{[^}]*max-width:36px[^}]*max-height:36px/s.test(uiCss)
+  && /\.title-avatar\s*\{[^}]*max-width:38px[^}]*max-height:38px/s.test(uiCss));
 
 // 25. Действие «ответить» не спрятано за наведение: невидимую кнопку
 // не находят.
@@ -353,9 +364,9 @@ check('активность Bedolaga показывает связанные т�
   html.includes("'Тикет','Сумма','Дата'")
     && /ticketId/u.test(html));
 check('карточка Bedolaga оформлена активным stylesheet, а не отключённым legacy-ui',
-  uiCss.includes('.sheet.wide { width:min(980px,100%); }')
+  /\.sheet\.wide\s*\{[^}]*width:min\(\d+px,100%\)/.test(uiCss)
     && uiCss.includes('.bed-tabs button[aria-pressed="true"]')
-    && uiCss.includes('.bed-sub { display:grid;'));
+    && /\.bed-sub\s*\{[^}]*display:grid;/.test(uiCss));
 
 // Запрос карточки A может завершиться после того, как оператор уже открыл
 // карточку B. Результат A нельзя записывать в общие state/DOM: нужен либо
