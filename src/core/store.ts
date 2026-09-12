@@ -184,6 +184,8 @@ export function replyWindow(conv: Conversation, now = Date.now()): WindowState {
 
 export type StoreEvents = {
   message: [{ conversation: Conversation; message: Message; backfill: boolean }];
+  message_updated: [{ conversation: Conversation; message: Message }];
+  message_deleted: [{ conversation: Conversation; message: Message }];
   suggestion: [{ conversation: Conversation; suggestion: Suggestion }];
   conversation: [Conversation];
 };
@@ -578,7 +580,12 @@ export class Store extends EventEmitter<StoreEvents> {
   }
 
   markRead(conversationId: number): void {
-    this.db.prepare('UPDATE conversation SET unread = 0, updated_at = ? WHERE id = ?').run(Date.now(), conversationId);
+    const result = this.db.prepare('UPDATE conversation SET unread = 0, updated_at = MAX(updated_at + 1, ?) WHERE id = ? AND unread != 0')
+      .run(Date.now(), conversationId);
+    if (result.changes) {
+      const conversation = this.getConversation(conversationId);
+      if (conversation) this.emit('conversation', conversation);
+    }
   }
 
   /**
@@ -1004,9 +1011,90 @@ export class Store extends EventEmitter<StoreEvents> {
         .get(conversationId, externalMsgId)) as Message | undefined;
   }
 
+  /** Обновляет Telegram-сообщение без повторного запуска AI-конвейера. */
+  editExternalMessage(input: {
+    conversationId: number;
+    externalMsgId: string;
+    direction: Direction;
+    text?: string;
+    mediaType?: string;
+    mediaFileId?: string;
+    mediaWidth?: number;
+    mediaHeight?: number;
+    mediaSourceId?: string;
+    replyToExternalId?: string;
+    replyExcerpt?: string;
+  }): { conversation: Conversation; message: Message } | null {
+    const previous = this.findMessageByExternalId(input.conversationId, input.externalMsgId, input.direction);
+    if (!previous) return null;
+    const mediaChanged = Boolean(input.mediaFileId && input.mediaFileId !== previous.media_file_id);
+    this.db.transaction(() => {
+      this.db.prepare(
+        `UPDATE message
+            SET text = ?,
+                media_type = CASE WHEN ? = 1 THEN ? ELSE media_type END,
+                media_file_id = CASE WHEN ? = 1 THEN ? ELSE media_file_id END,
+                reply_to_external_id = ?, reply_excerpt = ?
+          WHERE id = ?`,
+      ).run(
+        input.text ?? null,
+        mediaChanged ? 1 : 0, input.mediaType ?? null,
+        mediaChanged ? 1 : 0, input.mediaFileId ?? null,
+        input.replyToExternalId ?? null,
+        input.replyExcerpt ?? null,
+        previous.id,
+      );
+      if (mediaChanged) {
+        this.db.prepare('DELETE FROM attachment WHERE message_id = ?').run(previous.id);
+        const conversation = this.getConversation(input.conversationId);
+        const fileRef = conversation?.channel === 'bedolaga'
+          ? `bedolaga:${input.mediaFileId}`
+          : `tg:${encodeURIComponent(input.mediaSourceId ?? conversation?.avatar_source_id ?? conversation?.source_id ?? 'telegram-default')}:${input.mediaFileId}`;
+        this.addAttachment(previous.id, input.mediaType, fileRef, {
+          width: input.mediaWidth, height: input.mediaHeight,
+        });
+      }
+      this.db.prepare('UPDATE conversation SET updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
+        .run(Date.now(), input.conversationId);
+    })();
+    const conversation = this.getConversation(input.conversationId)!;
+    const message = this.db.prepare('SELECT * FROM message WHERE id = ?').get(previous.id) as Message;
+    this.emit('message_updated', { conversation, message });
+    return { conversation, message };
+  }
+
+  /** Удаляет сообщения из локальной истории и пересчитывает активность диалога. */
+  deleteExternalMessages(conversationId: number, externalMsgIds: string[]): number {
+    const ids = [...new Set(externalMsgIds.filter(Boolean))];
+    if (!ids.length) return 0;
+    const placeholders = ids.map(() => '?').join(',');
+    const messages = this.db.prepare(
+      `SELECT * FROM message WHERE conversation_id = ? AND external_msg_id IN (${placeholders})`,
+    ).all(conversationId, ...ids) as Message[];
+    if (!messages.length) return 0;
+    this.db.transaction(() => {
+      this.db.prepare(`DELETE FROM message WHERE id IN (${messages.map(() => '?').join(',')})`)
+        .run(...messages.map((message) => message.id));
+      const deletedInbound = messages.filter((message) => message.direction === 'in').length;
+      this.db.prepare(
+        `UPDATE conversation
+            SET last_message_at = (SELECT MAX(created_at) FROM message WHERE conversation_id = ?),
+                last_inbound_at = (SELECT MAX(created_at) FROM message WHERE conversation_id = ? AND direction = 'in'),
+                unread = MAX(0, unread - ?), updated_at = MAX(updated_at + 1, ?)
+          WHERE id = ?`,
+      ).run(conversationId, conversationId, deletedInbound, Date.now(), conversationId);
+    })();
+    const conversation = this.getConversation(conversationId)!;
+    for (const message of messages) this.emit('message_deleted', { conversation, message });
+    return messages.length;
+  }
+
   markAttachmentDownloaded(id: number, localPath: string, bytes: number, mimeType?: string): void {
     this.db
-      .prepare('UPDATE attachment SET local_path = ?, bytes = ?, downloaded_at = ?, mime_type = COALESCE(?, mime_type) WHERE id = ?')
+      .prepare(`UPDATE attachment
+                  SET local_path = ?, bytes = ?, downloaded_at = ?, mime_type = COALESCE(?, mime_type),
+                      next_attempt_at = 0, last_error = NULL
+                WHERE id = ?`)
       .run(localPath, bytes, Date.now(), mimeType ?? null, id);
   }
 
@@ -1015,19 +1103,25 @@ export class Store extends EventEmitter<StoreEvents> {
     return Number(row.n) || 0;
   }
 
-  /**
-   * Невыкачанные вложения. Ссылки Telegram живут около часа, поэтому вечно
-   * ретраить бессмысленно — после нескольких неудач вложение бросаем,
-   * иначе очередь будет молотить одни и те же мёртвые file_id каждые 15 секунд.
-   */
-  pendingAttachments(limit = 20, maxAttempts = 5): { id: number; message_id: number; media_type: string | null; file_ref: string }[] {
+  /** Невыкачанные вложения, чей сохранённый backoff уже истёк. */
+  pendingAttachments(limit = 20, now = Date.now()): { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[] {
     return this.db
-      .prepare('SELECT id, message_id, media_type, file_ref FROM attachment WHERE local_path IS NULL AND attempts < ? LIMIT ?')
-      .all(maxAttempts, limit) as { id: number; message_id: number; media_type: string | null; file_ref: string }[];
+      .prepare(`SELECT id, message_id, media_type, file_ref, attempts FROM attachment
+                 WHERE local_path IS NULL AND next_attempt_at <= ?
+                 ORDER BY next_attempt_at, id LIMIT ?`)
+      .all(now, limit) as { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[];
   }
 
-  bumpAttachmentAttempt(id: number): void {
-    this.db.prepare('UPDATE attachment SET attempts = attempts + 1 WHERE id = ?').run(id);
+  deferAttachment(id: number, error: unknown, now = Date.now()): number {
+    const row = this.db.prepare('SELECT attempts FROM attachment WHERE id = ?').get(id) as { attempts: number } | undefined;
+    if (!row) return 0;
+    const attempts = row.attempts + 1;
+    const delay = Math.min(6 * 60 * 60_000, 5_000 * 2 ** Math.min(12, attempts - 1));
+    const nextAttemptAt = now + delay;
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+    this.db.prepare('UPDATE attachment SET attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?')
+      .run(attempts, nextAttemptAt, message, id);
+    return nextAttemptAt;
   }
 
   getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null; file_ref: string;

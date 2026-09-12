@@ -259,7 +259,7 @@ check('редактор создаёт PNG-копию и сохраняет ор
   && html.includes('originalFile:file') && html.includes("'image/png'"));
 check('редактор содержит полный набор инструментов', ['draw','line','arrow','rect','ellipse','text','pixel','crop']
   .every((tool) => html.includes(`data-tool="${tool}"`)) && html.includes('data-action="resize"'));
-check('ранее отправленное изображение можно править копией', html.includes('openImageEditorFromUrl(mediaUrl'));
+check('ранее отправленное изображение можно править копией', html.includes('openImageEditorFromUrl(attachmentUrl(a.id)'));
 check('есть горячие клавиши загрузки и снимка', html.includes("event.key.toLowerCase()==='u'")
   && html.includes("event.key.toLowerCase()==='s'") && html.includes('getDisplayMedia'));
 check('полный размер открывается по клику', /function openImage\(/.test(html) && /className = 'lightbox'/.test(html));
@@ -356,7 +356,7 @@ check('медиана рядом со средним', /medianFirstResponseMs/.t
 check('шапка рисуется до ответа сервера', /function paintHeader/.test(html));
 check('на время загрузки показывается заглушка', /function skeleton/.test(html) && /bubble\.skel/.test(html));
 check('отметка о прочтении не блокирует отрисовку',
-  /void api\(`\/api\/conversations\/\$\{id\}\/read`/.test(html));
+  /markOpenConversationRead\(id\)/.test(html) && /readTimer = setTimeout/.test(html));
 check('быстрое переключение не путает диалоги', /ticket !== openToken/.test(html));
 check('подписка грузится по раскрытию раздела', /if \(!wrap\.open\)/.test(html));
 check('новые диалоги сразу сливаются из WebSocket в список', /mergeLiveConversation\(frame\.conversation\)/.test(html));
@@ -367,6 +367,16 @@ check('live-сообщения не дублируются', /data-message-id/.t
   && /inner\.querySelector\(`\.msg\[data-message-id=/.test(html));
 check('видео-стикеры показываются зацикленным WebM-видео',
   /a\.media_type === 'video_sticker'/.test(html) && /video\.playsInline = true/.test(html));
+check('TGS загружается локальным Lottie-рендерером',
+  /function renderTgsSticker/.test(html) && /\/vendor\/lottie\.min\.js/.test(html)
+  && /a\.media_type === 'tgs_sticker'/.test(html));
+check('билеты обновляют уже созданные lazy-media URL',
+  /function refreshMediaTicketUrls/.test(html) && /data-attachment-id/.test(html)
+  && /attachmentUrl\(a\.id\)/.test(html));
+check('редактирование и удаление сообщений обрабатываются live',
+  /frame\.type === 'message_updated'/.test(html) && /frame\.type === 'message_deleted'/.test(html));
+check('новое входящее в открытом диалоге сразу отмечается прочитанным',
+  /markOpenConversationRead\(frame\.conversation\.id\)/.test(html));
 check('список имеет резервный опрос не реже пяти секунд',
   /setInterval\(\(\) => \{ if \(document\.visibilityState === 'visible'\) void refresh\(\); \}, 5000\)/.test(html));
 check('ошибка аватара повторяется, а не удаляет картинку навсегда',

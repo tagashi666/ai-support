@@ -1,6 +1,6 @@
 {
   "name": "ai-support",
-  "version": "2.4.5",
+  "version": "2.4.6",
   "description": "Self-hosted Telegram support inbox with AI-assisted replies, knowledge base and operator dashboard",
   "private": true,
   "license": "MIT",
@@ -12,7 +12,13 @@
   "bugs": {
     "url": "https://github.com/tagashi666/ai-support/issues"
   },
-  "keywords": ["telegram", "support", "ai", "helpdesk", "self-hosted"],
+  "keywords": [
+    "telegram",
+    "support",
+    "ai",
+    "helpdesk",
+    "self-hosted"
+  ],
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -35,7 +41,8 @@
     "@fastify/websocket": "^11.3.0",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.1",
-    "grammy": "^1.45.1"
+    "grammy": "^1.45.1",
+    "lottie-web": "^5.13.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

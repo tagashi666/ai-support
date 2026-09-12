@@ -273,6 +273,42 @@ store.recordInbound({ channel:'tg_dm', externalId:'777', tgUserId:777, businessC
 const liveNewChat = await newChatFrame.catch((error) => ({ error:error.message }));
 ok('WS немедленно присылает новый диалог', liveNewChat.type === 'message'
   && liveNewChat.conversation.display_name === 'Новый клиент', liveNewChat);
+
+const liveEditTarget = store.recordInbound({ channel:'tg_dm', externalId:'555', sourceId:'telegram-default',
+  tgUserId:555, businessConnectionId:'b1', text:'до правки', externalMsgId:'live-edit-1', sentAt:Date.now() })!;
+const updatedFrame = new Promise<any>((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error('таймаут изменения WS')), 4000);
+  const receive = (data: any) => {
+    const next = JSON.parse(data.toString());
+    if (next.type !== 'message_updated' || next.message.id !== liveEditTarget.message.id) return;
+    clearTimeout(timeout); ws.off('message', receive); resolve(next);
+  };
+  ws.on('message', receive);
+});
+store.editExternalMessage({ conversationId:liveEditTarget.conversation.id, externalMsgId:'live-edit-1',
+  direction:'in', text:'после правки' });
+const liveUpdated = await updatedFrame.catch((error) => ({ error:error.message }));
+ok('WS присылает редактирование сообщения', liveUpdated.message?.text === 'после правки', liveUpdated);
+
+const deletedFrame = new Promise<any>((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error('таймаут удаления WS')), 4000);
+  const receive = (data: any) => {
+    const next = JSON.parse(data.toString());
+    if (next.type !== 'message_deleted' || next.message.id !== liveEditTarget.message.id) return;
+    clearTimeout(timeout); ws.off('message', receive); resolve(next);
+  };
+  ws.on('message', receive);
+});
+store.deleteExternalMessages(liveEditTarget.conversation.id, ['live-edit-1']);
+const liveDeleted = await deletedFrame.catch((error) => ({ error:error.message }));
+ok('WS присылает удаление сообщения', liveDeleted.message?.id === liveEditTarget.message.id, liveDeleted);
+
+store.recordInbound({ channel:'tg_dm', externalId:'555', sourceId:'telegram-default',
+  tgUserId:555, businessConnectionId:'b1', text:'прочитайте сразу', externalMsgId:'live-read-1', sentAt:Date.now() });
+const readLive = await fetch(`${B}/api/conversations/${id}/read`, { method:'POST', headers:h });
+const readLiveBody = await readLive.json() as any;
+ok('открытый диалог возвращается с нулём непрочитанных', readLive.status === 200
+  && readLiveBody.conversation.unread === 0 && store.getConversation(id)?.unread === 0, readLiveBody);
 const badWs = new WS(`ws://127.0.0.1:8099/ws?token=bad`);
 ok('WS без токена не апгрейдится', await new Promise(r=>{badWs.on('error',()=>r(true));badWs.on('open',()=>r(false));}));
 

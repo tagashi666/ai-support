@@ -517,6 +517,14 @@ const MIGRATIONS: string[] = [
   ALTER TABLE attachment ADD COLUMN mime_type     TEXT;
   ALTER TABLE attachment ADD COLUMN sha256        TEXT;
   `,
+
+  // 018 — очередь повторных загрузок с backoff, переживающим рестарт.
+  `
+  ALTER TABLE attachment ADD COLUMN next_attempt_at INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE attachment ADD COLUMN last_error     TEXT;
+  CREATE INDEX idx_attachment_retry ON attachment (next_attempt_at, id)
+    WHERE local_path IS NULL;
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {

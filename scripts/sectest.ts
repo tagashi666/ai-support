@@ -3,6 +3,7 @@ import { createServer } from 'node:http';
 import { mkdtempSync, rmSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 process.env.BOT_TOKEN = '1:FakeForSecurityTests';
 process.env.PANEL_TOKEN = 'security-0123456789ab';
@@ -235,6 +236,34 @@ console.log('\n[ доступ к панели ]');
   const safeAttachment = await fetch(`${B}/api/attachments/${attachmentId}`, { headers: H });
   check('валидное вложение по вычисленному пути отдаётся', safeAttachment.status === 200
     && await safeAttachment.text() === 'safe-photo');
+
+  const player = await fetch(`${B}/vendor/lottie.min.js`);
+  check('Lottie-плеер раздаётся локально с жёстким MIME', player.status === 200
+    && player.headers.get('content-type')?.startsWith('application/javascript') === true);
+
+  const safeTgs = store.recordInbound({
+    channel:'bedolaga', externalId:'safe-tgs', mediaType:'tgs_sticker', mediaFileId:'safe-tgs-file',
+    externalMsgId:'safe-tgs-1', sentAt:Date.now(),
+  })!;
+  const safeTgsId = store.attachmentsFor([safeTgs.message.id])[safeTgs.message.id]?.[0]?.id;
+  const safeTgsBytes = gzipSync(JSON.stringify({ v:'5.7.4', fr:60, ip:0, op:60, w:512, h:512, layers:[] }));
+  const safeTgsPath = await saveMediaFile('bedolaga:safe-tgs-file', safeTgsBytes);
+  store.markAttachmentDownloaded(safeTgsId!, safeTgsPath, safeTgsBytes.length, 'application/gzip');
+  const safeTgsResponse = await fetch(`${B}/api/attachments/${safeTgsId}/lottie?token=${encodeURIComponent(ticket)}`);
+  check('безопасный TGS распаковывается локально', safeTgsResponse.status === 200
+    && (await safeTgsResponse.json() as any).fr === 60);
+
+  const unsafeTgs = store.recordInbound({
+    channel:'bedolaga', externalId:'unsafe-tgs', mediaType:'tgs_sticker', mediaFileId:'unsafe-tgs-file',
+    externalMsgId:'unsafe-tgs-1', sentAt:Date.now(),
+  })!;
+  const unsafeTgsId = store.attachmentsFor([unsafeTgs.message.id])[unsafeTgs.message.id]?.[0]?.id;
+  const unsafeTgsBytes = gzipSync(JSON.stringify({ v:'5.7.4', fr:60, ip:0, op:60, w:512, h:512,
+    layers:[], assets:[{ id:'remote', u:'https://evil.example/', p:'track.png' }] }));
+  const unsafeTgsPath = await saveMediaFile('bedolaga:unsafe-tgs-file', unsafeTgsBytes);
+  store.markAttachmentDownloaded(unsafeTgsId!, unsafeTgsPath, unsafeTgsBytes.length, 'application/gzip');
+  check('TGS с внешним asset отклоняется',
+    (await fetch(`${B}/api/attachments/${unsafeTgsId}/lottie?token=${encodeURIComponent(ticket)}`)).status === 422);
 
   const WS = (await import('ws')).default;
   const crossOrigin = new WS(`ws://127.0.0.1:8189/ws?token=${encodeURIComponent(ticket)}`, {

@@ -35,10 +35,10 @@ function extractMedia(msg: TgMessage): { mediaType?: string; mediaFileId?: strin
     }
     if (msg.sticker.is_animated) {
       return {
-        mediaType: 'sticker',
-        mediaFileId: msg.sticker.thumbnail?.file_id,
-        mediaWidth: msg.sticker.thumbnail?.width ?? msg.sticker.width,
-        mediaHeight: msg.sticker.thumbnail?.height ?? msg.sticker.height,
+        mediaType: 'tgs_sticker',
+        mediaFileId: msg.sticker.file_id,
+        mediaWidth: msg.sticker.width,
+        mediaHeight: msg.sticker.height,
       };
     }
     return {
@@ -55,12 +55,6 @@ function extractMedia(msg: TgMessage): { mediaType?: string; mediaFileId?: strin
 function messageText(msg: TgMessage): string | undefined {
   if (msg.text !== undefined) return msg.text;
   if (msg.caption !== undefined) return msg.caption;
-  // У очень старых/редких animated sticker миниатюры может не быть. Не
-  // регистрируем .tgs как картинку: вместо вечной битой загрузки оставляем
-  // понятный текстовый след с emoji стикера.
-  if (msg.sticker?.is_animated && !msg.sticker.thumbnail) {
-    return msg.sticker.emoji ? `[анимированный стикер ${msg.sticker.emoji}]` : '[анимированный стикер]';
-  }
   return undefined;
 }
 
@@ -236,16 +230,62 @@ export function createBot(store: Store, tokenOrOptions: string | BotOptions = {}
   });
 
   bot.on('edited_business_message', (ctx) => {
-    store.logEvent('business_message_edited', null, {
-      chat_id: ctx.msg.chat.id,
-      message_id: ctx.msg.message_id,
+    const msg = ctx.msg;
+    const sourceId = `${botSourceId}:business:${msg.business_connection_id}`;
+    const conversation = store.findConversation('tg_dm', String(msg.chat.id), sourceId);
+    const business = store.businessConnection(msg.business_connection_id);
+    const outgoing = isBusinessMessageOutgoing(msg, business?.user_id);
+    const media = extractMedia(msg);
+    const edited = conversation ? store.editExternalMessage({
+      conversationId: conversation.id,
+      externalMsgId: String(msg.message_id),
+      direction: outgoing ? 'out' : 'in',
+      text: messageText(msg),
+      mediaType: media.mediaType,
+      mediaFileId: media.mediaFileId,
+      mediaWidth: media.mediaWidth,
+      mediaHeight: media.mediaHeight,
+      mediaSourceId: botSourceId,
+      ...extractReply(msg),
+    }) : null;
+    store.logEvent('business_message_edited', conversation?.id ?? null, {
+      chat_id: msg.chat.id, message_id: msg.message_id, applied: Boolean(edited),
     });
   });
 
   bot.on('deleted_business_messages', (ctx) => {
-    store.logEvent('business_messages_deleted', null, {
-      chat_id: ctx.update.deleted_business_messages.chat.id,
-      message_ids: ctx.update.deleted_business_messages.message_ids,
+    const deleted = ctx.update.deleted_business_messages;
+    const sourceId = `${botSourceId}:business:${deleted.business_connection_id}`;
+    const conversation = store.findConversation('tg_dm', String(deleted.chat.id), sourceId);
+    const count = conversation
+      ? store.deleteExternalMessages(conversation.id, deleted.message_ids.map(String))
+      : 0;
+    store.logEvent('business_messages_deleted', conversation?.id ?? null, {
+      chat_id: deleted.chat.id,
+      message_ids: deleted.message_ids,
+      applied: count,
+    });
+  });
+
+  bot.on('edited_message', (ctx) => {
+    const msg = ctx.msg;
+    if (msg.chat.type !== 'private' || msg.from?.is_bot) return;
+    const conversation = store.findConversation('tg_bot', String(msg.chat.id), botSourceId);
+    const media = extractMedia(msg);
+    const edited = conversation ? store.editExternalMessage({
+      conversationId: conversation.id,
+      externalMsgId: String(msg.message_id),
+      direction: 'in',
+      text: messageText(msg),
+      mediaType: media.mediaType,
+      mediaFileId: media.mediaFileId,
+      mediaWidth: media.mediaWidth,
+      mediaHeight: media.mediaHeight,
+      mediaSourceId: botSourceId,
+      ...extractReply(msg),
+    }) : null;
+    store.logEvent('telegram_message_edited', conversation?.id ?? null, {
+      chat_id: msg.chat.id, message_id: msg.message_id, applied: Boolean(edited),
     });
   });
 

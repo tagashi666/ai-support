@@ -187,7 +187,7 @@ check('ширина картинки сохранена', photoAttachment?.width
 check('высота картинки сохранена', photoAttachment?.height === 100, photoAttachment);
 
 // Sticker в Bot API бывает WebP, WebM или TGS. Видео нельзя отдавать как
-// image/webp, а TGS браузер напрямую не рисует — для него сохраняем thumbnail.
+// image/webp, а TGS сохраняем отдельно для локального Lottie-рендерера.
 await bot.handleUpdate({
   update_id: 501,
   business_message: {
@@ -216,9 +216,34 @@ await bot.handleUpdate({
   },
 } as never);
 const animatedSticker = store.listMessages(conversation.id).at(-1)!;
-check('для TGS сохраняется браузерная миниатюра',
+check('TGS сохраняется для локального Lottie-рендерера', animatedSticker.media_type === 'tgs_sticker'
+  &&
   store.pendingAttachments().some((item) => item.message_id === animatedSticker.id
-    && item.file_ref === 'tg:telegram-default:animated-preview'));
+    && item.file_ref === 'tg:telegram-default:animated-tgs'));
+
+let editedEvents = 0, deletedEvents = 0;
+store.on('message_updated', () => { editedEvents += 1; });
+store.on('message_deleted', () => { deletedEvents += 1; });
+await bot.handleUpdate({
+  update_id: 503,
+  edited_business_message: {
+    ...incoming(2, 'сообщение исправлено').business_message,
+  },
+} as never);
+check('редактирование Telegram обновляет локальный текст',
+  store.findMessageByExternalId(conversation.id, '2', 'in')?.text === 'сообщение исправлено');
+check('редактирование создаёт отдельное live-событие', editedEvents === 1, editedEvents);
+await bot.handleUpdate({
+  update_id: 504,
+  deleted_business_messages: {
+    business_connection_id: CONNECTION,
+    chat: { id: PEER, type: 'private' as const, first_name: 'Клиент' },
+    message_ids: [2],
+  },
+} as never);
+check('удаление Telegram убирает сообщение из истории',
+  !store.findMessageByExternalId(conversation.id, '2', 'in'));
+check('удаление создаёт отдельное live-событие', deletedEvents === 1, deletedEvents);
 
 // Ответ на конкретное сообщение: без цитаты «Да» и «Вот что выходит»
 // повисают в воздухе — непонятно, к чему они относятся.

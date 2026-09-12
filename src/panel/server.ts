@@ -3,6 +3,7 @@ import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify from 'fastify';
 import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Bot } from 'grammy';
@@ -40,6 +41,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 // Панель лежит в корне проекта, а этот файл — в src/panel и dist/panel.
 // Поднимаемся на два уровня, чтобы путь не зависел от глубины вложенности.
 const publicDir = join(here, '..', '..', 'public');
+const lottiePlayer = readFileSync(join(here, '..', '..', 'node_modules', 'lottie-web', 'build', 'player', 'lottie_light.min.js'));
 
 const inlineScripts = Array.from(
   readFileSync(join(publicDir, 'index.html'), 'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi),
@@ -58,7 +60,43 @@ const MEDIA_MIME: Record<string, string> = {
   animation: 'video/mp4',
   sticker: 'image/webp',
   video_sticker: 'video/webm',
+  tgs_sticker: 'application/gzip',
 };
+
+const MAX_TGS_JSON_BYTES = 2 * 1024 * 1024;
+
+/** Распаковывает только самодостаточную Telegram-анимацию без внешних assets. */
+function parseSafeTgs(bytes: Buffer): Record<string, unknown> {
+  if (bytes.length < 2 || bytes[0] !== 0x1f || bytes[1] !== 0x8b) throw new Error('Некорректный TGS');
+  const raw = gunzipSync(bytes, { maxOutputLength: MAX_TGS_JSON_BYTES });
+  const value = JSON.parse(raw.toString('utf8')) as Record<string, unknown>;
+  if (!value || typeof value !== 'object' || Array.isArray(value)
+      || !Array.isArray(value.layers)
+      || !Number.isFinite(Number(value.fr)) || Number(value.fr) <= 0 || Number(value.fr) > 120
+      || !Number.isFinite(Number(value.w)) || Number(value.w) <= 0 || Number(value.w) > 2048
+      || !Number.isFinite(Number(value.h)) || Number(value.h) <= 0 || Number(value.h) > 2048) {
+    throw new Error('Недопустимая TGS-анимация');
+  }
+  const assets = Array.isArray(value.assets) ? value.assets : [];
+  if (assets.some((asset) => asset && typeof asset === 'object'
+      && ('p' in asset || 'u' in asset || 'e' in asset))) {
+    throw new Error('Внешние assets в TGS запрещены');
+  }
+  let nodes = 0;
+  const inspect = (item: unknown, depth: number): void => {
+    if (depth > 48 || ++nodes > 100_000) throw new Error('TGS слишком сложный');
+    if (typeof item === 'string' && item.length > 100_000) throw new Error('Строка TGS слишком длинная');
+    if (Array.isArray(item)) for (const child of item) inspect(child, depth + 1);
+    else if (item && typeof item === 'object') {
+      for (const [key, child] of Object.entries(item)) {
+        if (['__proto__', 'prototype', 'constructor'].includes(key)) throw new Error('Недопустимый ключ TGS');
+        inspect(child, depth + 1);
+      }
+    }
+  };
+  inspect(value, 0);
+  return value;
+}
 
 /**
  * Telegram нередко отдаёт фотографии как application/octet-stream. При
@@ -205,6 +243,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
   await app.register(fastifyWebsocket);
   await app.register(fastifyStatic, { root: publicDir });
+
+  app.get('/vendor/lottie.min.js', async (_request, reply) => reply
+    .header('cache-control', 'public, max-age=31536000, immutable')
+    .type('application/javascript; charset=utf-8')
+    .send(lottiePlayer));
 
   const sockets = new Set<WebSocket>();
   const socketIps = new Map<string, number>();
@@ -456,9 +499,12 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   app.post<{ Params: { id: string } }>('/api/conversations/:id/read', async (request, reply) => {
     const id = Number(request.params.id);
-    if (!store.getConversation(id)) return reply.code(404).send({ error: 'Диалог не найден' });
+    const before = store.getConversation(id);
+    if (!before) return reply.code(404).send({ error: 'Диалог не найден' });
     store.markRead(id);
-    return { ok: true };
+    const conversation = store.getConversation(id)!;
+    onOpened?.(conversation);
+    return { ok: true, conversation: decorate(conversation, store, operations) };
   });
 
   /** Присутствие для совместной работы не означает, что оператор забрал ответ у AI. */
@@ -1077,6 +1123,20 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
   });
 
+  app.get<{ Params: { id: string } }>('/api/attachments/:id/lottie', async (request, reply) => {
+    const attachment = store.getAttachment(Number(request.params.id));
+    if (!attachment?.local_path || attachment.media_type !== 'tgs_sticker') {
+      return reply.code(404).send({ error: 'TGS ещё не скачан' });
+    }
+    try {
+      const animation = parseSafeTgs(await readMediaFile(attachment.file_ref));
+      return reply.header('cache-control', 'private, no-store').send(animation);
+    } catch (err) {
+      log.warn(`TGS-вложение ${attachment.id} отклонено: ${(err as Error).message}`);
+      return reply.code(422).send({ error: 'TGS-анимация повреждена или небезопасна' });
+    }
+  });
+
   app.get('/api/health', async () => ({
     ok: true,
     kb: store.kbCount(),
@@ -1625,6 +1685,21 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       conversation: decorate(conversation, store, operations),
       message,
       attachments: store.attachmentsFor([message.id]),
+    }),
+  );
+  store.on('message_updated', ({ conversation, message }) =>
+    broadcast({
+      type: 'message_updated',
+      conversation: decorate(conversation, store, operations),
+      message,
+      attachments: store.attachmentsFor([message.id]),
+    }),
+  );
+  store.on('message_deleted', ({ conversation, message }) =>
+    broadcast({
+      type: 'message_deleted',
+      conversation: decorate(conversation, store, operations),
+      message,
     }),
   );
   store.on('conversation', (conversation) =>

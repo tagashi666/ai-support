@@ -960,8 +960,25 @@ async function mutate(path, options, okText) {
 let ticket = '';
 async function refreshTicket() {
   const data = await json('/api/ticket');
-  if (data?.ticket) ticket = data.ticket;
+  if (data?.ticket) {
+    ticket = data.ticket;
+    refreshMediaTicketUrls();
+  }
   return ticket;
+}
+
+const attachmentUrl = (id, suffix = '') => `/api/attachments/${id}${suffix}?token=${encodeURIComponent(ticket)}`;
+
+/** Обновляет ещё не загруженные lazy-media и ссылки после ротации билета. */
+function refreshMediaTicketUrls() {
+  for (const node of document.querySelectorAll('[data-attachment-id]')) {
+    const id = node.dataset.attachmentId;
+    const suffix = node.dataset.attachmentSuffix ?? '';
+    const url = attachmentUrl(id, suffix);
+    if (node instanceof HTMLAnchorElement) node.href = url;
+    else if (node instanceof HTMLImageElement && (!node.complete || !node.naturalWidth)) node.src = url;
+    else if (node instanceof HTMLVideoElement && node.error) node.src = url;
+  }
 }
 
 let conversations = [], current = null, suggestion = null, filter = 'all', listQuery = '', templates = [], settings = null;
@@ -1521,6 +1538,62 @@ function quoteBlock(m) {
   return el;
 }
 
+const messageSignature = (m, files = []) => JSON.stringify([
+  m.text, m.media_type, m.reply_to_external_id, m.reply_excerpt,
+  files.map((file) => [file.id, file.media_type, file.mime_type, file.bytes]),
+]);
+
+let lottiePlayerPromise = null;
+const tgsAnimations = new WeakMap();
+new MutationObserver((records) => {
+  for (const record of records) for (const removed of record.removedNodes) {
+    if (!(removed instanceof Element)) continue;
+    const boxes = removed.matches('.tgs-sticker') ? [removed] : [...removed.querySelectorAll('.tgs-sticker')];
+    for (const box of boxes) {
+      tgsAnimations.get(box)?.destroy();
+      tgsAnimations.delete(box);
+    }
+  }
+}).observe(document.body, { childList:true, subtree:true });
+
+function loadLottiePlayer() {
+  if (window.lottie) return Promise.resolve(window.lottie);
+  if (lottiePlayerPromise) return lottiePlayerPromise;
+  lottiePlayerPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = '/vendor/lottie.min.js'; script.async = true;
+    script.onload = () => window.lottie ? resolve(window.lottie) : reject(new Error('Lottie не загрузился'));
+    script.onerror = () => reject(new Error('Не удалось загрузить Lottie'));
+    document.head.append(script);
+  }).catch((error) => { lottiePlayerPromise = null; throw error; });
+  return lottiePlayerPromise;
+}
+
+async function renderTgsSticker(box, attachmentId) {
+  try {
+    let animationData = null;
+    for (let attempt = 0; attempt < 12 && box.isConnected; attempt += 1) {
+      const response = await fetch(attachmentUrl(attachmentId, '/lottie'));
+      if (response.ok) { animationData = await response.json(); break; }
+      if (response.status === 401) await refreshTicket();
+      if (![401, 404].includes(response.status)) throw new Error(`TGS: HTTP ${response.status}`);
+      await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, 750 * (attempt + 1))));
+    }
+    if (!animationData || !box.isConnected) throw new Error('TGS пока недоступен');
+    const player = await loadLottiePlayer();
+    if (!box.isConnected) return;
+    box.textContent = '';
+    const animation = player.loadAnimation({
+      container: box, renderer:'svg', loop:true, autoplay:true, animationData,
+      rendererSettings:{ progressiveLoad:true, preserveAspectRatio:'xMidYMid meet' },
+    });
+    tgsAnimations.set(box, animation);
+    box.classList.add('ready');
+  } catch {
+    if (box.isConnected) box.textContent = '[анимацию не удалось загрузить]';
+  }
+}
+
 function bubble(m, attachments = {}) {
   const wrap = document.createElement('div');
   wrap.className = `msg ${m.direction === 'in' ? 'in' : m.direction === 'note' ? 'note' : 'out'}`;
@@ -1535,8 +1608,9 @@ function bubble(m, attachments = {}) {
   if (m.text) el.append(document.createTextNode(m.text));
 
   const files = attachments[m.id] ?? [];
+  wrap.dataset.messageSignature = messageSignature(m, files);
   for (const a of files) {
-    const mediaUrl = `/api/attachments/${a.id}?token=${encodeURIComponent(ticket)}`;
+    const mediaUrl = attachmentUrl(a.id);
     if (a.media_type === 'photo' || a.media_type === 'sticker' || (a.media_type === 'animation' && a.mime_type === 'image/gif')) {
       // Пропорции знаем заранее — под картинку сразу отводится ровно
       // столько места, сколько она займёт. Ничего не сдвинется при загрузке.
@@ -1548,13 +1622,14 @@ function bubble(m, attachments = {}) {
       box.style.aspectRatio = String(ratio);
 
       const img = document.createElement('img');
+      img.dataset.attachmentId = String(a.id);
       img.src = mediaUrl;
       img.alt = 'вложение'; img.loading = 'lazy'; img.decoding = 'async';
       img.onload = () => img.classList.add('ready');
       let attempts = 0;
       img.onerror = () => {
         if (++attempts <= 8 && box.isConnected) {
-          setTimeout(() => { img.src = `${mediaUrl}&retry=${Date.now()}`; }, 1500);
+          setTimeout(() => { img.src = `${attachmentUrl(a.id)}&retry=${Date.now()}`; }, 1500);
           return;
         }
         box.replaceWith(Object.assign(document.createElement('div'),
@@ -1566,12 +1641,20 @@ function bubble(m, attachments = {}) {
         const actions = document.createElement('span'); actions.className = 'shot-actions';
         const edit = document.createElement('button'); edit.className = 'shot-edit'; edit.type = 'button';
         edit.textContent = 'Править'; edit.title = 'Создать отредактированную копию';
-        edit.onclick = (event) => { event.stopPropagation(); openImageEditorFromUrl(mediaUrl, a.original_name || 'image.png'); };
+        edit.onclick = (event) => { event.stopPropagation(); openImageEditorFromUrl(attachmentUrl(a.id), a.original_name || 'image.png'); };
         actions.append(edit); box.append(actions);
       }
       el.append(box);
+    } else if (a.media_type === 'tgs_sticker') {
+      const box = document.createElement('div');
+      box.className = 'tgs-sticker';
+      box.textContent = '[анимация загружается]';
+      box.style.aspectRatio = String(a.width && a.height ? a.width / a.height : 1);
+      el.append(box);
+      void renderTgsSticker(box, a.id);
     } else if (a.media_type === 'video' || a.media_type === 'video_note' || a.media_type === 'animation' || a.media_type === 'video_sticker') {
       const video = document.createElement('video'); video.className = 'media-video'; video.controls = true;
+      video.dataset.attachmentId = String(a.id);
       if (a.media_type === 'animation' || a.media_type === 'video_sticker') {
         video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
         if (a.media_type === 'video_sticker') video.controls = false;
@@ -1580,6 +1663,7 @@ function bubble(m, attachments = {}) {
     } else {
       const link = document.createElement('a');
       link.className = 'file-card'; link.target = '_blank'; link.rel = 'noopener'; link.href = mediaUrl;
+      link.dataset.attachmentId = String(a.id);
       const label = document.createElement('span'); label.textContent = a.original_name || `[${a.media_type ?? 'файл'}]`;
       const size = document.createElement('small'); size.textContent = a.bytes ? formatBytes(a.bytes) : 'скачать';
       link.append('⇩', label, size);
@@ -2253,7 +2337,7 @@ async function open(id) {
   void loadUnifiedProfile(id);
 
   // Всё, что ходит в сеть, — после отрисовки и без ожидания.
-  if (canWrite()) void api(`/api/conversations/${id}/read`, { method: 'POST' }).then(refreshSoon);
+  markOpenConversationRead(id);
   if (data.customerStale) {
     void json(`/api/conversations/${id}/customer`).then((res) => {
       if (res && ticket === openToken) renderCustomer(res.customer);
@@ -2266,6 +2350,26 @@ let refreshTimer = null;
 const refreshSoon = () => { if (!refreshTimer) refreshTimer = setTimeout(() => { refreshTimer = null; refresh(); }, 400); };
 let refreshPromise = null, refreshAgain = false;
 let currentSyncPromise = null, currentSyncId = null;
+let readTimer = null;
+
+function markOpenConversationRead(id = current?.id) {
+  if (!canWrite() || !id || current?.id !== id) return;
+  current = { ...current, unread:0 };
+  const index = conversations.findIndex((item) => item.id === id);
+  if (index >= 0) conversations[index] = { ...conversations[index], unread:0 };
+  renderList();
+  clearTimeout(readTimer);
+  readTimer = setTimeout(async () => {
+    if (current?.id !== id) return;
+    try {
+      const response = await api(`/api/conversations/${id}/read`, { method:'POST' });
+      const data = response.ok ? await response.json().catch(() => null) : null;
+      if (data?.conversation) mergeLiveConversation(data.conversation);
+    } catch (error) {
+      console.warn('Не удалось подтвердить прочтение диалога', error);
+    }
+  }, 120);
+}
 
 /**
  * HTTP-reconciliation открытой переписки. WebSocket остаётся быстрым путём,
@@ -2291,20 +2395,30 @@ async function syncCurrentMessages(id = current?.id) {
       thread.dataset.conversationId = String(id);
     }
     const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 140;
-    const known = new Set([...inner.querySelectorAll('.msg[data-message-id]')]
-      .map((node) => Number(node.dataset.messageId)));
+    const serverIds = new Set(data.messages.map((message) => message.id));
+    for (const node of inner.querySelectorAll('.msg[data-message-id]')) {
+      if (!serverIds.has(Number(node.dataset.messageId))) node.remove();
+    }
     if (inner.querySelector('.empty') && data.messages.length) inner.innerHTML = '';
     let appended = 0;
     for (const message of data.messages) {
-      if (known.has(message.id)) continue;
-      inner.append(bubble(message, data.attachments));
-      known.add(message.id);
-      appended += 1;
+      const existing = inner.querySelector(`.msg[data-message-id="${message.id}"]`);
+      const files = data.attachments[message.id] ?? [];
+      if (existing) {
+        if (existing.dataset.messageSignature !== messageSignature(message, files)) {
+          existing.replaceWith(bubble(message, data.attachments));
+        }
+      } else {
+        inner.append(bubble(message, data.attachments));
+        appended += 1;
+      }
     }
+    if (!data.messages.length) inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
     current = data.conversation;
     suggestion = data.suggestion;
     paintHeader(current); renderWindow(); renderSuggestion(); renderAiNote();
     renderCollaboration(current.collaboration);
+    if (appended && data.messages.some((message) => message.direction === 'in')) markOpenConversationRead(id);
     if (appended && nearBottom) requestAnimationFrame(() => { thread.scrollTop = thread.scrollHeight; });
     else if (appended) toast('Новые сообщения ниже по переписке');
   })();
@@ -2319,12 +2433,14 @@ async function refresh() {
     if (!data) return;
     const openId = current?.id;
     const previousLastMessageAt = Number(current?.last_message_at ?? 0);
+    const previousUpdatedAt = Number(current?.updated_at ?? 0);
     conversations = data.conversations;
     if (current) current = conversations.find(c => c.id === current.id) ?? current;
     renderList();
     // Контрольный опрос раньше обновлял только левый список. Если push-кадр
     // потерялся, открытая переписка оставалась старой до повторного входа.
-    if (openId && Number(current?.last_message_at ?? 0) > previousLastMessageAt) {
+    if (openId && (Number(current?.last_message_at ?? 0) > previousLastMessageAt
+      || Number(current?.updated_at ?? 0) > previousUpdatedAt)) {
       void syncCurrentMessages(openId);
     }
   })();
@@ -3886,8 +4002,25 @@ function connect() {
       }
       if (nearBottom || frame.message.direction === 'out') requestAnimationFrame(() => { $('thread').scrollTop = $('thread').scrollHeight; });
       else toast('Новое сообщение ниже по переписке');
-      if (frame.message.direction === 'in') { suggestion = null; renderSuggestion(); }
+      if (frame.message.direction === 'in') {
+        suggestion = null; renderSuggestion(); markOpenConversationRead(frame.conversation.id);
+      }
       renderWindow(); renderAiNote();
+    }
+    if (frame.type === 'message_updated' && current?.id === frame.conversation.id) {
+      const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
+        ? $('thread').querySelector('.thread-inner') : null;
+      const existing = inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`);
+      if (existing) existing.replaceWith(bubble(frame.message, frame.attachments ?? {}));
+      else void syncCurrentMessages(frame.conversation.id);
+    }
+    if (frame.type === 'message_deleted' && current?.id === frame.conversation.id) {
+      const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
+        ? $('thread').querySelector('.thread-inner') : null;
+      inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`)?.remove();
+      if (inner && !inner.querySelector('.msg[data-message-id]')) {
+        inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
+      }
     }
     if (frame.type === 'suggestion' && current?.id === frame.conversation.id) { suggestion = frame.suggestion; renderSuggestion(); }
     refreshSoon();

@@ -177,6 +177,7 @@ async function main(): Promise<void> {
         'edited_business_message',
         'deleted_business_messages',
         'message',
+        'edited_message',
       ],
       onStart: (me) => {
         const source = config.telegramBots[index];

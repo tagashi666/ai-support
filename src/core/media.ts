@@ -24,6 +24,7 @@ function downloadedMediaMime(bytes: Buffer, mediaType: string | null): string | 
   }
   if (bytes.length >= 12 && bytes.subarray(4, 8).toString('ascii') === 'ftyp') return 'video/mp4';
   if (bytes.length >= 4 && bytes.subarray(0, 4).toString('ascii') === 'OggS') return 'audio/ogg';
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) return 'application/gzip';
   return undefined;
 }
 
@@ -203,10 +204,9 @@ export class MediaFetcher {
     try {
       await mkdir(config.mediaDir, { recursive: true });
       for (const item of this.store.pendingAttachments()) {
-        this.store.bumpAttachmentAttempt(item.id);
         try {
           const bytes = await this.fetch(item.file_ref);
-          if (!bytes) continue;
+          if (!bytes) throw new Error('Источник вложения временно недоступен');
           if (this.store.mediaBytes() + bytes.byteLength > config.mediaMaxTotalBytes) {
             throw new Error(`Каталог вложений достиг лимита ${config.mediaMaxTotalBytes} байт`);
           }
@@ -223,7 +223,9 @@ export class MediaFetcher {
             await this.transcribe(item.id, item.message_id, bytes, item.media_type ?? 'voice');
           }
         } catch (err) {
+          const nextAttemptAt = this.store.deferAttachment(item.id, err);
           log.debug(`Вложение ${item.file_ref} не скачалось`, err);
+          log.debug(`Следующая попытка вложения ${item.id}: ${new Date(nextAttemptAt).toISOString()}`);
         }
       }
     } finally {

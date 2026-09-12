@@ -766,11 +766,15 @@ store.recordOutbound({ conversationId: metric.id, author: 'agent', text: 'пос
 const lastIn = store.lastInboundMessage(metric.id);
 check('последнее входящее найдено верно', lastIn?.direction === 'in' && lastIn.external_msg_id === 'm2', lastIn?.external_msg_id);
 
-// 5. Мёртвые вложения перестают ретраиться.
+// 5. Вложения ретраятся бесконечно, но с сохраняемым backoff.
 const holder = store.recordInbound({ channel: 'tg_dm', externalId: 'att', text: 'фото', externalMsgId: 'a1', sentAt: Date.now() })!;
 const attId = store.addAttachment(holder.message.id, 'photo', 'tg:dead-file');
-for (let i = 0; i < 5; i += 1) store.bumpAttachmentAttempt(attId);
-check('вложение бросается после 5 неудач', !store.pendingAttachments().some((a) => a.id === attId));
+let retryAt = Date.now();
+for (let i = 0; i < 7; i += 1) retryAt = store.deferAttachment(attId, new Error('temporary'), retryAt);
+check('вложение не молотит источник до истечения backoff',
+  !store.pendingAttachments(20, retryAt - 1).some((a) => a.id === attId));
+check('вложение остаётся в очереди после пяти неудач',
+  store.pendingAttachments(20, retryAt).some((a) => a.id === attId));
 
 // ---------- ретраи AI ----------
 console.log('\n[ поведение при лимитах ]');

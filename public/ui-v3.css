@@ -452,6 +452,8 @@ button:active:not(:disabled) { transform:translateY(1px); }
 .shot-actions { position:absolute; top:6px; right:6px; }
 .shot-edit { min-height:28px; padding:0 8px; color:var(--text); border:1px solid rgba(255,255,255,.18); border-radius:6px; background:rgba(28,31,35,.78); font-size:11px; }
 .media-video { max-width:100%; max-height:320px; border-radius:8px; }
+.tgs-sticker { width:min(240px,100%); max-height:300px; margin:6px 0 0; display:grid; place-items:center; overflow:hidden; color:var(--text-tertiary); border-radius:8px; background:var(--canvas-muted); font:500 11px/1.4 var(--font-ui); }
+.tgs-sticker svg { width:100%!important; height:100%!important; display:block; }
 .file-card { max-width:300px; margin-top:6px; padding:8px 10px; display:grid; gap:2px; color:var(--text); border-left:2px solid var(--accent); background:var(--canvas-muted); text-decoration:none; }
 .file-card span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .file-card small { color:var(--text-tertiary); }
