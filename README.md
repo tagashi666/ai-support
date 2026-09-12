@@ -1,4 +1,4 @@
-# AI Support 2.3
+# AI Support 2.4.1
 
 [![Версия](https://img.shields.io/github/v/release/tagashi666/ai-support?label=версия)](https://github.com/tagashi666/ai-support/releases/latest)
 [![CI](https://github.com/tagashi666/ai-support/actions/workflows/ci.yml/badge.svg)](https://github.com/tagashi666/ai-support/actions/workflows/ci.yml)
@@ -9,9 +9,24 @@
 и тикетов Bedolaga. Панель объединяет переписки, операторов, шаблоны, базу
 знаний, SLA, статистику, серверы Remnawave и безопасного AI-помощника.
 
-Текущая стабильная версия — **2.4.0**. Заметки о выпуске находятся в
+Текущая стабильная версия — **2.4.1**. Заметки о выпуске находятся в
 [CHANGELOG.md](CHANGELOG.md), готовые сборки — в разделе
 [Releases](https://github.com/tagashi666/ai-support/releases).
+
+## Главное в версии 2.4.1
+
+- **Цельное рабочее пространство.** Interface shell, inbox, SLA, база знаний,
+  аналитика, команда и настройки заново собраны как плотное профессиональное
+  desktop-приложение без шаблонной сетки dashboard-карточек.
+- **Отдельная дизайн-система v3.** Активный UI использует системную
+  типографику, семантические палитры, строгий spacing, спокойные separators и
+  единые состояния controls в светлой, тёмной и системной темах.
+- **Master/detail для поддержки.** Список обращений и переписка остаются в
+  рабочем фокусе, а сведения о клиенте открываются контекстным inspector поверх
+  основного пространства.
+- **Проверенная эргономика.** Таблицы, графики, формы и toolbars адаптируются к
+  ширинам 1024–2560 px; поддержаны keyboard navigation, focus trap, Escape,
+  Ctrl/Cmd+K и `prefers-reduced-motion`.
 
 ## Главное в версии 2.3
 

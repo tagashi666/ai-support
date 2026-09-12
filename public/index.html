@@ -621,7 +621,7 @@ tr:last-child td { border-bottom:0; }
   .bed-extend { justify-content:flex-start; }
 }
 </style>
-<link rel="stylesheet" href="/ui-v2.css">
+<link rel="stylesheet" href="/ui-v3.css">
 </head>
 <body>
 
@@ -647,97 +647,104 @@ tr:last-child td { border-bottom:0; }
 
 <div class="app" id="app" data-context="on" hidden>
 
-  <aside class="sidebar"><div class="grip" id="gripSide" style="right:-4px"></div>
-    <div class="brand">
-      <span class="brand-copy"><b>AI Support</b></span>
+  <aside class="sidebar"><div class="grip" id="gripSide"></div>
+    <header class="brand">
+      <span class="brand-copy"><b>AI Support</b><small>Операторская</small></span>
       <span class="pulse" id="pulse" title="Соединение с сервером"></span>
-    </div>
-    <div class="side-cap">Работа</div>
-    <button class="nav" data-view="inbox" aria-current="true" aria-label="Инбокс">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 14h4l2 2h4l2-2h4"/></svg></span><span class="nav-label">Инбокс</span><span class="count" id="cntInbox">0</span>
+    </header>
+    <button class="nav search-nav" id="globalSearch" aria-label="Глобальный поиск">
+      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></span><span class="nav-label">Найти</span><kbd class="count" id="globalShortcut">Ctrl+K</kbd>
     </button>
-    <button class="nav" data-view="queue" aria-label="SLA-очередь">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span class="nav-label">Очередь и SLA</span><span class="count" id="cntOverdue"></span>
-    </button>
-    <button class="nav" data-view="kb" aria-label="База знаний">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span><span class="nav-label">База знаний</span><span class="count" id="cntKb">0</span>
-    </button>
-    <div class="side-cap">Сервис</div>
-    <button class="nav" id="globalSearch" aria-label="Глобальный поиск">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg></span><span class="nav-label">Поиск</span><span class="count" id="globalShortcut">Ctrl+K</span>
-    </button>
-    <button class="nav" data-view="lab" aria-label="Тестирование AI">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M8 14h8"/></svg></span><span class="nav-label">Тестирование AI</span>
-    </button>
-    <button class="nav" data-view="nodes" aria-label="Серверы">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"/></svg></span><span class="nav-label">Серверы</span><span class="count" id="cntNodes"></span>
-    </button>
-    <button class="nav" data-view="stats" aria-label="Статистика">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span><span class="nav-label">Статистика</span>
-    </button>
-    <button class="nav" data-view="team" aria-label="Команда и аудит">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 19c.7-3.6 2.7-6 6-6s5.3 2.4 6 6M15 15c2.8 0 4.5 1.4 5 4"/></svg></span><span class="nav-label">Команда</span>
-    </button>
-    <button class="nav" data-view="diagnostics" aria-label="Диагностика">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-5 4 10 2-5h5M4 4h16v16H4z"/></svg></span><span class="nav-label">Диагностика</span>
-    </button>
-    <button class="nav" data-view="settings" aria-label="Настройки">
-      <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span><span class="nav-label">Настройки</span>
-    </button>
+    <nav class="primary-nav" aria-label="Основная навигация">
+      <div class="side-cap">Работа</div>
+      <button class="nav" data-view="inbox" aria-current="true" aria-label="Входящие">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 14h4l2 2h4l2-2h4"/></svg></span><span class="nav-label">Входящие</span><span class="count" id="cntInbox">0</span>
+      </button>
+      <button class="nav" data-view="queue" aria-label="Контроль SLA">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span class="nav-label">Контроль SLA</span><span class="count" id="cntOverdue"></span>
+      </button>
+      <button class="nav" data-view="kb" aria-label="База знаний">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span><span class="nav-label">База знаний</span><span class="count" id="cntKb">0</span>
+      </button>
+      <div class="side-cap">Инструменты</div>
+      <button class="nav" data-view="lab" aria-label="AI-студия">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M8 14h8"/></svg></span><span class="nav-label">AI-студия</span>
+      </button>
+      <button class="nav" data-view="nodes" aria-label="Инфраструктура">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"/></svg></span><span class="nav-label">Инфраструктура</span><span class="count" id="cntNodes"></span>
+      </button>
+      <button class="nav" data-view="stats" aria-label="Аналитика">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span><span class="nav-label">Аналитика</span>
+      </button>
+      <div class="side-cap">Управление</div>
+      <button class="nav" data-view="team" aria-label="Команда">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 19c.7-3.6 2.7-6 6-6s5.3 2.4 6 6M15 15c2.8 0 4.5 1.4 5 4"/></svg></span><span class="nav-label">Команда</span>
+      </button>
+      <button class="nav" data-view="diagnostics" aria-label="Состояние системы">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h3l2-5 4 10 2-5h5M4 4h16v16H4z"/></svg></span><span class="nav-label">Состояние системы</span>
+      </button>
+      <button class="nav" data-view="settings" aria-label="Настройки">
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span><span class="nav-label">Настройки</span>
+      </button>
+    </nav>
     <div class="grow"></div>
-    <div class="side-cap">Сейчас</div>
-    <div id="pulseBoard" class="board"></div>
-    <div class="sidebar-foot"><span class="foot" id="ver">—</span><button class="lock-btn" id="lockBtn" title="Выйти из панели" aria-label="Выйти из панели"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg></button></div>
+    <div id="pulseBoard" class="board" hidden></div>
+    <footer class="sidebar-foot"><span><b>Владелец</b><small id="ver">—</small></span><button class="lock-btn" id="lockBtn" title="Выйти из панели" aria-label="Выйти из панели"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg></button></footer>
   </aside>
 
   <main class="main">
 
     <section class="view" id="view-inbox">
-      <div class="split" id="inboxSplit" data-pane="list">
-        <div class="col left">
-          <div class="queue-head">
+      <div class="split inbox-workspace" id="inboxSplit" data-pane="list">
+        <section class="col left inbox-list-pane" aria-label="Список обращений">
+          <header class="queue-head">
             <div class="queue-top">
-              <div><span class="bar-kicker">Рабочая очередь</span><h2>Диалоги</h2></div>
+              <div><span class="workspace-label">Рабочая очередь</span><h1>Входящие</h1></div>
+              <span class="live-count"><i></i><span id="inboxLiveLabel">в работе</span></span>
             </div>
             <label class="queue-search" for="listSearch">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
               <span class="sr-only">Поиск диалогов</span>
-              <input type="text" id="listSearch" placeholder="Найти клиента или диалог…" autocomplete="off">
+              <input type="text" id="listSearch" placeholder="Клиент, сообщение или канал" autocomplete="off">
               <kbd>/</kbd>
             </label>
             <div class="folder-bar">
               <div class="folder-tabs" id="filters" aria-label="Папки диалогов">
                 <button data-filter="all" aria-pressed="true">Все</button>
-                <button data-filter="waiting" aria-pressed="false">Ждут</button>
+                <button data-filter="waiting" aria-pressed="false">Без ответа</button>
                 <button data-filter="hot" aria-pressed="false">Важные</button>
               </div>
               <button class="folder-manage" id="manageFolders" title="Настроить папки" aria-label="Настроить папки">+</button>
             </div>
-          </div>
+          </header>
           <div class="scroll-y" id="list" role="listbox" aria-label="Диалоги"></div>
-          <div class="grip" id="gripList" style="right:-4px"></div>
-        </div>
+          <div class="grip" id="gripList"></div>
+        </section>
 
-        <div class="col conversation">
-          <div class="bar conversation-head">
+        <section class="col conversation conversation-pane" aria-label="Текущее обращение">
+          <header class="conversation-head">
             <button class="mobile-back" id="backToList" title="Назад к диалогам" aria-label="Назад к диалогам">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>
             </button>
             <span class="title-avatar" id="titleAvatar" aria-hidden="true">—</span>
             <div class="title-stack">
-              <span class="bar-kicker">Текущий диалог</span>
+              <span class="workspace-label">Текущее обращение</span>
               <h1 id="title">Диалог не выбран</h1>
               <span class="note mono" id="subtitle"></span>
             </div>
-            <div class="right">
-              <button class="icon-btn inspector-toggle" id="contextToggle" title="Открыть карточку клиента" aria-label="Открыть карточку клиента" aria-expanded="false">
+            <div class="conversation-actions">
+              <label class="compact-field"><span>Статус</span><select class="ctl" id="statusSel"><option value="open">Открыт</option><option value="pending">Ждёт клиента</option><option value="resolved">Решён</option></select></label>
+              <label class="compact-field ai-field"><span>AI</span><select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="shadow">Тень</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></label>
+              <button class="btn toolbar-btn" id="escBtn">Важное</button>
+              <button class="btn primary toolbar-btn" id="handoffBtn">Передать</button>
+              <button class="icon-btn inspector-toggle" id="contextToggle" title="Открыть детали обращения" aria-label="Открыть детали обращения" aria-expanded="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M6 19c.7-3.1 2.7-5 6-5s5.3 1.9 6 5M4 3h16v18H4z"/></svg>
               </button>
             </div>
-          </div>
+          </header>
+          <div class="ai-mode-line" id="aiModeNote"></div>
           <div class="thread" id="thread" aria-live="polite"><div class="thread-inner"><div class="empty empty-thread">
-            <span class="empty-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 16.7A8 8 0 1 1 8.3 20L4 21l1-4.3Z"/></svg></span>
-            <b>Выберите диалог</b><span>Переписка и контекст клиента появятся здесь.</span>
+            <b>Выберите обращение</b><span>Переписка откроется в рабочей области.</span>
           </div></div></div>
           <div class="suggest-wrap" id="suggestBox"></div>
           <div class="composer" id="composer" hidden>
@@ -762,148 +769,110 @@ tr:last-child td { border-bottom:0; }
               <div class="err" id="err" role="alert"></div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
     </section>
 
     <section class="view" id="view-kb" hidden>
-      <div class="bar">
-        <div class="bar-title">
-          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span>
-          <div><span class="bar-kicker">Материалы для ответов</span><h1>База знаний</h1></div>
-        </div>
-        <div class="right">
-          <span class="note" id="kbHint"></span>
-          <div class="seg" id="kbTabs">
-            <button data-tab="kb" aria-pressed="true">Рабочие</button>
-            <button data-tab="draft" aria-pressed="false">Черновики</button>
-            <button data-tab="learning" aria-pressed="false">На проверке</button>
+      <header class="workspace-header">
+        <div><h1>База знаний</h1><p id="kbHint"></p></div>
+        <div class="workspace-actions"><button class="btn" id="mineBtn">Собрать из чатов</button><button class="btn primary" id="newDoc"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>Новая статья</button></div>
+      </header>
+      <div class="knowledge-workspace">
+        <aside class="knowledge-nav" aria-label="Разделы базы знаний">
+          <span class="pane-label">Коллекции</span>
+          <div class="section-tabs" id="kbTabs">
+            <button data-tab="kb" aria-pressed="true"><span>Опубликовано</span><small>Используется AI</small></button>
+            <button data-tab="draft" aria-pressed="false"><span>Черновики</span><small>Требуют редакции</small></button>
+            <button data-tab="learning" aria-pressed="false"><span>На проверке</span><small>Кандидаты из диалогов</small></button>
           </div>
-          <button class="btn" id="newDoc"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v12M4 10h12"/></svg>Статья</button>
-          <button class="btn" id="mineBtn">Собрать из чатов</button>
-        </div>
+          <div class="knowledge-note"><b>Порядок публикации</b><p>Черновик не влияет на ответы, пока руководитель не опубликует его.</p></div>
+        </aside>
+        <div class="knowledge-main"><div class="list-caption"><span>Материалы</span><span>Название и состояние</span></div><div id="docs"></div><div id="mineLog"></div></div>
       </div>
-      <div class="page"><div class="page-inner"><div class="grid" id="docs"></div><div id="mineLog"></div></div></div>
     </section>
 
     <section class="view" id="view-queue" hidden>
-      <div class="bar"><div class="bar-title">
-        <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span>
-        <div><span class="bar-kicker">Приоритеты и сроки</span><h1>Очередь и SLA</h1></div>
-      </div><div class="right"><button class="btn" id="saveFilterBtn">Сохранить фильтр</button><button class="btn" id="queueRefresh">Обновить</button></div></div>
-      <div class="page"><div class="page-inner"><div id="savedFilters"></div><div id="slaPolicies"></div><div id="queueBody"></div></div></div>
+      <header class="workspace-header">
+        <div><h1>Контроль SLA</h1><p>Обращения, требующие решения команды</p></div>
+        <div class="workspace-actions"><button class="btn" id="saveFilterBtn">Сохранить вид</button><button class="icon-btn refresh-action" id="queueRefresh" aria-label="Обновить очередь" title="Обновить"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 7a6 6 0 1 0 .3 5M15 3v4h-4"/></svg></button></div>
+      </header>
+      <div class="queue-workspace">
+        <aside class="queue-sidebar"><div id="savedFilters"></div><div id="slaPolicies"></div></aside>
+        <div class="queue-main" id="queueBody"></div>
+      </div>
     </section>
 
     <section class="view" id="view-lab" hidden>
-      <div class="bar">
-        <div class="bar-title">
-          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v5l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3M8 14h8"/></svg></span>
-          <div><span class="bar-kicker">Без отправки клиенту</span><h1>Тестирование AI</h1></div>
-        </div>
-        <div class="right"><span class="note">Тот же промпт и база, что в бою</span><button class="btn" id="pingBtn">Проверить связь</button></div>
+      <header class="workspace-header">
+        <div><h1>AI-студия</h1><p>Безопасная проверка боевого промпта и базы знаний</p></div>
+        <div class="workspace-actions"><span class="note" id="labNote"></span><button class="btn" id="pingBtn">Проверить провайдера</button></div>
+      </header>
+      <div class="lab-workspace">
+        <section class="lab-prompt-pane">
+          <div class="pane-heading"><span class="pane-label">Сценарий</span><h2>Запрос клиента</h2><p>Ответ никуда не отправится.</p></div>
+          <label class="lab-editor" for="labInput"><span>Сообщение</span><textarea id="labInput" rows="12" placeholder="Например: не подключается на iPhone — что проверить?"></textarea></label>
+          <button class="btn primary" id="labRun"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 8 6-8 6V4Z"/></svg>Запустить проверку</button>
+        </section>
+        <section class="lab-result-pane"><div class="pane-heading"><span class="pane-label">Результат</span><h2>Решение модели</h2><p>Черновик, маршрут и доказательства.</p></div><div id="labOut"><div class="empty">Результат появится после запуска.</div></div></section>
       </div>
-      <div class="page"><div class="page-inner lab-layout">
-        <section class="work-card">
-          <div class="work-card-head"><span class="step">01</span><div><b>Запрос клиента</b><span>Введите реальный вопрос или тестовый сценарий</span></div></div>
-          <div class="frow">
-            <label for="labInput">Вопрос клиента</label>
-            <textarea id="labInput" rows="7" placeholder="Например: не подключается на iPhone — что проверить?"></textarea>
-          </div>
-          <div class="work-actions">
-            <button class="btn primary" id="labRun"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 4 8 6-8 6V4Z"/></svg>Прогнать сценарий</button>
-            <span class="note" id="labNote"></span>
-          </div>
-        </section>
-        <section class="work-card result-card">
-          <div class="work-card-head"><span class="step">02</span><div><b>Результат</b><span>Черновик, уверенность и найденные источники</span></div></div>
-          <div id="labOut"><div class="empty"><span>Результат появится после запуска.</span></div></div>
-        </section>
-      </div></div>
     </section>
 
     <section class="view" id="view-nodes" hidden>
-      <div class="bar">
-        <div class="bar-title">
-          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="6" rx="2"/><rect x="4" y="14" width="16" height="6" rx="2"/><path d="M8 7h.01M8 17h.01M12 7h5M12 17h5"/></svg></span>
-          <div><span class="bar-kicker">Инфраструктура</span><h1>Серверы</h1></div>
-        </div>
-        <div class="right"><span class="note" id="nodesNote"></span><button class="btn" id="nodesRefresh"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 7a6 6 0 1 0 .3 5M15 3v4h-4"/></svg>Обновить</button></div>
-      </div>
-      <div class="page"><div class="page-inner" id="nodesBody"></div></div>
+      <header class="workspace-header"><div><h1>Инфраструктура</h1><p>Состояние VPN-узлов и имена, доступные оператору</p></div><div class="workspace-actions"><span class="note" id="nodesNote"></span><button class="btn" id="nodesRefresh"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 7a6 6 0 1 0 .3 5M15 3v4h-4"/></svg>Обновить</button></div></header>
+      <div class="workspace-scroll"><div class="wide-content" id="nodesBody"></div></div>
     </section>
 
     <section class="view" id="view-stats" hidden>
-      <div class="bar">
-        <div class="bar-title">
-          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"/></svg></span>
-          <div><span class="bar-kicker">Качество поддержки</span><h1>Статистика</h1></div>
-        </div>
-        <div class="right"><div class="seg" id="statsRange">
+      <header class="workspace-header">
+        <div><h1>Аналитика</h1><p>Скорость ответа, нагрузка и участие AI</p></div>
+        <div class="workspace-actions"><div class="seg" id="statsRange">
           <button data-days="7" aria-pressed="false">7 дней</button>
           <button data-days="14" aria-pressed="true">14 дней</button>
           <button data-days="30" aria-pressed="false">30 дней</button>
           <button data-days="90" aria-pressed="false">90 дней</button>
         </div></div>
-      </div>
-      <div class="page"><div class="page-inner" id="stats"></div></div>
+      </header>
+      <div class="workspace-scroll"><div class="wide-content" id="stats"></div></div>
     </section>
 
     <section class="view" id="view-team" hidden>
-      <div class="bar"><div class="bar-title">
-        <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 19c.7-3.6 2.7-6 6-6s5.3 2.4 6 6M15 15c2.8 0 4.5 1.4 5 4"/></svg></span>
-        <div><span class="bar-kicker">Доступ и история действий</span><h1>Команда</h1></div>
-      </div><div class="right"><span class="note" id="meLabel"></span><button class="btn primary" id="newOperator">Добавить оператора</button></div></div>
-      <div class="page"><div class="page-inner"><div id="operatorsBody"></div><div id="auditBody"></div></div></div>
+      <header class="workspace-header"><div><h1>Команда</h1><p id="meLabel"></p></div><div class="workspace-actions"><button class="btn primary" id="newOperator">Добавить оператора</button></div></header>
+      <div class="subnav" id="teamTabs"><button data-team-tab="operators" aria-pressed="true">Сотрудники</button><button data-team-tab="audit" aria-pressed="false">Журнал действий</button></div>
+      <div class="workspace-scroll team-workspace" data-team-view="operators"><div class="wide-content"><div id="operatorsBody"></div><div id="auditBody" hidden></div></div></div>
     </section>
 
     <section class="view" id="view-diagnostics" hidden>
-      <div class="bar"><div class="bar-title">
-        <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 12h3l2-5 4 10 2-5h5M4 4h16v16H4z"/></svg></span>
-        <div><span class="bar-kicker">Самопроверка без секретов</span><h1>Диагностика</h1></div>
-      </div><div class="right"><button class="btn" id="diagRefresh">Повторить проверку</button></div></div>
-      <div class="page"><div class="page-inner" id="diagnosticsBody"></div></div>
+      <header class="workspace-header"><div><h1>Состояние системы</h1><p>Каналы, интеграции и фоновые процессы</p></div><div class="workspace-actions"><button class="btn" id="diagRefresh">Повторить проверку</button></div></header>
+      <div class="workspace-scroll"><div class="wide-content" id="diagnosticsBody"></div></div>
     </section>
 
     <section class="view" id="view-settings" hidden>
-      <div class="bar">
-        <div class="bar-title">
-          <span class="page-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.6v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></svg></span>
-          <div><span class="bar-kicker">Персонализация и AI</span><h1>Настройки</h1></div>
+      <header class="workspace-header"><div><h1>Настройки</h1><p>Рабочая среда, источники и поведение AI</p></div><div class="workspace-actions"><span class="save-state" role="status" aria-live="polite"><i></i><span class="note" id="setHint"></span></span></div></header>
+      <div class="settings-workspace">
+        <nav class="settings-nav" aria-label="Разделы настроек"><a href="#settings-appearance">Оформление</a><a href="#settings-sources">Источники</a><a href="#settings-ai">AI-помощник</a><a href="#settings-update">Обновление</a><a href="#settings-health">Интеграции</a></nav>
+        <div class="settings-content-scroll">
+          <div class="settings-content-column">
+            <section class="settings-section" id="settings-appearance"><div class="section-copy"><h2>Рабочая среда</h2><p>Светлая, тёмная или системная схема для этого браузера.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Изменение применяется сразу</span></header><div class="themes" id="themePick"></div></div><div id="accentPick" hidden></div></div></section>
+            <section class="settings-section" id="settings-sources"><div class="section-copy"><h2>Источники и папки</h2><p>Каналы можно объединять в пересекающиеся рабочие очереди.</p></div><div class="source-folders" id="sourceFolders"><span class="hint">Загружаю источники…</span></div></section>
+            <section class="settings-section" id="settings-ai"><div class="section-copy"><h2>Помощник оператора</h2><p>Правила подготовки и автоматической отправки ответов.</p></div><div><div class="settings-content" id="aiSettings"></div><p class="hint settings-hint">Ключи, адреса и токены хранятся в <span class="mono">.env</span> на сервере.</p></div></section>
+            <section class="settings-section" id="settings-update"><div class="section-copy"><h2>Обновление</h2><p>Проверка релизов и безопасная заявка на установку.</p></div><div class="update-panel" id="updatePanel"><span class="hint">Проверяю обновления…</span></div></section>
+            <section class="settings-section" id="settings-health"><div class="section-copy"><h2>Интеграции</h2><p>Подключения, база и системные проверки.</p></div><div class="health-grid" id="health"></div></section>
+          </div>
         </div>
-        <div class="right"><span class="save-state" role="status" aria-live="polite"><i></i><span class="note" id="setHint"></span></span></div>
       </div>
-      <div class="page"><div class="page-inner">
-        <div class="narrow">
-          <section class="settings-section"><div class="section-copy"><span class="cap">Оформление</span><h2>Рабочая среда</h2><p>Светлая, тёмная или системная схема. Единый акцент сохраняет визуальную иерархию.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Настройка действует только в этом браузере</span></header><div class="themes" id="themePick"></div></div><div id="accentPick" hidden></div></div></section>
-          <section class="settings-section"><div class="section-copy"><span class="cap">Инбокс</span><h2>Источники и папки</h2><p>Несколько ботов, Business-аккаунтов и панелей можно объединять в пересекающиеся папки.</p></div><div class="source-folders" id="sourceFolders"><span class="hint">Загружаю источники…</span></div></section>
-          <section class="settings-section"><div class="section-copy"><span class="cap">Поведение AI</span><h2>Помощник оператора</h2><p>Как AI предлагает и отправляет ответы.</p></div><div><div class="settings-content" id="aiSettings"></div><p class="hint settings-hint">Ключи, адреса и токены живут в <span class="mono">.env</span> на сервере — из панели они не меняются.</p></div></section>
-          <section class="settings-section"><div class="section-copy"><span class="cap">Версия</span><h2>Обновление</h2><p>Проверка релизов и безопасная заявка на установку.</p></div><div class="update-panel" id="updatePanel"><span class="hint">Проверяю обновления…</span></div></section>
-          <section class="settings-section"><div class="section-copy"><span class="cap">Состояние</span><h2>Интеграции</h2><p>Подключения, база и системные проверки.</p></div><div class="health-grid" id="health"></div></section>
-        </div>
-      </div></div>
     </section>
 
   </main>
 
-  <aside class="context" id="context"><div class="grip" id="gripCtx" style="left:-4px"></div>
+  <aside class="context" id="context"><div class="grip" id="gripCtx"></div>
     <div class="context-head">
-      <div><span class="bar-kicker">Контекст</span><h2>Карточка клиента</h2><p>Управление диалогом и подпиской</p></div>
+      <div><span class="workspace-label">Контекст</span><h2>Детали обращения</h2><p>Клиент, доступ и связанные данные</p></div>
       <button class="icon-btn context-close" id="contextClose" title="Закрыть" aria-label="Закрыть карточку клиента">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </div>
-    <details class="fold" open data-fold="dialog">
-      <summary>Диалог<span class="tag" id="foldDialog"></span></summary>
-      <div class="group">
-        <div class="item"><span class="lbl">Статус</span>
-          <select class="ctl" id="statusSel"><option value="open">Открыт</option><option value="pending">Ждёт клиента</option><option value="resolved">Решён</option></select></div>
-        <div class="item"><span class="lbl">Режим AI</span>
-          <select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="shadow">Тень (только журнал)</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></div>
-        <div class="item"><span class="hint" id="aiModeNote"></span></div>
-        <div class="item context-action"><button class="btn wide" id="escBtn">Пометить важным</button></div>
-        <div class="item context-action"><button class="btn primary wide" id="handoffBtn">Передать человеку</button></div>
-      </div>
-    </details>
+    <div class="inspector-summary"><span>Состояние обращения</span><b id="foldDialog">—</b></div>
     <details class="fold" open data-fold="team">
       <summary>Совместная работа<span class="tag" id="foldOwner"></span></summary>
       <div class="group" id="collabCard"><div class="item"><span class="hint">Выберите диалог.</span></div></div>
@@ -1044,6 +1013,47 @@ $('themePick').onclick = (e) => {
 };
 $('accentPick').onclick = () => {};
 applyLook();
+
+// Навигация настроек следует за реальной позицией прокрутки, как в
+// desktop settings: выбранная категория всегда соответствует содержимому.
+const settingsScroller = document.querySelector('.settings-content-scroll');
+const settingsLinks = [...document.querySelectorAll('.settings-nav a')];
+let requestedSettingsSection = 'settings-appearance';
+const setSettingsCategory = (id) => {
+  requestedSettingsSection = id;
+  for (const link of settingsLinks) link.setAttribute('aria-current', String(link.hash === `#${id}`));
+};
+const scrollToSettingsCategory = (id, smooth = true) => {
+  const section = document.getElementById(id);
+  if (!section) return;
+  settingsScroller.scrollTo({ top:Math.max(0, section.offsetTop - 4), behavior:smooth ? 'smooth' : 'auto' });
+  setSettingsCategory(id);
+};
+let settingsScrollFrame = 0;
+const syncSettingsCategory = () => {
+  settingsScrollFrame = 0;
+  const scrollerTop = settingsScroller.getBoundingClientRect().top;
+  let active = settingsLinks[0]?.hash.slice(1) ?? requestedSettingsSection;
+  if (settingsScroller.scrollTop + settingsScroller.clientHeight >= settingsScroller.scrollHeight - 4) {
+    active = settingsLinks.at(-1)?.hash.slice(1) ?? active;
+  } else {
+    for (const link of settingsLinks) {
+      const section = document.querySelector(link.hash);
+      if (section && section.getBoundingClientRect().top - scrollerTop <= 72) active = section.id;
+    }
+  }
+  if (active) setSettingsCategory(active);
+};
+for (const link of settingsLinks) link.onclick = (event) => {
+  event.preventDefault();
+  const id = link.hash.slice(1);
+  history.replaceState(null, '', link.hash);
+  scrollToSettingsCategory(id);
+};
+settingsScroller.addEventListener('scroll', () => {
+  if (!settingsScrollFrame) settingsScrollFrame = requestAnimationFrame(syncSettingsCategory);
+}, { passive:true });
+setSettingsCategory('settings-appearance');
 
 /* ═══ вход ═══
    Раньше здесь стоял prompt() — он не показывает ошибку, не даёт
@@ -1634,7 +1644,7 @@ function renderSuggestion() {
   const pct = suggestion.confidence == null ? 0 : Math.round(suggestion.confidence * 100);
   let sources = []; try { sources = suggestion.sources ? JSON.parse(suggestion.sources) : []; } catch {}
   box.innerHTML = `<div class="suggest">
-    <div class="head"><b><span class="ai-spark">✦</span> AI-помощник</b><span>уверенность ${pct}%${suggestion.needs_human ? ' · нужен человек' : ''}</span></div>
+    <div class="head"><b>AI-помощник</b><span>уверенность ${pct}%${suggestion.needs_human ? ' · нужен человек' : ''}</span></div>
     <div class="text">${esc(suggestion.text)}</div>
     ${suggestion.reason ? `<div class="src">Модель: ${esc(suggestion.reason)}</div>` : ''}
     ${sources.length ? `<div class="src">Источники: ${esc(sources.join(' · '))}</div>` : ''}
@@ -2129,8 +2139,10 @@ function paintHeader(c) {
   $('subtitle').textContent = `${c.username ? '@' + c.username + ' · ' : ''}${channelLabel(c)} · ${c.external_id}`;
   $('statusSel').value = c.status;
   $('aiSel').value = c.ai_mode;
-  $('escBtn').textContent = c.escalated ? 'Снять важность' : 'Пометить важным';
-  $('handoffBtn').textContent = c.handoff_at ? 'Вернуть диалог AI' : 'Передать человеку';
+  $('escBtn').textContent = c.escalated ? 'Снять важность' : 'Важно';
+  $('escBtn').title = c.escalated ? 'Снять отметку важного обращения' : 'Пометить обращение важным';
+  $('handoffBtn').textContent = c.handoff_at ? 'Вернуть AI' : 'Передать';
+  $('handoffBtn').title = c.handoff_at ? 'Вернуть диалог в автоматический режим' : 'Передать диалог человеку';
   for (const id of ['statusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
     $(id).disabled = !canWrite();
     $(id).title = canWrite() ? '' : 'Недоступно в режиме просмотра';
@@ -2560,11 +2572,10 @@ function renderDocs() {
     return;
   }
   if (kbTab === 'learning') {
-    box.innerHTML = list.map((d) => `<div class="doc">
-      <b>${esc(d.title)}</b><span class="hint mono">v${d.version} · ${esc(d.source)}${d.confidence == null ? '' : ` · уверенность ${Math.round(d.confidence * 100)}%`}</span>
-      <span class="hint mono">${esc(d.file_name)}</span><div class="acts">
+    box.innerHTML = list.map((d) => `<article class="doc-row review-row">
+      <div class="doc-state"><span class="status-dot warning"></span></div><div class="doc-copy"><b>${esc(d.title)}</b><span>v${d.version} · ${esc(d.source)}${d.confidence == null ? '' : ` · уверенность ${Math.round(d.confidence * 100)}%`} · ${esc(d.file_name)}</span></div><div class="doc-actions">
         <button class="btn primary" data-approve="${d.id}">Проверено — опубликовать</button>
-        <button class="btn danger" data-reject="${d.id}">Отклонить</button></div></div>`).join('');
+        <button class="btn danger" data-reject="${d.id}">Отклонить</button></div></article>`).join('');
     for (const b of box.querySelectorAll('[data-approve]')) b.onclick = async () => {
       if (await mutate(`/api/learning/candidates/${b.dataset.approve}`, { method:'POST', body:JSON.stringify({ decision:'approved' }) }, 'Материал опубликован')) loadDocs();
     };
@@ -2573,12 +2584,14 @@ function renderDocs() {
     };
     return;
   }
-  box.innerHTML = list.map((d) => `<div class="doc">
-    <b>${esc(d.title)}</b><span class="hint mono">${esc(d.name)} · ${d.size} симв.</span>
-    <div class="acts"><button class="btn" data-edit="${esc(d.name)}">Открыть</button>
-      ${reviewer && kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
-      ${reviewer ? `<button class="btn danger" data-del="${esc(d.name)}">Удалить</button>` : ''}</div></div>`).join('');
-  for (const b of box.querySelectorAll('[data-edit]')) b.onclick = () => editDoc(b.dataset.edit);
+  box.innerHTML = list.map((d) => `<article class="doc-row" data-doc="${esc(d.name)}" data-edit="${esc(d.name)}" role="button" tabindex="0" aria-label="Открыть статью: ${esc(d.title)}">
+    <div class="doc-state"><span class="status-dot ${kbTab === 'kb' ? 'ok' : ''}"></span></div><div class="doc-copy"><b>${esc(d.title)}</b><span>${esc(d.name)} · ${d.size} симв.</span></div>
+    <div class="doc-actions">${reviewer && kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
+      ${reviewer ? `<button class="icon-btn row-more danger" data-del="${esc(d.name)}" aria-label="Удалить статью" title="Удалить">×</button>` : ''}<span class="doc-disclosure" aria-hidden="true">›</span></div></article>`).join('');
+  for (const row of box.querySelectorAll('.doc-row[data-edit]')) {
+    row.onclick = (event) => { if (!event.target.closest('button')) editDoc(row.dataset.edit); };
+    row.onkeydown = (event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) { event.preventDefault(); editDoc(row.dataset.edit); } };
+  }
   for (const b of box.querySelectorAll('[data-pub]')) b.onclick = async () => {
     b.disabled = true;
     const done = await mutate(`/api/kb/publish/${encodeURIComponent(b.dataset.pub)}`, { method:'POST' }, 'Опубликовано');
@@ -2731,8 +2744,7 @@ function countryFlag(raw) {
     FIN:'FI', SWE:'SE', NOR:'NO', POL:'PL', AUT:'AT', CHE:'CH', ESP:'ES', ITA:'IT',
     CAN:'CA', JPN:'JP', SGP:'SG', TUR:'TR', KAZ:'KZ', RUS:'RU', UKR:'UA' };
   const code = aliases[raw] ?? raw;
-  if (!/^[A-Z]{2}$/.test(code)) return '🌐';
-  return String.fromCodePoint(...Array.from(code, (letter) => 127397 + letter.charCodeAt(0)));
+  return /^[A-Z]{2}$/.test(code) ? code : '—';
 }
 
 async function loadNodes() {
@@ -2784,10 +2796,10 @@ async function loadNodes() {
     <div class="nodes-shell">
       ${data.error ? `<div class="nodes-alert" role="status"><span class="nodes-alert-icon">!</span><div><b>Не удалось обновить данные</b><span>Показан последний успешный слепок${data.at ? ` от ${fmtTime(data.at)}` : ''} · ${esc(data.error)}</span></div></div>` : ''}
       <div class="nodes-summary" aria-label="Сводка по серверам">
-        <article class="node-kpi online"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><path d="m7 12 3 3 7-7"/></svg></span><strong>${online}</strong><span>Работают</span><small>из ${data.nodes.length} узлов</small></article>
-        <article class="node-kpi ${offline ? 'danger' : 'quiet'}"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><path d="M12 8v5M12 17h.01M4 20h16L12 4 4 20Z"/></svg></span><strong>${offline}</strong><span>Требуют внимания</span><small>${offline ? 'недоступны сейчас' : 'всё спокойно'}</small></article>
-        <article class="node-kpi quiet"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><path d="M7 12h10M12 7v10"/></svg></span><strong>${disabled}</strong><span>Отключены</span><small>администратором</small></article>
-        <article class="node-kpi accent"><span class="node-kpi-icon"><svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3"/><circle cx="17" cy="10" r="2"/><path d="M3 20c.6-3.3 2.6-5 6-5s5.4 1.7 6 5M15 15c3 0 4.6 1.5 5 4"/></svg></span><strong>${users}</strong><span>Подключений</span><small>прямо сейчас</small></article>
+        <article class="node-kpi online"><span>Работают</span><strong>${online}</strong><small>из ${data.nodes.length} узлов</small></article>
+        <article class="node-kpi ${offline ? 'danger' : 'quiet'}"><span>Требуют внимания</span><strong>${offline}</strong><small>${offline ? 'недоступны сейчас' : 'всё спокойно'}</small></article>
+        <article class="node-kpi quiet"><span>Отключены</span><strong>${disabled}</strong><small>администратором</small></article>
+        <article class="node-kpi accent"><span>Подключения сейчас</span><strong>${users}</strong><small>активных клиентов</small></article>
       </div>
       <section class="nodes-panel">
         <header class="nodes-panel-head"><div><h2>Состояние узлов</h2><p>Псевдоним — имя, которое увидят AI и клиент.</p></div><span>${data.at ? `Слепок ${fmtTime(data.at)}` : 'Время неизвестно'}</span></header>
@@ -3041,22 +3053,28 @@ function renderQueue() {
   const filtered = queueRows.filter((row) => (queueMode === 'overdue' ? row.overdue : queueMode === 'unassigned' ? !row.assignee : true)
     && (queuePriority === 'all' || row.priority === queuePriority));
   const overdue = queueRows.filter((row) => row.overdue).length;
+  const unassigned = queueRows.filter((row) => !row.assignee && !row.owner_name).length;
+  const urgent = queueRows.filter((row) => row.priority === 'urgent').length;
   $('cntOverdue').textContent = overdue || '';
-  box.innerHTML = `<div class="ops-head"><div><b>Рабочая очередь</b><span class="hint">${filtered.length} из ${queueRows.length} · просрочено ${overdue}</span></div>
-    <div class="ops-actions"><select class="ctl" id="queueMode"><option value="all">Все</option><option value="overdue">Просроченные</option><option value="unassigned">Без ответственного</option></select>
+  box.innerHTML = `<section class="queue-summary" aria-label="Сводка очереди"><div><span>В очереди</span><b>${queueRows.length}</b></div><div class="${overdue ? 'danger-text' : ''}"><span>Просрочено</span><b>${overdue}</b></div><div><span>Без ответственного</span><b>${unassigned}</b></div><div><span>Срочные</span><b>${urgent}</b></div></section>
+    <div class="table-toolbar"><div><b>Рабочая очередь</b><span>${filtered.length} обращений в текущем представлении</span></div>
+    <div class="ops-actions"><select class="ctl" id="queueMode" aria-label="Состояние очереди"><option value="all">Все</option><option value="overdue">Просроченные</option><option value="unassigned">Без ответственного</option></select>
     <select class="ctl" id="queuePriority"><option value="all">Любой приоритет</option>${Object.entries(PRIORITY_LABELS).map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></div></div>
-    ${filtered.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Диалог</th><th>Канал</th><th>Приоритет</th><th>Ответственный</th><th>SLA</th><th></th></tr></thead><tbody>${filtered.map((row) => {
+    ${filtered.length ? `<div class="table-scroll"><table class="ops-table queue-table"><thead><tr><th>Диалог</th><th>Канал</th><th>Приоритет</th><th>Ответственный</th><th>SLA</th><th><span class="sr-only">Открыть</span></th></tr></thead><tbody>${filtered.map((row) => {
       const left = Number(row.due_at) - Date.now();
-      return `<tr><td><b>${esc(row.display_name || (row.username ? '@'+row.username : '#'+row.id))}</b><div class="hint">${esc(row.status)}</div></td>
-        <td>${esc(channelLabel(row))}</td><td><span class="badge ${row.priority === 'urgent' ? 'danger' : ''}">${esc(PRIORITY_LABELS[row.priority] ?? row.priority)}</span></td>
-        <td>${esc(row.owner_name || 'Не назначен')}</td><td><span class="badge ${row.overdue ? 'danger' : 'ok'}">${row.overdue ? `Просрочено на ${fmtLeft(Math.abs(left))}` : `Осталось ${fmtLeft(Math.max(0,left))}`}</span></td>
-        <td><button class="btn" data-queue-open="${Number(row.id)}">Открыть</button></td></tr>`;
+      return `<tr tabindex="0" data-queue-open="${Number(row.id)}"><td><b>${esc(row.display_name || (row.username ? '@'+row.username : '#'+row.id))}</b><div class="hint">${esc(row.status)}</div></td>
+        <td>${esc(channelLabel(row))}</td><td><span class="status-text ${row.priority === 'urgent' ? 'danger' : ''}"><i></i>${esc(PRIORITY_LABELS[row.priority] ?? row.priority)}</span></td>
+        <td>${esc(row.owner_name || 'Не назначен')}</td><td><span class="status-text ${row.overdue ? 'danger' : 'ok'}"><i></i>${row.overdue ? `Просрочено на ${fmtLeft(Math.abs(left))}` : `Осталось ${fmtLeft(Math.max(0,left))}`}</span></td>
+        <td class="row-disclosure" aria-hidden="true">›</td></tr>`;
     }).join('')}</tbody></table></div>` : '<p class="empty">В этом представлении диалогов нет.</p>'}`;
   $('queueMode').value = queueMode;
   $('queuePriority').value = queuePriority;
   $('queueMode').onchange = (event) => { queueMode = event.target.value; renderQueue(); };
   $('queuePriority').onchange = (event) => { queuePriority = event.target.value; renderQueue(); };
-  for (const button of box.querySelectorAll('[data-queue-open]')) button.onclick = async () => { show('inbox'); await open(Number(button.dataset.queueOpen)); };
+  for (const row of box.querySelectorAll('[data-queue-open]')) {
+    row.onclick = async () => { show('inbox'); await open(Number(row.dataset.queueOpen)); };
+    row.onkeydown = async (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); show('inbox'); await open(Number(row.dataset.queueOpen)); } };
+  }
 }
 
 async function loadQueue() {
@@ -3099,12 +3117,12 @@ function renderOperators(rows) {
       <p class="hint">Управление учётными записями доступно только администратору.</p></article>`;
     return;
   }
-  box.innerHTML = `<div class="team-note">Для каждого сотрудника создаётся отдельная учётная запись. Токен показывается один раз и хранится только в виде хеша.</div>
-    <div class="ops-head"><div><b>Операторы и роли</b><span class="hint">Токены хранятся только в виде хеша и повторно не показываются</span></div></div>
+  box.innerHTML = `<div class="team-note">У каждого сотрудника собственная учётная запись. Новый токен показывается один раз.</div>
+    <div class="table-toolbar"><div><b>Сотрудники</b><span>Роли и доступ к рабочей панели</span></div></div>
     ${rows.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Имя</th><th>Роль</th><th>Состояние</th><th>Создан</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr>
-      <td><b>${esc(row.name)}</b></td><td>${esc(ROLE_LABELS[row.role] ?? row.role)}</td><td><span class="badge ${row.active ? 'ok' : 'danger'}">${row.active ? 'Активен' : 'Отключён'}</span></td>
-      <td>${fmtTime(Number(row.created_at))}</td><td><div class="ops-actions"><button class="btn" data-op-rotate="${Number(row.id)}" data-op-name="${esc(row.name)}">Новый токен</button>
-      <button class="btn ${row.active ? 'danger' : ''}" data-op-active="${Number(row.id)}" data-op-next="${row.active ? '0' : '1'}">${row.active ? 'Отключить' : 'Включить'}</button></div></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Отдельных операторов пока нет — используется токен владельца.</p>'}`;
+      <td><b>${esc(row.name)}</b></td><td>${esc(ROLE_LABELS[row.role] ?? row.role)}</td><td><span class="status-text ${row.active ? 'ok' : 'danger'}"><i></i>${row.active ? 'Активен' : 'Отключён'}</span></td>
+      <td>${fmtTime(Number(row.created_at))}</td><td><details class="row-menu"><summary aria-label="Действия с оператором ${esc(row.name)}">•••</summary><div><button data-op-rotate="${Number(row.id)}" data-op-name="${esc(row.name)}">Выпустить новый токен</button>
+      <button class="${row.active ? 'danger-text' : ''}" data-op-active="${Number(row.id)}" data-op-next="${row.active ? '0' : '1'}">${row.active ? 'Отключить доступ' : 'Включить доступ'}</button></div></details></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Отдельных операторов пока нет — используется токен владельца.</p>'}`;
   for (const button of box.querySelectorAll('[data-op-rotate]')) button.onclick = () => confirmAction('Перевыпустить токен?', 'Старый токен сразу перестанет работать.', async () => {
     const result = await mutate(`/api/operators/${button.dataset.opRotate}`, { method:'POST', body:JSON.stringify({ rotate:true }) });
     if (result?.token) showOperatorToken(button.dataset.opName, result.token);
@@ -3121,7 +3139,7 @@ function renderAudit(events) {
   const box = $('auditBody');
   if (!box) return;
   if (!(currentActor?.role === 'admin' || currentActor?.role === 'lead')) { box.innerHTML = ''; return; }
-  box.innerHTML = `<div class="ops-head"><div><b>Журнал действий</b><span class="hint">Последние ${events.length} событий без секретов</span></div></div>
+  box.innerHTML = `<div class="table-toolbar"><div><b>Журнал действий</b><span>Последние ${events.length} событий без секретов</span></div></div>
     ${events.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Объект</th><th>Детали</th></tr></thead><tbody>${events.map((event) => `<tr>
       <td>${fmtTime(Number(event.created_at))}</td><td>${esc(event.actor_name)}<div class="hint">${esc(ROLE_LABELS[event.actor_role] ?? event.actor_role)}</div></td>
       <td><span class="mono">${esc(event.action)}</span></td><td>${esc(event.resource)} ${event.resource_id ? '#'+esc(event.resource_id) : ''}</td>
@@ -3133,6 +3151,7 @@ async function loadTeam() {
   currentActor = me?.actor ?? currentActor;
   $('meLabel').textContent = currentActor ? `${currentActor.name} · ${ROLE_LABELS[currentActor.role] ?? currentActor.role}` : '';
   $('newOperator').hidden = currentActor?.role !== 'admin';
+  $('teamTabs').querySelector('[data-team-tab="audit"]').hidden = !(currentActor?.role === 'admin' || currentActor?.role === 'lead');
   const [operatorsData, auditData] = await Promise.all([
     currentActor?.role === 'admin' ? json('/api/operators') : Promise.resolve(null),
     currentActor?.role === 'admin' || currentActor?.role === 'lead' ? json('/api/audit?limit=200') : Promise.resolve(null),
@@ -3151,6 +3170,15 @@ function openOperatorSheet() {
   };
 }
 $('newOperator').onclick = openOperatorSheet;
+$('teamTabs').onclick = (event) => {
+  const button = event.target.closest('[data-team-tab]');
+  if (!button) return;
+  const tab = button.dataset.teamTab;
+  for (const item of $('teamTabs').children) item.setAttribute('aria-pressed', String(item === button));
+  $('operatorsBody').hidden = tab !== 'operators';
+  $('auditBody').hidden = tab !== 'audit';
+  document.querySelector('.team-workspace').dataset.teamView = tab;
+};
 
 /* ═══ диагностика ═══ */
 const mb = (bytes) => `${(Number(bytes ?? 0) / 1048576).toFixed(1)} МБ`;
@@ -3159,17 +3187,17 @@ async function loadDiagnostics() {
   box.innerHTML = '<p class="empty">Проверяю компоненты…</p>';
   const data = await json('/api/diagnostics');
   if (!data) { box.innerHTML = '<p class="empty">Диагностика недоступна.</p>'; return; }
-  const channelRows = Object.entries(data.channels).map(([key,on]) => `<div class="item"><span>${esc(channelLabel({channel:key}))}</span><span class="badge ${on ? 'ok' : ''}">${on ? 'Подключён' : 'Не подключён'}</span></div>`).join('');
-  const integrationRows = Object.entries(data.integrations).map(([key,on]) => `<div class="item"><span>${esc(key)}</span><span class="badge ${on ? 'ok' : ''}">${on ? 'Готов' : 'Не настроен'}</span></div>`).join('');
+  const channelRows = Object.entries(data.channels).map(([key,on]) => `<div class="item"><span>${esc(channelLabel({channel:key}))}</span><span class="status-text ${on ? 'ok' : ''}"><i></i>${on ? 'Подключён' : 'Не подключён'}</span></div>`).join('');
+  const integrationRows = Object.entries(data.integrations).map(([key,on]) => `<div class="item"><span>${esc(key)}</span><span class="status-text ${on ? 'ok' : ''}"><i></i>${on ? 'Готов' : 'Не настроен'}</span></div>`).join('');
   const jobs = data.database.jobs ?? [];
   box.innerHTML = `<div class="diagnostic-sections">
-    <section class="diagnostic-section"><header><div><b>Приложение <span class="mono">v${esc(data.application.version)}</span></b><span>Процесс и память</span></div><span class="badge ok">Работает</span></header><div class="diagnostic-facts"><span>Аптайм <b>${fmtLeft(data.application.uptime*1000)}</b></span><span>RSS <b>${mb(data.application.memory.rss)}</b></span><span>Heap <b>${mb(data.application.memory.heapUsed)}</b></span></div></section>
-    <section class="diagnostic-section"><header><div><b>База данных</b><span>Целостность и схема</span></div><span class="badge ${data.database.integrity === 'ok' ? 'ok' : 'danger'}">${esc(data.database.integrity)}</span></header><div class="diagnostic-facts"><span>Схема <b>${Number(data.database.schema)}</b></span>${Object.entries(data.database.counts).map(([key,n]) => `<span>${esc(key)} <b>${Number(n)}</b></span>`).join('')}</div></section>
+    <section class="diagnostic-section"><header><div><b>Приложение <span class="mono">v${esc(data.application.version)}</span></b><span>Процесс и память</span></div><span class="status-text ok"><i></i>Работает</span></header><div class="diagnostic-facts"><span>Аптайм <b>${fmtLeft(data.application.uptime*1000)}</b></span><span>RSS <b>${mb(data.application.memory.rss)}</b></span><span>Heap <b>${mb(data.application.memory.heapUsed)}</b></span></div></section>
+    <section class="diagnostic-section"><header><div><b>База данных</b><span>Целостность и схема</span></div><span class="status-text ${data.database.integrity === 'ok' ? 'ok' : 'danger'}"><i></i>${esc(data.database.integrity)}</span></header><div class="diagnostic-facts"><span>Схема <b>${Number(data.database.schema)}</b></span>${Object.entries(data.database.counts).map(([key,n]) => `<span>${esc(key)} <b>${Number(n)}</b></span>`).join('')}</div></section>
     <section class="diagnostic-section"><header><div><b>Каналы</b><span>Голый режим допустим</span></div></header><div class="group">${channelRows}</div></section>
     <section class="diagnostic-section"><header><div><b>Интеграции</b><span>Необязательные подключения</span></div></header><div class="group">${integrationRows}</div></section>
   </div>
   <div class="ops-head"><div><b>Фоновые задания</b><span class="hint">Последние ${jobs.length}; ошибки видны явно</span></div></div>
-  ${jobs.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Тип</th><th>Статус</th><th>Прогресс</th><th>Завершено</th></tr></thead><tbody>${jobs.map((job) => `<tr><td>${esc(job.kind)}</td><td><span class="badge ${job.status === 'failed' ? 'danger' : job.status === 'done' ? 'ok' : ''}">${esc(job.status)}</span></td><td>${esc(job.error || job.progress || '—')}</td><td>${job.ended_at ? fmtTime(Number(job.ended_at)) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Фоновых заданий пока не было.</p>'}`;
+  ${jobs.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Тип</th><th>Статус</th><th>Прогресс</th><th>Завершено</th></tr></thead><tbody>${jobs.map((job) => `<tr><td>${esc(job.kind)}</td><td><span class="status-text ${job.status === 'failed' ? 'danger' : job.status === 'done' ? 'ok' : ''}"><i></i>${esc(job.status)}</span></td><td>${esc(job.error || job.progress || '—')}</td><td>${job.ended_at ? fmtTime(Number(job.ended_at)) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Фоновых заданий пока не было.</p>'}`;
 }
 $('diagRefresh').onclick = loadDiagnostics;
 
@@ -3732,6 +3760,7 @@ async function loadSettings() {
     $('testAlert').disabled = true;
     $('testAlert').title = 'Проверка доступна только администратору';
   }
+  requestAnimationFrame(() => scrollToSettingsCategory(requestedSettingsSection, false));
   void loadUpdateState();
 }
 

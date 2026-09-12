@@ -25,5 +25,6 @@ grep -Fxq "$project/.env.example" <<<"$listing"
 grep -Fxq "$project/LICENSE" <<<"$listing"
 grep -Fxq "$project/public/ui.css" <<<"$listing"
 grep -Fxq "$project/public/ui-v2.css" <<<"$listing"
+grep -Fxq "$project/public/ui-v3.css" <<<"$listing"
 
 printf 'Release archive is safe: %s\n' "$archive"
