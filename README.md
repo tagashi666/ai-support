@@ -1,4 +1,4 @@
-# AI Support 2.4.3
+# AI Support 2.4.5
 
 [![Версия](https://img.shields.io/github/v/release/tagashi666/ai-support?label=версия)](https://github.com/tagashi666/ai-support/releases/latest)
 [![CI](https://github.com/tagashi666/ai-support/actions/workflows/ci.yml/badge.svg)](https://github.com/tagashi666/ai-support/actions/workflows/ci.yml)
@@ -9,9 +9,17 @@
 и тикетов Bedolaga. Панель объединяет переписки, операторов, шаблоны, базу
 знаний, SLA, статистику, серверы Remnawave и безопасного AI-помощника.
 
-Текущая стабильная версия — **2.4.3**. Заметки о выпуске находятся в
+Текущая стабильная версия — **2.4.5**. Заметки о выпуске находятся в
 [CHANGELOG.md](CHANGELOG.md), готовые сборки — в разделе
 [Releases](https://github.com/tagashi666/ai-support/releases).
+
+## Главное в версии 2.4.5
+
+- **Исправленная карточка клиента.** Inspector получил собственную цельную
+  сетку без конфликтов со старыми layout-стилями.
+- **Русские статусы и доступное управление.** Статусы обращений переведены во
+  всех рабочих представлениях, а изменить их снова можно прямо из карточки на
+  любой ширине окна. Серверные значения и API-контракт не менялись.
 
 ## Главное в версии 2.4.3
 

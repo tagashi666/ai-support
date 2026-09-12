@@ -498,9 +498,12 @@ button:active:not(:disabled) { transform:translateY(1px); }
   bottom:8px;
   width:min(420px,calc(100vw - 24px));
   min-height:0;
+  padding:0;
   display:flex;
   flex-direction:column;
+  gap:0;
   overflow-y:auto;
+  overscroll-behavior:contain;
   color:var(--text);
   border:1px solid var(--separator-strong);
   border-radius:var(--radius-panel);
@@ -521,8 +524,11 @@ button:active:not(:disabled) { transform:translateY(1px); }
 .context-head h2 { margin:0; font-size:17px; font-weight:600; letter-spacing:-.02em; }
 .context-head p { color:var(--text-tertiary); font-size:12px; }
 .context-close { display:grid; margin-left:auto; }
-.inspector-summary { min-height:52px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px; color:var(--text-secondary); border-bottom:1px solid var(--separator); font-size:12px; }
-.inspector-summary b { color:var(--text); font:500 11px/1.3 var(--font-mono); }
+.inspector-summary { min-height:64px; padding:10px 16px; display:flex; align-items:center; justify-content:space-between; gap:16px; color:var(--text-secondary); border-bottom:1px solid var(--separator); }
+.inspector-summary label { min-width:0; display:grid; gap:1px; }
+.inspector-summary label > span { color:var(--text); font-size:12.5px; font-weight:500; }
+.inspector-summary label > small { color:var(--text-tertiary); font-size:10.5px; line-height:1.3; }
+.inspector-status { width:132px; flex:0 0 132px; }
 .context .fold { border-bottom:1px solid var(--separator); }
 .context .fold summary { min-height:42px; padding:0 16px; color:var(--text-secondary); font-size:12.5px; font-weight:500; }
 .context .group { padding:0 16px 12px; }

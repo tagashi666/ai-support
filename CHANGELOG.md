@@ -4,6 +4,17 @@
 [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии следуют
 [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [2.4.5] — 2026-09-12
+
+- Исправлена раскладка карточки клиента: inspector больше не наследует отступы
+  и промежутки старого интерфейса, секции снова образуют аккуратную непрерывную
+  сетку в светлой и тёмной темах.
+- Статусы обращений переведены на русский во входящих, глобальном поиске,
+  связанных диалогах, SLA-очереди и карточке клиента.
+- В карточку возвращён постоянно доступный селектор статуса. Он работает и на
+  узких экранах, синхронизируется с toolbar и сохраняет API-контракт
+  `open` / `pending` / `resolved` без изменений.
+
 ## [2.4.4] — 2026-09-12
 
 - Исправлено отображение Telegram-стикеров: статические WebP и превью TGS
@@ -317,6 +328,8 @@
 - Неудачная доставка не подавляет повтор важного уведомления.
 - Архив релиза собирается по allowlist и никогда не включает `.env` или `data/`.
 
+[2.4.5]: https://github.com/tagashi666/ai-support/releases/tag/v2.4.5
+[2.4.4]: https://github.com/tagashi666/ai-support/releases/tag/v2.4.4
 [2.4.3]: https://github.com/tagashi666/ai-support/releases/tag/v2.4.3
 [2.4.2]: https://github.com/tagashi666/ai-support/releases/tag/v2.4.2
 [2.4.1]: https://github.com/tagashi666/ai-support/releases/tag/v2.4.1

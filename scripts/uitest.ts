@@ -212,6 +212,17 @@ check('кнопка держит иконку и текст в одной стр
   /\.btn\s*\{[^}]*display:inline-flex[^}]*align-items:center[^}]*white-space:nowrap/s.test(uiCss));
 check('иконка инспектора оптически центрирована',
   /\.inspector-toggle\s*\{[^}]*display:grid[^}]*place-items:center/s.test(uiCss));
+check('inspector не наследует отступы и gap старого layout',
+  /\.context\s*\{[^}]*padding:0[^}]*gap:0/s.test(uiCss));
+check('статус обращения переведён в UI без изменения API-значений',
+  /const CONVERSATION_STATUS = Object\.freeze\(\{[\s\S]*?open:'Открыто'[\s\S]*?pending:'Ждёт клиента'[\s\S]*?resolved:'Решено'/.test(html)
+  && /<option value="open">Открыто<\/option>/.test(html)
+  && /<option value="pending">Ждёт клиента<\/option>/.test(html)
+  && /<option value="resolved">Решено<\/option>/.test(html));
+check('статус можно изменить из inspector на любой ширине',
+  /id="contextStatusSel"/.test(html)
+  && /\$\('contextStatusSel'\)\.onchange = \(e\) => setState\(\{ status: e\.target\.value \}\)/.test(html)
+  && /\['statusSel', 'contextStatusSel', 'aiSel'/.test(html));
 check('сообщения v3 привязаны к краям рабочей области',
   /\.thread-inner\s*\{[^}]*width:100%[^}]*margin:0/s.test(uiCss)
   && !/@media \(min-width:1900px\)[\s\S]*?\.thread-inner\s*\{/u.test(uiCss));

@@ -733,7 +733,7 @@ tr:last-child td { border-bottom:0; }
               <span class="note mono" id="subtitle"></span>
             </div>
             <div class="conversation-actions">
-              <label class="compact-field"><span>Статус</span><select class="ctl" id="statusSel"><option value="open">Открыт</option><option value="pending">Ждёт клиента</option><option value="resolved">Решён</option></select></label>
+              <label class="compact-field"><span>Статус</span><select class="ctl" id="statusSel"><option value="open">Открыто</option><option value="pending">Ждёт клиента</option><option value="resolved">Решено</option></select></label>
               <label class="compact-field ai-field"><span>AI</span><select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="shadow">Тень</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></label>
               <button class="btn toolbar-btn" id="escBtn">Важное</button>
               <button class="btn toolbar-btn handoff-btn" id="handoffBtn">Взять диалог</button>
@@ -872,7 +872,14 @@ tr:last-child td { border-bottom:0; }
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </div>
-    <div class="inspector-summary"><span>Состояние обращения</span><b id="foldDialog">—</b></div>
+    <div class="inspector-summary">
+      <label for="contextStatusSel"><span>Статус обращения</span><small>Изменение применяется сразу</small></label>
+      <select class="ctl inspector-status" id="contextStatusSel" aria-label="Изменить статус обращения">
+        <option value="open">Открыто</option>
+        <option value="pending">Ждёт клиента</option>
+        <option value="resolved">Решено</option>
+      </select>
+    </div>
     <details class="fold" open data-fold="team">
       <summary>Совместная работа<span class="tag" id="foldOwner"></span></summary>
       <div class="group" id="collabCard"><div class="item"><span class="hint">Выберите диалог.</span></div></div>
@@ -1255,7 +1262,7 @@ async function runGlobalSearch(q) {
   const data = await json(`/api/search?q=${encodeURIComponent(q)}`);
   if (!data || !box) return;
   const rows = [
-    ...data.conversations.map((r) => ({ kind:'Диалог', id:r.id, title:r.display_name || r.username || `#${r.id}`, text:`${r.channel} · ${r.status} · ${r.subject || ''}` })),
+    ...data.conversations.map((r) => ({ kind:'Диалог', id:r.id, title:r.display_name || r.username || `#${r.id}`, text:`${channelLabel(r)} · ${conversationStatus(r.status)} · ${r.subject || ''}` })),
     ...data.messages.map((r) => ({ kind:'Сообщение', id:r.conversation_id, title:r.author || `Диалог #${r.conversation_id}`, text:r.text })),
     ...data.customers.map((r) => ({ kind:'Клиент', title:r.display_name || r.username || `Клиент #${r.id}`, text:[r.company,r.email,r.phone].filter(Boolean).join(' · ') })),
     ...data.knowledge.map((r) => ({ kind:'База знаний', title:r.title, text:r.excerpt, knowledge:true })),
@@ -1310,6 +1317,12 @@ const nameOf = (c) => c.display_name || (c.username ? '@'+c.username : (c.subjec
 const channelLabel = (c) => c.source?.name || (c.channel === 'tg_dm' ? 'Telegram · Business'
   : c.channel === 'tg_bot' ? 'Telegram · Бот'
   : 'Тикет Bedolaga');
+const CONVERSATION_STATUS = Object.freeze({
+  open:'Открыто',
+  pending:'Ждёт клиента',
+  resolved:'Решено',
+});
+const conversationStatus = (value) => CONVERSATION_STATUS[value] ?? 'Неизвестный статус';
 const gb = (b) => b == null ? '—' : `${(b / 1073741824).toFixed(1)} ГБ`;
 const initials = (value) => value.replace(/^@/, '').trim().split(/\s+/).slice(0, 2)
   .map((part) => Array.from(part)[0] ?? '').join('').toUpperCase() || '•';
@@ -1412,7 +1425,7 @@ function renderList(force = false) {
       ${avatarMarkup(c, 'row-avatar', Boolean(c.unread))}
       <div class="row-main">
         <div class="who"><span class="row-person"><b>${esc(nameOf(c))}</b>${c.username && nameOf(c) !== '@'+c.username ? `<em>@${esc(c.username)}</em>` : ''}</span><small>${c.last_message_at ? fmtTime(c.last_message_at) : ''}</small></div>
-        <div class="snippet">${closed ? 'Окно ответа закрыто' : esc(c.subject || c.status)}</div>
+        <div class="snippet">${closed ? 'Окно ответа закрыто' : esc(c.subject || conversationStatus(c.status))}</div>
         <div class="chips"><span class="chip channel">${esc(channelLabel(c))}</span>
           ${closed ? '<span class="chip hot">24 ч закрыто</span>' : ''}
           ${c.suspicious ? '<span class="chip hot">нет в базах</span>' : ''}
@@ -1959,7 +1972,7 @@ function renderUnifiedProfile(profile) {
   card.innerHTML = rows.map(([k,v]) => `<div class="item"><span class="lbl">${esc(k)}</span><span class="val">${esc(v)}</span></div>`).join('')
     + `<div class="item col-item"><span class="lbl">Теги</span><div class="profile-tags">${tags.length ? tags.map((t) => `<span class="badge">${esc(t)}</span>`).join('') : '<span class="hint">нет</span>'}</div></div>`
     + (notes.length ? `<div class="item col-item"><span class="lbl">Последние заметки</span>${notes.slice(0,4).map((n) => `<span class="mini-note">${esc(n.text)}<br><span class="hint">${esc(n.actor_key)} · ${fmtTime(n.created_at)}</span></span>`).join('')}</div>` : '')
-    + (related.length > 1 ? `<div class="item col-item"><span class="lbl">Связанные диалоги</span>${related.slice(0,8).map((r) => `<button class="btn quiet" data-related="${r.id}">${esc(channelLabel(r))} · ${esc(r.status)}</button>`).join('')}</div>` : '')
+    + (related.length > 1 ? `<div class="item col-item"><span class="lbl">Связанные диалоги</span>${related.slice(0,8).map((r) => `<button class="btn quiet" data-related="${r.id}">${esc(channelLabel(r))} · ${esc(conversationStatus(r.status))}</button>`).join('')}</div>` : '')
     + (canWrite() ? `<div class="item context-action"><button class="btn wide" id="editProfile">Изменить профиль</button></div>
        <div class="item context-action"><button class="btn wide" id="addProfileNote">Добавить заметку</button></div>` : '');
   for (const b of card.querySelectorAll('[data-related]')) b.onclick = () => open(Number(b.dataset.related));
@@ -2155,16 +2168,16 @@ function paintHeader(c) {
   armAvatars($('titleAvatar'));
   $('subtitle').textContent = `${c.username ? '@' + c.username + ' · ' : ''}${channelLabel(c)} · ${c.external_id}`;
   $('statusSel').value = c.status;
+  $('contextStatusSel').value = c.status;
   $('aiSel').value = c.ai_mode;
   $('escBtn').textContent = c.escalated ? 'Снять важность' : 'Важно';
   $('escBtn').title = c.escalated ? 'Снять отметку важного обращения' : 'Пометить обращение важным';
   $('handoffBtn').textContent = c.handoff_at ? 'Вернуть AI' : 'Взять диалог';
   $('handoffBtn').title = c.handoff_at ? 'Вернуть диалог в автоматический режим' : 'Передать диалог человеку';
-  for (const id of ['statusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
+  for (const id of ['statusSel', 'contextStatusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
     $(id).disabled = !canWrite();
     $(id).title = canWrite() ? '' : 'Недоступно в режиме просмотра';
   }
-  $('foldDialog').textContent = c.handoff_at ? 'у человека' : c.status;
   $('foldClient').textContent = c.suspicious ? 'нет в базах' : '';
   $('err').textContent = '';
 }
@@ -2583,12 +2596,13 @@ async function setState(patch) {
     : null;
   const data = await mutate(`/api/conversations/${current.id}/state`,
     { method:'POST', body: JSON.stringify(patch) }, bedolagaStatus);
-  if (!data) return;
+  if (!data) { paintHeader(current); return; }
   current = data.conversation;
   paintHeader(current);
   renderAiNote(); refresh();
 }
 $('statusSel').onchange = (e) => setState({ status: e.target.value });
+$('contextStatusSel').onchange = (e) => setState({ status: e.target.value });
 $('aiSel').onchange = (e) => setState({ aiMode: e.target.value });
 $('escBtn').onclick = () => setState({ escalated: !current?.escalated });
 $('handoffBtn').onclick = () => setState({ handoff: !current?.handoff_at });
@@ -3134,7 +3148,7 @@ function renderQueue() {
     <select class="ctl" id="queuePriority"><option value="all">Любой приоритет</option>${Object.entries(PRIORITY_LABELS).map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></div></div>
     ${filtered.length ? `<div class="table-scroll"><table class="ops-table queue-table"><thead><tr><th>Диалог</th><th>Канал</th><th>Приоритет</th><th>Ответственный</th><th>SLA</th><th><span class="sr-only">Открыть</span></th></tr></thead><tbody>${filtered.map((row) => {
       const left = Number(row.due_at) - Date.now();
-      return `<tr tabindex="0" data-queue-open="${Number(row.id)}"><td><b>${esc(row.display_name || (row.username ? '@'+row.username : '#'+row.id))}</b><div class="hint">${esc(row.status)}</div></td>
+      return `<tr tabindex="0" data-queue-open="${Number(row.id)}"><td><b>${esc(row.display_name || (row.username ? '@'+row.username : '#'+row.id))}</b><div class="hint">${esc(conversationStatus(row.status))}</div></td>
         <td>${esc(channelLabel(row))}</td><td><span class="status-text ${row.priority === 'urgent' ? 'danger' : ''}"><i></i>${esc(PRIORITY_LABELS[row.priority] ?? row.priority)}</span></td>
         <td>${esc(row.owner_name || 'Не назначен')}</td><td><span class="status-text ${row.overdue ? 'danger' : 'ok'}"><i></i>${row.overdue ? `Просрочено на ${fmtLeft(Math.abs(left))}` : `Осталось ${fmtLeft(Math.max(0,left))}`}</span></td>
         <td class="row-disclosure" aria-hidden="true">›</td></tr>`;
