@@ -736,9 +736,9 @@ tr:last-child td { border-bottom:0; }
               <label class="compact-field"><span>Статус</span><select class="ctl" id="statusSel"><option value="open">Открыт</option><option value="pending">Ждёт клиента</option><option value="resolved">Решён</option></select></label>
               <label class="compact-field ai-field"><span>AI</span><select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="shadow">Тень</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></label>
               <button class="btn toolbar-btn" id="escBtn">Важное</button>
-              <button class="btn primary toolbar-btn" id="handoffBtn">Передать</button>
+              <button class="btn toolbar-btn handoff-btn" id="handoffBtn">Взять диалог</button>
               <button class="icon-btn inspector-toggle" id="contextToggle" title="Открыть детали обращения" aria-label="Открыть детали обращения" aria-expanded="false">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M6 19c.7-3.1 2.7-5 6-5s5.3 1.9 6 5M4 3h16v18H4z"/></svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M8 9h3M8 13h3"/></svg>
               </button>
             </div>
           </header>
@@ -1026,7 +1026,10 @@ const setSettingsCategory = (id) => {
 const scrollToSettingsCategory = (id, smooth = true) => {
   const section = document.getElementById(id);
   if (!section) return;
-  settingsScroller.scrollTo({ top:Math.max(0, section.offsetTop - 4), behavior:smooth ? 'smooth' : 'auto' });
+  const scrollerTop = settingsScroller.getBoundingClientRect().top;
+  const sectionTop = section.getBoundingClientRect().top;
+  const top = Math.max(0, settingsScroller.scrollTop + sectionTop - scrollerTop - 4);
+  settingsScroller.scrollTo({ top, behavior:smooth ? 'smooth' : 'auto' });
   setSettingsCategory(id);
 };
 let settingsScrollFrame = 0;
@@ -1179,7 +1182,17 @@ function show(view) {
   if (view === 'stats') loadStats();
   if (view === 'team') loadTeam();
   if (view === 'diagnostics') loadDiagnostics();
-  if (view === 'settings') loadSettings();
+  if (view === 'settings') {
+    const resetSettingsPosition = () => {
+      settingsScroller.scrollTop = 0;
+      setSettingsCategory('settings-appearance');
+    };
+    resetSettingsPosition();
+    void loadSettings().finally(() => requestAnimationFrame(() => {
+      resetSettingsPosition();
+      requestAnimationFrame(resetSettingsPosition);
+    }));
+  }
 }
 for (const b of document.querySelectorAll('.nav[data-view]')) b.onclick = () => show(b.dataset.view);
 
@@ -2141,7 +2154,7 @@ function paintHeader(c) {
   $('aiSel').value = c.ai_mode;
   $('escBtn').textContent = c.escalated ? 'Снять важность' : 'Важно';
   $('escBtn').title = c.escalated ? 'Снять отметку важного обращения' : 'Пометить обращение важным';
-  $('handoffBtn').textContent = c.handoff_at ? 'Вернуть AI' : 'Передать';
+  $('handoffBtn').textContent = c.handoff_at ? 'Вернуть AI' : 'Взять диалог';
   $('handoffBtn').title = c.handoff_at ? 'Вернуть диалог в автоматический режим' : 'Передать диалог человеку';
   for (const id of ['statusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
     $(id).disabled = !canWrite();
@@ -3316,7 +3329,7 @@ function paintUpdate(state) {
   const progressHtml = progress ? `<div class="ops-card"><header><b>${esc(UPDATE_STATUS[progress.status] ?? progress.status)}</b><span class="badge ${progress.status === 'failed' ? 'danger' : progress.status === 'completed' || progress.status === 'rolled_back' ? 'ok' : ''}">${Number(progress.percent ?? 0)}%</span></header>
     <div class="progress"><i style="width:${Math.max(0,Math.min(100,Number(progress.percent ?? 0)))}%"></i></div>
     <div class="meta"><span>${esc(progress.stage || progress.detail || 'Ожидает ограниченный host-updater')}</span>${progress.backupPath ? '<span>Резервная копия подтверждена</span>' : ''}</div></div>` : '';
-  const safety = `<div class="meta"><span>Кнопка запускает полную установку</span><span>Изолированный host-updater скачивает и проверяет релиз</span><span>Перед заменой: backup · health-check · автоматический откат</span></div>`;
+  const safety = `<div class="update-safety"><span>Кнопка запускает полную установку.</span><span>Изолированный host-updater скачивает и проверяет релиз.</span><span>Перед заменой создаётся резервная копия; затем выполняются health-check и автоматический откат при ошибке.</span></div>`;
   const changelog = state.changelog ? `<details><summary>Что изменилось в ${esc(state.tag ?? state.latest ?? '')}</summary><pre class="log" style="white-space:pre-wrap;max-height:260px">${esc(state.changelog)}</pre></details>` : '';
   const rollback = state.compatibility?.rollbackAvailable ? '<button class="btn danger" id="updateRollback">Откатить</button>' : '';
 

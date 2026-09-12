@@ -202,6 +202,35 @@ check('переписка привязана к краям колонки', /\.t
 check('пузырь ограничен комфортной строкой', /\.msg\s*\{[^}]*max-width:\s*min\(/.test(html));
 check('место под скроллбар зарезервировано', /scrollbar-gutter:\s*stable/.test(html));
 
+// Активная v3-тема должна сохранять базовые layout-контракты. Эти проверки
+// намеренно читают подключённый stylesheet: legacy CSS не может маскировать
+// повторное появление переносов и наложений.
+check('поиск очереди не получает вторую рамку от глобального input',
+  /\.queue-search\s*\{[^}]*min-width:0[^}]*overflow:hidden/s.test(uiCss)
+  && /\.queue-search input#listSearch\s*\{[^}]*min-width:0[^}]*border:0!important[^}]*box-shadow:none!important/s.test(uiCss));
+check('кнопка держит иконку и текст в одной строке',
+  /\.btn\s*\{[^}]*display:inline-flex[^}]*align-items:center[^}]*white-space:nowrap/s.test(uiCss));
+check('иконка инспектора оптически центрирована',
+  /\.inspector-toggle\s*\{[^}]*display:grid[^}]*place-items:center/s.test(uiCss));
+check('сообщения v3 привязаны к краям рабочей области',
+  /\.thread-inner\s*\{[^}]*width:100%[^}]*margin:0/s.test(uiCss)
+  && !/@media \(min-width:1900px\)[\s\S]*?\.thread-inner\s*\{/u.test(uiCss));
+check('серверы ограничены и центрированы',
+  /\.nodes-shell\s*\{[^}]*width:min\(1240px,100%\)[^}]*margin:0 auto/s.test(uiCss));
+check('настройки открываются сверху и считают координаты относительно scroller',
+  /settingsScroller\.scrollTop = 0/.test(html)
+  && /section\.getBoundingClientRect\(\)\.top/.test(html)
+  && /settingsScroller\.getBoundingClientRect\(\)\.top/.test(html));
+check('источники используют скруглённый системный glyph',
+  /\.source-kind\s*\{[^}]*border-radius:6px/s.test(uiCss));
+check('обновления и проверка уведомлений имеют собственную раскладку',
+  /class="update-safety"/.test(html)
+  && /\.update-safety\s*\{[^}]*display:grid/s.test(uiCss)
+  && /\.health-action > div\s*\{[^}]*display:grid/s.test(uiCss));
+check('2K и 4K получают масштаб без двойного увеличения HiDPI',
+  /@media \(min-width:2400px\) and \(min-height:1200px\)[\s\S]*?zoom:1\.15/.test(uiCss)
+  && /@media \(min-width:3400px\) and \(min-height:1800px\)[\s\S]*?zoom:1\.45/.test(uiCss));
+
 // 21. Цитаты: показываем, на что отвечает сообщение, и даём ответить
 // на конкретное — половина смысла переписки в Telegram именно в этом.
 check('цитата отрисовывается в переписке', /function quoteBlock\(/.test(html));
