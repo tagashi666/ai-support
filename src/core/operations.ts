@@ -3,11 +3,54 @@ import type Database from 'better-sqlite3';
 import type { Conversation, Store } from './store.js';
 
 export type OperatorRole = 'admin' | 'lead' | 'agent' | 'viewer';
-export type Permission =
-  | 'conversation:read' | 'conversation:write' | 'conversation:assign'
-  | 'bedolaga:write'
-  | 'knowledge:review' | 'settings:write' | 'operators:manage'
-  | 'audit:read' | 'update:manage';
+
+export const PERMISSION_CATALOG = [
+  { id: 'conversation:read', group: 'Диалоги', label: 'Просматривать диалоги' },
+  { id: 'conversation:reply', group: 'Диалоги', label: 'Отвечать клиентам' },
+  { id: 'conversation:attachments', group: 'Диалоги', label: 'Отправлять вложения' },
+  { id: 'conversation:notes', group: 'Диалоги', label: 'Добавлять внутренние заметки' },
+  { id: 'conversation:profile', group: 'Диалоги', label: 'Изменять карточку клиента' },
+  { id: 'conversation:status', group: 'Диалоги', label: 'Менять статус и режим AI диалога' },
+  { id: 'conversation:assign', group: 'Диалоги', label: 'Переназначать чужие диалоги' },
+  { id: 'bedolaga:view', group: 'Bedolaga', label: 'Просматривать подписки и платежи' },
+  { id: 'bedolaga:extend', group: 'Bedolaga', label: 'Продлевать подписки' },
+  { id: 'bedolaga:devices', group: 'Bedolaga', label: 'Управлять устройствами и подпиской' },
+  { id: 'queue:read', group: 'Очередь и SLA', label: 'Просматривать очередь SLA' },
+  { id: 'queue:manage', group: 'Очередь и SLA', label: 'Изменять сроки SLA' },
+  { id: 'templates:read', group: 'Контент', label: 'Использовать шаблоны' },
+  { id: 'templates:manage', group: 'Контент', label: 'Редактировать шаблоны' },
+  { id: 'knowledge:read', group: 'Контент', label: 'Просматривать базу знаний' },
+  { id: 'knowledge:manage', group: 'Контент', label: 'Редактировать базу знаний' },
+  { id: 'knowledge:review', group: 'Контент', label: 'Публиковать черновики обучения' },
+  { id: 'knowledge:mine', group: 'Контент', label: 'Запускать добычу знаний' },
+  { id: 'stats:read', group: 'Аналитика', label: 'Просматривать общую статистику' },
+  { id: 'stats:reset', group: 'Аналитика', label: 'Сбрасывать период статистики' },
+  { id: 'operator_stats:read', group: 'Аналитика', label: 'Просматривать статистику операторов' },
+  { id: 'team:read', group: 'Команда', label: 'Просматривать команду' },
+  { id: 'operators:manage', group: 'Команда', label: 'Создавать и отключать операторов' },
+  { id: 'roles:manage', group: 'Команда', label: 'Настраивать права ролей' },
+  { id: 'audit:read', group: 'Команда', label: 'Просматривать журнал действий' },
+  { id: 'diagnostics:read', group: 'Система', label: 'Просматривать диагностику' },
+  { id: 'settings:read', group: 'Система', label: 'Открывать настройки' },
+  { id: 'settings:sources', group: 'Система', label: 'Управлять источниками и папками' },
+  { id: 'settings:services', group: 'Система', label: 'Изменять профили сервисов' },
+  { id: 'settings:nodes', group: 'Система', label: 'Обновлять серверы и псевдонимы' },
+  { id: 'settings:alerts', group: 'Система', label: 'Проверять системные уведомления' },
+  { id: 'settings:update', group: 'Система', label: 'Устанавливать обновления и откаты' },
+  { id: 'settings:ai_tools', group: 'Система', label: 'Проверять модели и ключи AI' },
+  ...Object.entries({
+    aiMode: 'Режим AI по умолчанию', requireKb: 'Ответы только по базе знаний',
+    autoLearn: 'Обучение на закрытых диалогах', minConfidence: 'Порог уверенности AI',
+    autoPerHour: 'Лимит автоответов в час', humanHoldMinutes: 'Пауза после ответа оператора',
+    maxAgeMinutes: 'Максимальный возраст сообщения', slaFirstResponseMinutes: 'Срок первого ответа',
+    handoffRepeatMinutes: 'Частота напоминания об операторе', notifyLevel: 'Подробность уведомлений',
+    model: 'Основная модель AI', fallbackModel: 'Запасная модель AI', brand: 'Название сервиса',
+    replyStyle: 'Манера ответа', handoffMessage: 'Текст передачи оператору',
+    modelKey: 'Ключ основной модели', fallbackKey: 'Ключ запасной модели',
+  }).map(([key, label]) => ({ id: `setting:${key}`, group: 'Параметры AI', label })),
+] as const;
+
+export type Permission = (typeof PERMISSION_CATALOG)[number]['id'];
 
 export interface Actor {
   key: string;
@@ -15,17 +58,27 @@ export interface Actor {
   name: string;
   role: OperatorRole;
   root?: boolean;
+  permissions?: Permission[];
 }
 
 const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<Permission>> = {
-  viewer: new Set(['conversation:read']),
-  agent: new Set(['conversation:read', 'conversation:write', 'bedolaga:write']),
-  lead: new Set(['conversation:read', 'conversation:write', 'conversation:assign', 'bedolaga:write', 'knowledge:review', 'audit:read']),
-  admin: new Set([
-    'conversation:read', 'conversation:write', 'conversation:assign', 'bedolaga:write', 'knowledge:review',
-    'settings:write', 'operators:manage', 'audit:read', 'update:manage',
+  viewer: new Set(['conversation:read', 'queue:read', 'templates:read', 'knowledge:read', 'stats:read', 'settings:read']),
+  agent: new Set([
+    'conversation:read', 'conversation:reply', 'conversation:attachments', 'conversation:notes',
+    'conversation:profile', 'conversation:status', 'bedolaga:view', 'bedolaga:extend',
+    'queue:read', 'templates:read', 'knowledge:read', 'stats:read', 'settings:read',
   ]),
+  lead: new Set([
+    'conversation:read', 'conversation:reply', 'conversation:attachments', 'conversation:notes',
+    'conversation:profile', 'conversation:status', 'conversation:assign', 'bedolaga:view',
+    'bedolaga:extend', 'queue:read', 'queue:manage', 'templates:read', 'templates:manage',
+    'knowledge:read', 'knowledge:manage', 'knowledge:review', 'knowledge:mine', 'stats:read',
+    'operator_stats:read', 'team:read', 'audit:read', 'diagnostics:read', 'settings:read',
+  ]),
+  admin: new Set(PERMISSION_CATALOG.map((item) => item.id)),
 };
+
+const KNOWN_PERMISSIONS = new Set<Permission>(PERMISSION_CATALOG.map((item) => item.id));
 
 const tokenHash = (token: string): string => createHash('sha256').update(token).digest('hex');
 const cleanText = (value: unknown, max = 200): string => String(value ?? '').trim().slice(0, max);
@@ -38,11 +91,22 @@ export class Operations {
   }
 
   rootActor(): Actor {
-    return { key: 'root', id: null, name: 'Владелец', role: 'admin', root: true };
+    return {
+      key: 'root', id: null, name: 'Владелец', role: 'admin', root: true,
+      permissions: PERMISSION_CATALOG.map((item) => item.id),
+    };
   }
 
   can(actor: Actor, permission: Permission): boolean {
-    return ROLE_PERMISSIONS[actor.role].has(permission);
+    if (actor.root) return true;
+    const override = this.db.prepare(
+      'SELECT allowed FROM role_permission WHERE role = ? AND permission = ?',
+    ).get(actor.role, permission) as { allowed: number } | undefined;
+    return override ? Boolean(override.allowed) : ROLE_PERMISSIONS[actor.role].has(permission);
+  }
+
+  permissionsFor(actor: Actor): Permission[] {
+    return PERMISSION_CATALOG.map((item) => item.id).filter((permission) => this.can(actor, permission));
   }
 
   authenticate(token: string): Actor | null {
@@ -51,7 +115,10 @@ export class Operations {
       SELECT id, name, role FROM operator_account
        WHERE token_hash = ? AND active = 1
     `).get(tokenHash(token)) as { id: number; name: string; role: OperatorRole } | undefined;
-    return row ? { key: `op:${row.id}`, id: row.id, name: row.name, role: row.role } : null;
+    if (!row) return null;
+    const actor: Actor = { key: `op:${row.id}`, id: row.id, name: row.name, role: row.role };
+    actor.permissions = this.permissionsFor(actor);
+    return actor;
   }
 
   listOperators(): Array<Record<string, unknown>> {
@@ -76,6 +143,75 @@ export class Operations {
       SELECT id, name, role, active, created_at, updated_at FROM operator_account WHERE id = ?
     `).get(Number(result.lastInsertRowid)) as Record<string, unknown>;
     return { operator, token };
+  }
+
+  updateOperator(id: number, values: { name?: unknown; role?: unknown }): Record<string, unknown> | null {
+    const current = this.db.prepare('SELECT * FROM operator_account WHERE id = ?').get(id) as Record<string, unknown> | undefined;
+    if (!current) return null;
+    const name = values.name === undefined ? String(current['name']) : cleanText(values.name, 80);
+    const role = values.role === undefined ? String(current['role']) as OperatorRole : String(values.role) as OperatorRole;
+    if (name.length < 2) throw new Error('Имя оператора слишком короткое');
+    if (!Object.hasOwn(ROLE_PERMISSIONS, role)) throw new Error('Неизвестная роль');
+    this.db.prepare('UPDATE operator_account SET name = ?, role = ?, updated_at = ? WHERE id = ?')
+      .run(name, role, Date.now(), id);
+    return this.db.prepare(`
+      SELECT id, name, role, active, created_at, updated_at FROM operator_account WHERE id = ?
+    `).get(id) as Record<string, unknown>;
+  }
+
+  rolePermissions(): Record<string, Permission[]> {
+    const result: Record<string, Permission[]> = {};
+    for (const role of Object.keys(ROLE_PERMISSIONS) as OperatorRole[]) {
+      const actor: Actor = { key: `role:${role}`, id: null, name: role, role };
+      result[role] = this.permissionsFor(actor);
+    }
+    return result;
+  }
+
+  defaultRolePermissions(): Record<string, Permission[]> {
+    return Object.fromEntries(
+      (Object.keys(ROLE_PERMISSIONS) as OperatorRole[]).map((role) => [role, [...ROLE_PERMISSIONS[role]]]),
+    );
+  }
+
+  setRolePermissions(roleRaw: unknown, values: unknown): Permission[] {
+    const role = String(roleRaw) as OperatorRole;
+    if (!Object.hasOwn(ROLE_PERMISSIONS, role)) throw new Error('Неизвестная роль');
+    if (!Array.isArray(values)) throw new Error('Нужен список прав');
+    const permissions = [...new Set(values.map(String))];
+    if (permissions.some((permission) => !KNOWN_PERMISSIONS.has(permission as Permission))) {
+      throw new Error('Список содержит неизвестное право');
+    }
+    const selected = new Set(permissions as Permission[]);
+    // Зависимые действия без экрана/объекта чтения дали бы формально
+    // разрешённую, но недоступную функцию. Нормализуем только необходимые
+    // базовые права; остальные флаги остаются полностью независимыми.
+    if ([...selected].some((permission) => permission.startsWith('conversation:') && permission !== 'conversation:read')) selected.add('conversation:read');
+    if (selected.has('bedolaga:extend') || selected.has('bedolaga:devices')) {
+      selected.add('bedolaga:view'); selected.add('conversation:read');
+    }
+    if ([...selected].some((permission) => permission.startsWith('setting:'))) selected.add('settings:read');
+    if ([...selected].some((permission) => ['settings:sources','settings:services','settings:alerts','settings:update'].includes(permission))) selected.add('settings:read');
+    if (selected.has('queue:manage')) selected.add('queue:read');
+    if (selected.has('templates:manage')) selected.add('templates:read');
+    if ([...selected].some((permission) => ['knowledge:manage','knowledge:review','knowledge:mine'].includes(permission))) selected.add('knowledge:read');
+    if (selected.has('stats:reset')) selected.add('stats:read');
+    if (selected.has('operators:manage') || selected.has('roles:manage')) selected.add('team:read');
+    const upsert = this.db.prepare(`
+      INSERT INTO role_permission (role, permission, allowed, updated_at) VALUES (?, ?, ?, ?)
+      ON CONFLICT(role, permission) DO UPDATE SET allowed=excluded.allowed, updated_at=excluded.updated_at
+    `);
+    this.db.transaction(() => {
+      for (const item of PERMISSION_CATALOG) {
+        const allowed = selected.has(item.id);
+        if (allowed === ROLE_PERMISSIONS[role].has(item.id)) {
+          this.db.prepare('DELETE FROM role_permission WHERE role = ? AND permission = ?').run(role, item.id);
+        } else {
+          upsert.run(role, item.id, allowed ? 1 : 0, Date.now());
+        }
+      }
+    })();
+    return this.rolePermissions()[role]!;
   }
 
   rotateOperator(id: number): string {
@@ -155,6 +291,64 @@ export class Operations {
     if (!Number.isFinite(id)) return key;
     const row = this.db.prepare(`SELECT name FROM operator_account WHERE id = ?`).get(id) as { name: string } | undefined;
     return row?.name ?? 'Бывший оператор';
+  }
+
+  /** Ожидание клиента с первого входящего после последнего ответа. */
+  pendingResponseMs(conversationId: number, now = Date.now()): number | null {
+    const row = this.db.prepare(`
+      SELECT MIN(created_at) AS inbound_at
+        FROM message
+       WHERE conversation_id = ? AND direction = 'in' AND is_backfill = 0
+         AND created_at > COALESCE((
+           SELECT MAX(created_at) FROM message
+            WHERE conversation_id = ? AND direction = 'out'
+         ), 0)
+    `).get(conversationId, conversationId) as { inbound_at: number | null };
+    return row.inbound_at == null ? null : Math.max(0, now - row.inbound_at);
+  }
+
+  recordActivity(actor: Actor, kind: 'reply' | 'resolved', conversationId: number, responseMs?: number | null): void {
+    this.db.prepare(`
+      INSERT INTO operator_activity (actor_key, operator_id, conversation_id, kind, response_ms, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(actor.key, actor.id, conversationId, kind, responseMs ?? null, Date.now());
+  }
+
+  operatorStats(daysRaw = 30): Record<string, unknown> {
+    const days = Math.min(365, Math.max(1, Number(daysRaw) || 30));
+    const since = Date.now() - days * 86_400_000;
+    const accounts = this.listOperators();
+    const identities = [
+      { id: null, key: 'root', name: 'Владелец', role: 'admin', active: 1 },
+      ...accounts.map((row) => ({ ...row, key: `op:${row['id']}` })),
+    ] as Array<Record<string, unknown>>;
+    const events = this.db.prepare(`
+      SELECT actor_key, conversation_id, kind, response_ms, created_at
+        FROM operator_activity WHERE created_at >= ? ORDER BY created_at
+    `).all(since) as Array<{ actor_key: string; conversation_id: number; kind: string; response_ms: number | null; created_at: number }>;
+    const assigned = new Map<string, number>();
+    for (const row of this.db.prepare(`
+      SELECT assignee, COUNT(*) AS n FROM conversation
+       WHERE assignee IS NOT NULL AND status NOT IN ('closed','resolved') GROUP BY assignee
+    `).all() as Array<{ assignee: string; n: number }>) assigned.set(row.assignee, Number(row.n));
+    const operators = identities.map((identity) => {
+      const key = String(identity['key']);
+      const own = events.filter((event) => event.actor_key === key);
+      const replies = own.filter((event) => event.kind === 'reply');
+      const samples = replies.map((event) => event.response_ms).filter((ms): ms is number => ms != null).sort((a, b) => a - b);
+      const median = samples.length ? samples[Math.floor((samples.length - 1) / 2)]! : null;
+      return {
+        ...identity,
+        handled: new Set(own.map((event) => event.conversation_id)).size,
+        resolved: new Set(own.filter((event) => event.kind === 'resolved').map((event) => event.conversation_id)).size,
+        replies: replies.length,
+        average_response_ms: samples.length ? Math.round(samples.reduce((sum, ms) => sum + ms, 0) / samples.length) : null,
+        median_response_ms: median,
+        active_assigned: assigned.get(key) ?? 0,
+        last_activity_at: own.at(-1)?.created_at ?? null,
+      };
+    });
+    return { days, since, operators };
   }
 
   ensureProfile(conversation: Conversation): number {

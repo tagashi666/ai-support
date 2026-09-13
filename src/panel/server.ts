@@ -34,7 +34,7 @@ import { version } from '../config.js';
 import type { BedolagaClient, BedolagaTicketStatus } from '../channels/bedolaga.js';
 import { UpdateManager } from '../core/update.js';
 import { SourceManager } from '../core/sources.js';
-import { Operations, type Actor, type Permission } from '../core/operations.js';
+import { Operations, PERMISSION_CATALOG, type Actor, type Permission } from '../core/operations.js';
 import { inspectUpload, openMediaFile, readMediaFile, removeMediaFile, saveUploadedMedia } from '../core/media.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -373,35 +373,50 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   };
 
   const permissionFor = (method: string, url: string): Permission => {
-    // Эти GET-ответы содержат административные данные, поэтому общий
-    // read-only допуск ниже для них слишком широк.
-    if (url.startsWith('/api/update')) return 'update:manage';
-    if (url.startsWith('/api/sources')) return 'settings:write';
-    if (url.startsWith('/api/operators')) return 'operators:manage';
+    if (url.startsWith('/api/roles')) return 'roles:manage';
+    if (url.startsWith('/api/operators')) return method === 'GET' ? 'team:read' : 'operators:manage';
+    if (url.startsWith('/api/operator-stats')) return 'operator_stats:read';
     if (url.startsWith('/api/audit')) return 'audit:read';
-    if (url.startsWith('/api/diagnostics')) return 'audit:read';
+    if (url.startsWith('/api/diagnostics')) return 'diagnostics:read';
+    if (url.startsWith('/api/update')) return 'settings:update';
+    if (url.startsWith('/api/sources')) return 'settings:sources';
     if (url.startsWith('/api/learning')) return 'knowledge:review';
     if (url.startsWith('/api/ai/keys') || url.startsWith('/api/ai/models') || url.startsWith('/api/ai/ping')) {
-      return 'settings:write';
+      return 'settings:ai_tools';
     }
-    if (url.startsWith('/api/ai/try')) return 'knowledge:review';
-    if (url.startsWith('/api/stats/reset')) return 'settings:write';
-    if (url.startsWith('/api/inbox/folders') && method !== 'GET') return 'settings:write';
+    if (url.startsWith('/api/ai/try')) return 'settings:ai_tools';
+    if (url.startsWith('/api/stats/reset')) return 'stats:reset';
+    if (url.startsWith('/api/stats')) return 'stats:read';
+    if (url.startsWith('/api/inbox/folders') && method !== 'GET') return 'settings:sources';
+    if (url.startsWith('/api/sla') && method !== 'GET') return 'queue:manage';
+    if (url.startsWith('/api/queue') || url.startsWith('/api/sla')) return 'queue:read';
+    if (url.startsWith('/api/filters')) return 'queue:read';
+    if (url.startsWith('/api/templates') && method !== 'GET') return 'templates:manage';
+    if (url.startsWith('/api/templates')) return 'templates:read';
+    if (url.startsWith('/api/suggestions')) return 'conversation:reply';
+    if (url.startsWith('/api/kb') && method !== 'GET') return url.startsWith('/api/kb/mine') ? 'knowledge:mine' : 'knowledge:manage';
+    if (url.startsWith('/api/kb')) return 'knowledge:read';
     if (/^\/api\/conversations\/\d+\/bedolaga\/subscriptions\/\d+\/extend(?:\?|$)/.test(url)) {
-      return 'bedolaga:write';
+      return 'bedolaga:extend';
     }
     if (/^\/api\/conversations\/\d+\/bedolaga\/customer(?:\?|$)/.test(url)) {
-      return 'conversation:write';
+      return 'bedolaga:view';
     }
-    // Subscription URL is a live credential, not ordinary conversation data.
-    // A viewer may inspect the dialogue, but must not retrieve or copy it.
-    // Destructive subscription actions remain admin-only.
-    if (url.includes('/subscription/action')) return 'settings:write';
-    if (url.includes('/subscription')) return 'conversation:write';
+    if (url.includes('/subscription/action')) return 'bedolaga:devices';
+    if (url.includes('/subscription')) return 'bedolaga:view';
+    if (/\/conversations\/\d+\/attachments(?:\?|$)/.test(url)) return 'conversation:attachments';
+    if (/\/conversations\/\d+\/reply(?:\?|$)/.test(url)) return 'conversation:reply';
+    if (/\/conversations\/\d+\/(?:note|profile\/notes)(?:\?|$)/.test(url)) return 'conversation:notes';
+    if (/\/conversations\/\d+\/(?:read|presence)(?:\?|$)/.test(url)) return 'conversation:read';
+    if (/\/conversations\/\d+\/customer\/refresh(?:\?|$)/.test(url)) return 'conversation:profile';
+    if (/\/conversations\/\d+\/profile(?:\?|$)/.test(url) && method !== 'GET') return 'conversation:profile';
+    if (/\/conversations\/\d+\/(?:state|engage|release)(?:\?|$)/.test(url)) return 'conversation:status';
+    if (url.startsWith('/api/settings/services/')) return 'settings:services';
+    if (url.startsWith('/api/settings/test-alert')) return 'settings:alerts';
+    if (url.startsWith('/api/nodes')) return 'settings:nodes';
+    if (url === '/api/settings' || url.startsWith('/api/settings?')) return 'settings:read';
     if (method === 'GET' || method === 'HEAD') return 'conversation:read';
-    if (url.startsWith('/api/settings') || url.startsWith('/api/nodes')) return 'settings:write';
-    if (url.startsWith('/api/kb') || url.startsWith('/api/templates') || url.startsWith('/api/sla')) return 'knowledge:review';
-    return 'conversation:write';
+    return 'conversation:status';
   };
 
   app.addHook('onRequest', async (request, reply) => {
@@ -575,6 +590,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       const actor = actorOf(request);
       const claimed = operations.claim(conversationId, actor);
       if (!claimed.ok) return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}` });
+      const responseMs = operations.pendingResponseMs(conversationId);
       const suggestionId = request.body?.suggestionId;
       if (suggestionId !== undefined) {
         const suggestion = store.getSuggestion(suggestionId);
@@ -592,6 +608,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         if (request.body?.suggestionId) {
           store.decideSuggestion(request.body.suggestionId, request.body.edited ? 'edited' : 'sent');
         }
+        operations.recordActivity(actor, 'reply', conversationId, responseMs);
         return { ok: true, message: sent.message };
       } catch (err) {
         if (err instanceof WindowClosedError) return reply.code(409).send({ error: err.message });
@@ -614,6 +631,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       const actor = actorOf(request);
       const claimed = operations.claim(conversationId, actor);
       if (!claimed.ok) return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}` });
+      const responseMs = operations.pendingResponseMs(conversationId);
 
       const decodeHeader = (name: string, fallback = ''): string => {
         const raw = request.headers[name];
@@ -671,6 +689,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
           actor: actor.name, name: original, bytes: saved.bytes, mime: inspected.mimeType,
           sha256: saved.sha256, dangerous: inspected.dangerous,
         });
+        operations.recordActivity(actor, 'reply', conversationId, responseMs);
         return { ok: true, message: sent.message };
       } catch (err) {
         if (saved) await removeMediaFile(saved.fileRef);
@@ -725,6 +744,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       }
       if (typeof handoff === 'boolean') store.setHandoff(id, handoff ? Date.now() : null);
       if (status) store.setStatus(id, status);
+      if (status === 'resolved' && before.status !== 'resolved' && before.status !== 'closed') {
+        operations.recordActivity(actorOf(request), 'resolved', id);
+      }
       if (aiMode === 'inherit' || aiMode === 'off' || aiMode === 'shadow' || aiMode === 'suggest' || aiMode === 'auto') store.setAiMode(id, aiMode);
       if (typeof escalated === 'boolean') {
         store.setEscalated(id, escalated, escalated ? 'high' : undefined);
@@ -789,7 +811,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         customer,
         capabilities: {
           canExtendSubscription: customer.identityVerified
-            && operations.can(actorOf(request), 'bedolaga:write'),
+            && operations.can(actorOf(request), 'bedolaga:extend'),
         },
       };
     } catch (err) {
@@ -971,10 +993,12 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
   });
 
-  app.get('/api/me', async (request) => ({ actor: actorOf(request) }));
+  app.get('/api/me', async (request) => {
+    const actor = actorOf(request);
+    return { actor: { ...actor, permissions: operations.permissionsFor(actor) }, version };
+  });
 
   app.get('/api/operators', async (request, reply) => {
-    if (!operations.can(actorOf(request), 'operators:manage')) return reply.code(403).send({ error: 'Недостаточно прав' });
     return { operators: operations.listOperators() };
   });
 
@@ -987,17 +1011,41 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
   });
 
-  app.post<{ Params: { id: string }; Body: { active?: boolean; rotate?: boolean } }>('/api/operators/:id', async (request, reply) => {
+  app.post<{ Params: { id: string }; Body: { active?: boolean; rotate?: boolean; name?: string; role?: string } }>('/api/operators/:id', async (request, reply) => {
     const id = Number(request.params.id);
     try {
       if (request.body?.rotate) return { ok: true, token: operations.rotateOperator(id) };
-      if (typeof request.body?.active !== 'boolean') return reply.code(400).send({ error: 'Нужно active или rotate' });
+      if (request.body?.name !== undefined || request.body?.role !== undefined) {
+        const operator = operations.updateOperator(id, request.body);
+        if (!operator) return reply.code(404).send({ error: 'Оператор не найден' });
+        return { ok: true, operator };
+      }
+      if (typeof request.body?.active !== 'boolean') return reply.code(400).send({ error: 'Нужно active, rotate, name или role' });
       if (!operations.setOperatorActive(id, request.body.active)) return reply.code(404).send({ error: 'Оператор не найден' });
       return { ok: true };
     } catch (err) {
       return reply.code(400).send({ error: (err as Error).message });
     }
   });
+
+  app.get('/api/roles', async () => ({
+    catalog: PERMISSION_CATALOG,
+    roles: operations.rolePermissions(),
+    defaults: operations.defaultRolePermissions(),
+  }));
+
+  app.put<{ Params: { role: string }; Body: { permissions?: unknown } }>('/api/roles/:role', async (request, reply) => {
+    try {
+      const permissions = operations.setRolePermissions(request.params.role, request.body?.permissions);
+      return { ok: true, role: request.params.role, permissions };
+    } catch (err) {
+      return reply.code(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get<{ Querystring: { days?: string } }>('/api/operator-stats', async (request) => (
+    operations.operatorStats(Number(request.query.days ?? 30))
+  ));
 
   app.get<{ Querystring: { limit?: string } }>('/api/audit', async (request, reply) => {
     if (!operations.can(actorOf(request), 'audit:read')) return reply.code(403).send({ error: 'Недостаточно прав' });
@@ -1373,6 +1421,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   app.post<{ Body: Record<string, unknown> }>('/api/settings', async (request, reply) => {
     const values = request.body ?? {};
+    const actor = actorOf(request);
+    const forbidden = Object.keys(values).filter((key) => !operations.can(actor, `setting:${key}` as Permission));
+    if (forbidden.length) {
+      return reply.code(403).send({ error: `Нет права изменять настройки: ${forbidden.join(', ')}` });
+    }
     if (values['aiMode'] !== undefined && values['aiMode'] !== 'off' && !config.ai.apiKeys.length) {
       return reply.code(400).send({ error: 'Сначала задайте AI_API_KEY на сервере' });
     }

@@ -692,6 +692,63 @@ ok('lead читает аудит, секретоподобные поля выч
   && !auditPayload.includes('audit-authorization-probe')
   && !auditPayload.includes('audit-cookie-probe'));
 
+// Гранулярная матрица должна влиять на реальный API, а не только скрывать
+// элементы интерфейса. Даём viewer право ровно на одно поле и проверяем,
+// что соседняя настройка по-прежнему закрыта.
+const rolesResponse = await fetch(`${B}/api/roles`, { headers: h });
+const rolesPayload = await rolesResponse.json() as any;
+ok('владелец получает полный каталог прав ролей', rolesResponse.status === 200
+  && rolesPayload.catalog.some((item: any) => item.id === 'setting:brand')
+  && rolesPayload.catalog.some((item: any) => item.id === 'conversation:reply'));
+const viewerBrandBefore = await fetch(`${B}/api/settings`, {
+  method: 'POST', headers: { ...viewerH, 'content-type': 'application/json' }, body: JSON.stringify({ brand: 'Запрещено' }),
+});
+const grantViewerBrand = await fetch(`${B}/api/roles/viewer`, {
+  method: 'PUT', headers: { ...h, 'content-type': 'application/json' },
+  body: JSON.stringify({ permissions: [...rolesPayload.defaults.viewer, 'setting:brand'] }),
+});
+const viewerBrandAllowed = await fetch(`${B}/api/settings`, {
+  method: 'POST', headers: { ...viewerH, 'content-type': 'application/json' }, body: JSON.stringify({ brand: 'Тестовый сервис' }),
+});
+const viewerAiStillForbidden = await fetch(`${B}/api/settings`, {
+  method: 'POST', headers: { ...viewerH, 'content-type': 'application/json' }, body: JSON.stringify({ aiMode: 'off' }),
+});
+const viewerMe = await (await fetch(`${B}/api/me`, { headers: viewerH })).json() as any;
+ok('право на конкретную настройку применяется сервером независимо от остальных',
+  viewerBrandBefore.status === 403 && grantViewerBrand.status === 200
+  && viewerBrandAllowed.status === 200 && viewerAiStillForbidden.status === 403
+  && viewerMe.actor.permissions.includes('setting:brand'));
+await fetch(`${B}/api/roles/viewer`, {
+  method: 'PUT', headers: { ...h, 'content-type': 'application/json' },
+  body: JSON.stringify({ permissions: rolesPayload.defaults.viewer }),
+});
+
+const metricConversation = store.recordInbound({
+  channel: 'tg_dm', externalId: 'operator-metrics', sourceId: 'bot-metrics',
+  username: 'metric-client', text: 'Когда ответите?', externalMsgId: 'metric-in-1', sentAt: Date.now() - 90_000,
+})!.conversation;
+const metricReply = await fetch(`${B}/api/conversations/${metricConversation.id}/reply`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: JSON.stringify({ text: 'Уже отвечаем' }),
+});
+const metricResolved = await fetch(`${B}/api/conversations/${metricConversation.id}/state`, {
+  method: 'POST', headers: { ...agentH, 'content-type': 'application/json' }, body: JSON.stringify({ status: 'resolved' }),
+});
+const operatorStatsDenied = await fetch(`${B}/api/operator-stats?days=30`, { headers: agentH });
+const operatorStatsResponse = await fetch(`${B}/api/operator-stats?days=30`, { headers: leadH });
+const operatorStats = await operatorStatsResponse.json() as any;
+const agentMetrics = operatorStats.operators?.find((item: any) => item.id === agent.body.operator.id);
+ok('ответы и закрытые тикеты атрибутируются оператору', metricReply.status === 200
+  && metricResolved.status === 200 && operatorStatsDenied.status === 403
+  && operatorStatsResponse.status === 200 && agentMetrics?.replies === 1
+  && agentMetrics?.resolved === 1 && agentMetrics?.average_response_ms >= 80_000, agentMetrics);
+
+const renamedOperator = await fetch(`${B}/api/operators/${viewer.body.operator.id}`, {
+  method: 'POST', headers: { ...h, 'content-type': 'application/json' },
+  body: JSON.stringify({ name: 'Наблюдатель 2', role: 'viewer' }),
+});
+ok('меню оператора может менять имя и роль', renamedOperator.status === 200
+  && (await renamedOperator.json() as any).operator.name === 'Наблюдатель 2');
+
 // Подбор токена: без ограничения частоты панель защищена одним секретом,
 // который можно перебирать тысячами попыток в секунду.
 let lastStatus = 0;

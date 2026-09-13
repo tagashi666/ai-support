@@ -232,6 +232,11 @@ check('настройки открываются сверху и считают 
   /settingsScroller\.scrollTop = 0/.test(html)
   && /section\.getBoundingClientRect\(\)\.top/.test(html)
   && /settingsScroller\.getBoundingClientRect\(\)\.top/.test(html));
+check('разделы настроек используют всю ширину без пустой левой колонки',
+  /\.settings-content-column\s*\{[^}]*width:100%/s.test(uiCss)
+  && /\.settings-section\s*\{[^}]*display:block/s.test(uiCss)
+  && /\.section-copy\s*\{[^}]*margin:0 auto 20px[^}]*text-align:center/s.test(uiCss)
+  && /\.settings-section > :not\(\.section-copy\)\s*\{[^}]*width:100%/s.test(uiCss));
 check('источники используют скруглённый системный glyph',
   /\.source-kind\s*\{[^}]*border-radius:6px/s.test(uiCss));
 check('обновления и проверка уведомлений имеют собственную раскладку',
@@ -340,6 +345,21 @@ check('ширина запоминается', /localStorage\.setItem\(`layout:/
 check('разделы карточки сворачиваются', (html.match(/class="fold"/g) ?? []).length >= 4);
 check('состояние разделов запоминается', /localStorage\.setItem\(key, fold\.open/.test(html));
 check('в навигации есть живая сводка', /renderBoard/.test(html) && /pulseBoard/.test(html));
+check('счётчики SLA и базы знаний загружаются до первого открытия экранов',
+  /async function loadNavigationCounts\(\)/.test(html)
+  && /await loadNavigationCounts\(\)/.test(html)
+  && /\$\('cntOverdue'\)\.textContent = String\(overdue\)/.test(html)
+  && /\$\('cntKb'\)\.textContent = String\(\(knowledge\.kb \?\? \[\]\)\.length\)/.test(html)
+  && /id="cntOverdue">0<\/span>/.test(html));
+check('очередь полноширинная, а сроки обслуживания вынесены в toolbar',
+  /id="slaPoliciesBtn">Сроки обслуживания<\/button>/.test(html)
+  && /\.queue-workspace\s*\{[^}]*display:block/s.test(uiCss)
+  && !/class="queue-sidebar"/.test(html)
+  && !/id="saveFilterBtn"/.test(html));
+check('массовое закрытие тикетов требует подтверждения и использует штатный state API',
+  /id="closeAllTickets">Закрыть все тикеты<\/button>/.test(html)
+  && /confirmAction\('Закрыть все тикеты\?'/u.test(html)
+  && /api\(`\/api\/conversations\/\$\{row\.id\}\/state`, \{ method:'POST', body:JSON\.stringify\(\{ status:'resolved' \}\) \}\)/.test(html));
 
 // 33. Описания свёрнуты, обе модели выбираются, ключ виден.
 check('описание раскрывается кнопкой', /class="why"/.test(html) && /why-text/.test(html));
@@ -348,6 +368,19 @@ check('видно, каким ключом ходит модель', /\/api\/ai\
 
 // 34. Статистика: период, график, разбивки.
 check('период статистики переключается', /statsRange/.test(html) && /days=\$\{statsDays\}/.test(html));
+check('меню оператора вынесено из обрезающей таблицы',
+  /document\.body\.append\(menu\)/.test(html)
+  && /className = 'operator-popover'/.test(html)
+  && /\.operator-popover\s*\{[^}]*position:fixed[^}]*z-index:80/s.test(uiCss));
+check('у команды есть статистика операторов',
+  /data-team-tab="performance"/.test(html)
+  && /\/api\/operator-stats\?days=\$\{operatorStatsDays\}/.test(html)
+  && /Средний ответ/.test(html) && /Медиана/.test(html));
+check('матрица ролей управляет каждым permission',
+  /data-team-tab="roles"/.test(html)
+  && /data-permission="\$\{esc\(item\.id\)\}"/.test(html)
+  && /\/api\/roles\/\$\{selectedRole\}/.test(html)
+  && /setting:\$\{el\.dataset\.key\}/.test(html));
 check('есть график объёма', /function barChart/.test(html));
 check('медиана рядом со средним', /medianFirstResponseMs/.test(html));
 

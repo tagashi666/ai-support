@@ -525,6 +525,31 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_attachment_retry ON attachment (next_attempt_at, id)
     WHERE local_path IS NULL;
   `,
+
+  // 019 — настраиваемые права ролей и атрибуция работы операторов.
+  // В role_permission лежат только переопределения штатной матрицы: новые
+  // permissions поэтому получают безопасные defaults после обновления.
+  `
+  CREATE TABLE role_permission (
+    role       TEXT    NOT NULL CHECK (role IN ('admin','lead','agent','viewer')),
+    permission TEXT    NOT NULL,
+    allowed    INTEGER NOT NULL CHECK (allowed IN (0,1)),
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (role, permission)
+  );
+
+  CREATE TABLE operator_activity (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor_key       TEXT    NOT NULL,
+    operator_id     INTEGER REFERENCES operator_account(id) ON DELETE SET NULL,
+    conversation_id INTEGER NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+    kind            TEXT    NOT NULL CHECK (kind IN ('reply','resolved')),
+    response_ms     INTEGER,
+    created_at      INTEGER NOT NULL
+  );
+  CREATE INDEX idx_operator_activity_actor ON operator_activity (actor_key, created_at DESC);
+  CREATE INDEX idx_operator_activity_period ON operator_activity (created_at DESC, kind);
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {

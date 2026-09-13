@@ -661,7 +661,7 @@ tr:last-child td { border-bottom:0; }
         <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM4 14h4l2 2h4l2-2h4"/></svg></span><span class="nav-label">Входящие</span><span class="count" id="cntInbox">0</span>
       </button>
       <button class="nav" data-view="queue" aria-label="Контроль SLA">
-        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span class="nav-label">Контроль SLA</span><span class="count" id="cntOverdue"></span>
+        <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h5"/></svg></span><span class="nav-label">Контроль SLA</span><span class="count" id="cntOverdue">0</span>
       </button>
       <button class="nav" data-view="kb" aria-label="База знаний">
         <span class="glyph"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4Zm3 13h10M9 8h5M9 11h5"/></svg></span><span class="nav-label">База знаний</span><span class="count" id="cntKb">0</span>
@@ -795,12 +795,13 @@ tr:last-child td { border-bottom:0; }
     <section class="view" id="view-queue" hidden>
       <header class="workspace-header">
         <div><h1>Контроль SLA</h1><p>Обращения, требующие решения команды</p></div>
-        <div class="workspace-actions"><button class="btn" id="saveFilterBtn">Сохранить вид</button><button class="icon-btn refresh-action" id="queueRefresh" aria-label="Обновить очередь" title="Обновить"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 7a6 6 0 1 0 .3 5M15 3v4h-4"/></svg></button></div>
+        <div class="workspace-actions">
+          <button class="btn" id="slaPoliciesBtn">Сроки обслуживания</button>
+          <details class="row-menu queue-actions-menu"><summary aria-label="Другие действия с очередью">•••</summary><div><button class="danger" id="closeAllTickets">Закрыть все тикеты</button></div></details>
+          <button class="icon-btn refresh-action" id="queueRefresh" aria-label="Обновить очередь" title="Обновить"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 7a6 6 0 1 0 .3 5M15 3v4h-4"/></svg></button>
+        </div>
       </header>
-      <div class="queue-workspace">
-        <aside class="queue-sidebar"><div id="savedFilters"></div><div id="slaPolicies"></div></aside>
-        <div class="queue-main" id="queueBody"></div>
-      </div>
+      <div class="queue-workspace"><div class="queue-main" id="queueBody"></div></div>
     </section>
 
     <section class="view" id="view-lab" hidden>
@@ -838,8 +839,8 @@ tr:last-child td { border-bottom:0; }
 
     <section class="view" id="view-team" hidden>
       <header class="workspace-header"><div><h1>Команда</h1><p id="meLabel"></p></div><div class="workspace-actions"><button class="btn primary" id="newOperator">Добавить оператора</button></div></header>
-      <div class="subnav" id="teamTabs"><button data-team-tab="operators" aria-pressed="true">Сотрудники</button><button data-team-tab="audit" aria-pressed="false">Журнал действий</button></div>
-      <div class="workspace-scroll team-workspace" data-team-view="operators"><div class="wide-content"><div id="operatorsBody"></div><div id="auditBody" hidden></div></div></div>
+      <div class="subnav" id="teamTabs"><button data-team-tab="operators" aria-pressed="true">Сотрудники</button><button data-team-tab="performance" aria-pressed="false">Статистика</button><button data-team-tab="roles" aria-pressed="false">Роли и права</button><button data-team-tab="audit" aria-pressed="false">Журнал действий</button></div>
+      <div class="workspace-scroll team-workspace" data-team-view="operators"><div class="wide-content"><div id="operatorsBody"></div><div id="performanceBody" hidden></div><div id="rolesBody" hidden></div><div id="auditBody" hidden></div></div></div>
     </section>
 
     <section class="view" id="view-diagnostics" hidden>
@@ -985,22 +986,45 @@ let conversations = [], current = null, suggestion = null, filter = 'all', listQ
 let inboxSources = [], inboxFolders = [];
 let kbTab = 'kb', docs = { kb: [], drafts: [], candidates: [] }, quoting = null, currentActor = null;
 let pendingFiles = [], uploadRunning = false;
-const canWrite = () => Boolean(currentActor && currentActor.role !== 'viewer');
-const canReview = () => currentActor?.role === 'lead' || currentActor?.role === 'admin';
-const canAdmin = () => currentActor?.role === 'admin';
+const canPermission = (permission) => Boolean(currentActor?.root || currentActor?.permissions?.includes(permission));
+const canWrite = () => canPermission('conversation:reply');
+const canCompose = () => ['conversation:reply','conversation:attachments','conversation:notes'].some(canPermission);
+const canReview = () => canPermission('knowledge:review');
 
 function applyRoleUi() {
-  const writable = canWrite();
   const reviewer = canReview();
-  $('templates').disabled = !writable;
-  $('noteBtn').disabled = !writable;
-  $('saveFilterBtn').hidden = !writable;
-  $('newDoc').hidden = !reviewer;
-  $('mineBtn').hidden = !reviewer;
-  $('manageFolders').hidden = !canAdmin();
+  $('templates').disabled = !canPermission('templates:read');
+  $('noteBtn').disabled = !canPermission('conversation:notes');
+  $('attachBtn').disabled = !canPermission('conversation:attachments');
+  $('captureBtn').disabled = !canPermission('conversation:attachments');
+  $('statusSel').disabled = !canPermission('conversation:status');
+  $('aiSel').disabled = !canPermission('conversation:status');
+  $('escBtn').disabled = !canPermission('conversation:status');
+  $('closeAllTickets').hidden = !canPermission('conversation:status');
+  $('newDoc').hidden = !canPermission('knowledge:manage');
+  $('mineBtn').hidden = !canPermission('knowledge:mine');
+  $('manageFolders').hidden = !canPermission('settings:sources');
+  $('slaPoliciesBtn').hidden = !canPermission('queue:manage');
   const learningTab = $('kbTabs').querySelector('[data-tab="learning"]');
   if (learningTab) learningTab.hidden = !reviewer;
   if (!reviewer && kbTab === 'learning') kbTab = 'kb';
+  const viewPermissions = {
+    inbox:'conversation:read', queue:'queue:read', kb:'knowledge:read', lab:'settings:ai_tools',
+    nodes:'settings:nodes', stats:'stats:read', diagnostics:'diagnostics:read', settings:'settings:read',
+  };
+  for (const [view, permission] of Object.entries(viewPermissions)) {
+    const button = document.querySelector(`.nav[data-view="${view}"]`);
+    if (button) button.hidden = !canPermission(permission);
+  }
+  const teamVisible = ['team:read','operator_stats:read','roles:manage','audit:read'].some(canPermission);
+  const teamButton = document.querySelector('.nav[data-view="team"]');
+  if (teamButton) teamButton.hidden = !teamVisible;
+  $('globalSearch').hidden = !canPermission('conversation:read');
+  const activeNav = document.querySelector('.nav[data-view][aria-current="true"]');
+  if (activeNav?.hidden) {
+    const firstAllowed = document.querySelector('.nav[data-view]:not([hidden])');
+    if (firstAllowed) show(firstAllowed.dataset.view);
+  }
 }
 
 /* ═══ оформление ═══ */
@@ -1496,7 +1520,7 @@ function renderWindow() {
   const box = $('composer');
   if (!current) { box.hidden = true; return; }
   box.hidden = false;
-  if (!canWrite()) {
+  if (!canCompose()) {
     box.dataset.window = 'closed';
     $('ring').style.setProperty('--p', 0);
     $('wleft').textContent = 'режим просмотра';
@@ -1504,6 +1528,15 @@ function renderWindow() {
     $('input').placeholder = 'Наблюдатель не может отвечать или оставлять заметки';
     $('send').innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>';
     $('send').setAttribute('aria-label', 'Ответы недоступны в режиме просмотра');
+    return;
+  }
+  if (!canWrite()) {
+    box.dataset.window = 'open'; $('ring').style.setProperty('--p', 0);
+    $('wleft').textContent = 'без права ответа';
+    $('input').disabled = !canPermission('conversation:notes'); $('send').disabled = true;
+    $('input').placeholder = canPermission('conversation:notes') ? 'Текст внутренней заметки' : 'Ответы запрещены настройками роли';
+    $('send').innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>';
+    $('send').setAttribute('aria-label', 'Ответы запрещены настройками роли');
     return;
   }
   if (!current.window.applies) {
@@ -1637,7 +1670,7 @@ function bubble(m, attachments = {}) {
       };
       box.onclick = () => openImage(img.src);
       box.append(img);
-      if (canWrite()) {
+      if (canPermission('conversation:attachments')) {
         const actions = document.createElement('span'); actions.className = 'shot-actions';
         const edit = document.createElement('button'); edit.className = 'shot-edit'; edit.type = 'button';
         edit.textContent = 'Править'; edit.title = 'Создать отредактированную копию';
@@ -1804,19 +1837,18 @@ function renderCustomer(profile) {
         ? `<div class="item col-item"><span class="lbl">Клиент прислал ключ</span>
              <span class="mono" style="overflow-wrap:anywhere">${esc(current.sub_link.slice(0, 120))}</span></div>`
         : '')
-    + (canWrite() && settings?.channels?.bedolaga
+    + (canPermission('bedolaga:view') && (current.channel === 'bedolaga' || settings?.channels?.bedolaga)
         ? `<div class="item"><button class="btn primary wide" id="bedolagaCardBtn">Полная карточка Bedolaga</button></div>`
         : '')
-    + (canWrite() ? `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>` : '')
+    + (canPermission('conversation:profile') ? `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>` : '')
     + (profile?.found
         ? `<div class="item"><span class="hint">Источники: ${esc((profile.sources ?? []).join(', ') || '—')}</span></div>`
         : `<div class="item"><span class="hint">Клиент не найден ни в бедолаге, ни в Remnawave.</span></div>`)
     + ((profile?.trace ?? []).length
         ? `<div class="item col-item"><span class="hint">${(profile.trace).map((t) => esc(t)).join('<br>')}</span></div>` : '');
 
-  if (!canWrite()) return;
   if ($('bedolagaCardBtn')) $('bedolagaCardBtn').onclick = () => openBedolagaCard();
-  $('refreshCust').onclick = async () => {
+  if ($('refreshCust')) $('refreshCust').onclick = async () => {
     $('refreshCust').disabled = true;
     const data = await mutate(`/api/conversations/${current.id}/customer/refresh`, { method:'POST' }, 'Карточка обновлена');
     $('refreshCust').disabled = false;
@@ -2025,9 +2057,9 @@ function renderCollaboration(value = current?.collaboration) {
   card.innerHTML = `<div class="item"><span class="lbl">Ответственный</span><span class="val">${esc(owner?.name ?? 'не назначен')}</span></div>
     ${owner?.until ? `<div class="item"><span class="lbl">Lease до</span><span class="val mono">${esc(fmtTime(owner.until))}</span></div>` : ''}
     ${presence.length ? `<div class="item col-item"><span class="lbl">Сейчас в диалоге</span>${presence.map((p) => `<span class="mini-note">${esc(p.name)} · ${p.state === 'typing' ? 'печатает' : 'смотрит'}</span>`).join('')}</div>` : ''}
-    ${canWrite() ? `<div class="item context-action"><button class="btn wide" id="claimBtn">Взять диалог</button></div>
+    ${canPermission('conversation:status') ? `<div class="item context-action"><button class="btn wide" id="claimBtn">Взять диалог</button></div>
     <div class="item context-action"><button class="btn quiet wide" id="releaseBtn">Освободить</button></div>` : '<div class="item"><span class="hint">Режим просмотра: закрепление недоступно.</span></div>'}`;
-  if (!canWrite()) return;
+  if (!canPermission('conversation:status')) return;
   $('claimBtn').onclick = async () => {
     const result = await mutate(`/api/conversations/${current.id}/engage`, { method:'POST' }, 'Диалог закреплён');
     if (result?.collaboration) { current.collaboration = result.collaboration; renderCollaboration(result.collaboration); }
@@ -2057,11 +2089,10 @@ function renderUnifiedProfile(profile) {
     + `<div class="item col-item"><span class="lbl">Теги</span><div class="profile-tags">${tags.length ? tags.map((t) => `<span class="badge">${esc(t)}</span>`).join('') : '<span class="hint">нет</span>'}</div></div>`
     + (notes.length ? `<div class="item col-item"><span class="lbl">Последние заметки</span>${notes.slice(0,4).map((n) => `<span class="mini-note">${esc(n.text)}<br><span class="hint">${esc(n.actor_key)} · ${fmtTime(n.created_at)}</span></span>`).join('')}</div>` : '')
     + (related.length > 1 ? `<div class="item col-item"><span class="lbl">Связанные диалоги</span>${related.slice(0,8).map((r) => `<button class="btn quiet" data-related="${r.id}">${esc(channelLabel(r))} · ${esc(conversationStatus(r.status))}</button>`).join('')}</div>` : '')
-    + (canWrite() ? `<div class="item context-action"><button class="btn wide" id="editProfile">Изменить профиль</button></div>
-       <div class="item context-action"><button class="btn wide" id="addProfileNote">Добавить заметку</button></div>` : '');
+    + (canPermission('conversation:profile') ? `<div class="item context-action"><button class="btn wide" id="editProfile">Изменить профиль</button></div>` : '')
+    + (canPermission('conversation:notes') ? `<div class="item context-action"><button class="btn wide" id="addProfileNote">Добавить заметку</button></div>` : '');
   for (const b of card.querySelectorAll('[data-related]')) b.onclick = () => open(Number(b.dataset.related));
-  if (!canWrite()) return;
-  $('editProfile').onclick = () => {
+  if ($('editProfile')) $('editProfile').onclick = () => {
     sheet('Единый профиль', `<div class="frow"><label>Имя</label><input id="pfName" value="${esc(profile.display_name || '')}"></div>
       <div class="frow"><label>Компания</label><input id="pfCompany" value="${esc(profile.company || '')}"></div>
       <div class="frow"><label>Email</label><input id="pfEmail" value="${esc(profile.email || '')}"></div>
@@ -2077,7 +2108,7 @@ function renderUnifiedProfile(profile) {
       if (result?.profile) { closeSheet(); renderUnifiedProfile(result.profile); }
     };
   };
-  $('addProfileNote').onclick = () => {
+  if ($('addProfileNote')) $('addProfileNote').onclick = () => {
     sheet('Заметка о клиенте', '<textarea id="pfNote" rows="6" placeholder="Контекст для следующего оператора"></textarea>', '<button class="btn" id="pfCancel">Отмена</button><button class="btn primary" id="pfAdd">Добавить</button>');
     $('pfCancel').onclick = closeSheet;
     $('pfAdd').onclick = async () => {
@@ -2098,7 +2129,7 @@ function reveal(el) {
 
 async function renderSubscription() {
   const wrap = $('subWrap');
-  if (!current || !settings?.remnawave || !canWrite()) { wrap.hidden = true; $('devicesWrap').hidden = true; return; }
+  if (!current || !settings?.remnawave || !canPermission('bedolaga:view')) { wrap.hidden = true; $('devicesWrap').hidden = true; return; }
   wrap.hidden = false;
   // Диалог, для которого грузим подписку. Запрос в Remnawave небыстрый, и при
   // быстром переключении ответ мог прийти, когда открыт уже другой диалог —
@@ -2143,7 +2174,7 @@ async function renderSubscription() {
     (rows.length ? rows.map(([k,v]) => `<div class="item"><span class="lbl">${esc(k)}</span><span class="val mono">${esc(v)}</span></div>`).join('')
       : '<div class="item"><span class="hint">Профиль не найден.</span></div>')
     + (profile?.subscriptionUrl ? `<div class="item"><button class="btn wide" id="copySub">Скопировать ссылку</button></div>` : '')
-    + (canAdmin() ? `<div class="item"><button class="btn wide" id="resetDev">Сбросить все устройства</button></div>
+    + (canPermission('bedolaga:devices') ? `<div class="item"><button class="btn wide" id="resetDev">Сбросить все устройства</button></div>
        <div class="item"><button class="btn wide danger" id="revoke">Перевыпустить подписку</button></div>` : '<div class="item"><span class="hint">Сброс устройств и перевыпуск доступны только администратору.</span></div>');
   reveal($('subBody'));
 
@@ -2154,12 +2185,12 @@ async function renderSubscription() {
     $('devicesCap').textContent = `${devices.length}`;
     $('devicesBody').innerHTML = devices.map((d) => `<div class="device">
       <span class="grow">${esc(d.platform ?? '?')} · ${esc(d.model ?? d.hwid.slice(0,10))}</span>
-      ${canAdmin() ? `<button class="btn danger" data-hwid="${esc(d.hwid)}">Удалить</button>` : ''}</div>`).join('');
+      ${canPermission('bedolaga:devices') ? `<button class="btn danger" data-hwid="${esc(d.hwid)}">Удалить</button>` : ''}</div>`).join('');
     reveal($('devicesBody'));
   }
 
   if (profile?.subscriptionUrl) $('copySub').onclick = () => { navigator.clipboard.writeText(profile.subscriptionUrl); toast('Ссылка скопирована'); };
-  if (!canAdmin()) return;
+  if (!canPermission('bedolaga:devices')) return;
   for (const b of document.querySelectorAll('#devicesBody [data-hwid]')) {
     b.onclick = () => confirmAction('Удалить устройство?', 'Клиент потеряет доступ с него до повторного подключения.',
       () => subAction('delete-device', b.dataset.hwid));
@@ -2213,7 +2244,7 @@ let openToken = 0;
 
 /** Видимость операторов не захватывает диалог и не мешает AI отвечать. */
 async function heartbeatCurrent() {
-  if (!current || !canWrite() || document.visibilityState !== 'visible') return;
+  if (!current || !canPermission('conversation:read') || document.visibilityState !== 'visible') return;
   const id = current.id;
   try {
     const response = await api(`/api/conversations/${id}/presence`, {
@@ -2259,8 +2290,8 @@ function paintHeader(c) {
   $('handoffBtn').textContent = c.handoff_at ? 'Вернуть AI' : 'Взять диалог';
   $('handoffBtn').title = c.handoff_at ? 'Вернуть диалог в автоматический режим' : 'Передать диалог человеку';
   for (const id of ['statusSel', 'contextStatusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
-    $(id).disabled = !canWrite();
-    $(id).title = canWrite() ? '' : 'Недоступно в режиме просмотра';
+    $(id).disabled = !canPermission('conversation:status');
+    $(id).title = canPermission('conversation:status') ? '' : 'Действие запрещено настройками роли';
   }
   $('foldClient').textContent = c.suspicious ? 'нет в базах' : '';
   $('err').textContent = '';
@@ -2353,7 +2384,7 @@ let currentSyncPromise = null, currentSyncId = null;
 let readTimer = null;
 
 function markOpenConversationRead(id = current?.id) {
-  if (!canWrite() || !id || current?.id !== id) return;
+  if (!canPermission('conversation:read') || !id || current?.id !== id) return;
   current = { ...current, unread:0 };
   const index = conversations.findIndex((item) => item.id === id);
   if (index >= 0) conversations[index] = { ...conversations[index], unread:0 };
@@ -2497,7 +2528,7 @@ const editableImage = (file) => (file.type.startsWith('image/') && file.type !==
   || /\.(png|jpe?g|webp|gif)$/i.test(file.name);
 
 function addFiles(files) {
-  if (!canWrite() || !current) return;
+  if (!canPermission('conversation:attachments') || !current) return;
   const incoming = [...files].filter((file) => file instanceof File);
   if (!incoming.length) return;
   if (pendingFiles.length + incoming.length > 10) return toast('За один раз можно отправить не больше 10 файлов');
@@ -2695,7 +2726,7 @@ $('input').addEventListener('input', (e) => {
   e.target.style.height = 'auto'; e.target.style.height = Math.min(e.target.scrollHeight, 148) + 'px';
 });
 $('noteBtn').onclick = async () => {
-  if (!canWrite()) return;
+  if (!canPermission('conversation:notes')) return;
   const text = $('input').value.trim(); if (!text || !current) return;
   if (await mutate(`/api/conversations/${current.id}/note`,
     { method:'POST', body: JSON.stringify({ text }) }, 'Заметка добавлена')) {
@@ -2704,7 +2735,7 @@ $('noteBtn').onclick = async () => {
 };
 
 async function setState(patch) {
-  if (!current || !canWrite()) return;
+  if (!current || !canPermission('conversation:status')) return;
   const bedolagaStatus = current.channel === 'bedolaga' && patch.status
     ? patch.status === 'resolved' ? 'Тикет закрыт и в Bedolaga'
       : patch.status === 'open' ? 'Тикет открыт и в Bedolaga'
@@ -2760,6 +2791,7 @@ async function loadDocs() {
 }
 function renderDocs() {
   const reviewer = canReview();
+  const editor = canPermission('knowledge:manage');
   if (!reviewer && kbTab === 'learning') kbTab = 'kb';
   const list = kbTab === 'kb' ? docs.kb : kbTab === 'draft' ? docs.drafts : docs.candidates;
   $('cntKb').textContent = docs.kb.length;
@@ -2788,8 +2820,8 @@ function renderDocs() {
   }
   box.innerHTML = list.map((d) => `<article class="doc-row" data-doc="${esc(d.name)}" data-edit="${esc(d.name)}" role="button" tabindex="0" aria-label="Открыть статью: ${esc(d.title)}">
     <div class="doc-state"><span class="status-dot ${kbTab === 'kb' ? 'ok' : ''}"></span></div><div class="doc-copy"><b>${esc(d.title)}</b><span>${esc(d.name)} · ${d.size} симв.</span></div>
-    <div class="doc-actions">${reviewer && kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
-      ${reviewer ? `<button class="icon-btn row-more danger" data-del="${esc(d.name)}" aria-label="Удалить статью" title="Удалить">×</button>` : ''}<span class="doc-disclosure" aria-hidden="true">›</span></div></article>`).join('');
+    <div class="doc-actions">${editor && kbTab === 'draft' ? `<button class="btn primary" data-pub="${esc(d.name)}">Опубликовать</button>` : ''}
+      ${editor ? `<button class="icon-btn row-more danger" data-del="${esc(d.name)}" aria-label="Удалить статью" title="Удалить">×</button>` : ''}<span class="doc-disclosure" aria-hidden="true">›</span></div></article>`).join('');
   for (const row of box.querySelectorAll('.doc-row[data-edit]')) {
     row.onclick = (event) => { if (!event.target.closest('button')) editDoc(row.dataset.edit); };
     row.onkeydown = (event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) { event.preventDefault(); editDoc(row.dataset.edit); } };
@@ -2807,10 +2839,10 @@ function renderDocs() {
 async function editDoc(name) {
   const data = await json(`/api/kb/${kbTab}/${encodeURIComponent(name)}`);
   if (!data) return;
-  sheet(name, `<textarea id="docText" ${canReview() ? '' : 'readonly'}>${esc(data.text)}</textarea>`,
-    canReview() ? `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="save">Сохранить</button>` : '<button class="btn primary" id="cancel">Закрыть</button>');
+  sheet(name, `<textarea id="docText" ${canPermission('knowledge:manage') ? '' : 'readonly'}>${esc(data.text)}</textarea>`,
+    canPermission('knowledge:manage') ? `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="save">Сохранить</button>` : '<button class="btn primary" id="cancel">Закрыть</button>');
   $('cancel').onclick = closeSheet;
-  if (!canReview()) return;
+  if (!canPermission('knowledge:manage')) return;
   $('save').onclick = async () => {
     const saved = await mutate(`/api/kb/${kbTab}/${encodeURIComponent(name)}`,
       { method:'PUT', body: JSON.stringify({ text: $('docText').value }) }, 'Сохранено');
@@ -2818,7 +2850,7 @@ async function editDoc(name) {
   };
 }
 $('newDoc').onclick = () => {
-  if (!canReview()) return;
+  if (!canPermission('knowledge:manage')) return;
   sheet('Новая статья',
     `<div class="frow"><label>Заголовок</label><input type="text" id="nTitle" placeholder="Не работает на роутере"></div>
      <div class="frow"><label>Текст</label><textarea id="nText" placeholder="Что отвечать оператору в этом случае"></textarea></div>`,
@@ -2835,7 +2867,7 @@ function mineStarted() {
   $('mineLog').innerHTML = '<div class="cap" style="margin-top:var(--sp-6)">Сбор идёт</div><div class="log" id="logBox">Запускаю…</div>';
 }
 $('mineBtn').onclick = () => {
-  if (!canReview()) return;
+  if (!canPermission('knowledge:mine')) return;
   sheet('Собрать базу знаний из переписки',
     `<p class="hint">Модель прочитает реальные обращения и напишет статьи. Они лягут в черновики — клиентам ничего не уйдёт, пока их не опубликуешь.</p>
      <div class="frow"><label>Источник</label><select id="mSource">
@@ -2950,7 +2982,7 @@ function countryFlag(raw) {
 }
 
 async function loadNodes() {
-  const nodesWritable = currentActor?.role === 'admin';
+  const nodesWritable = canPermission('settings:nodes');
   $('nodesRefresh').disabled = !nodesWritable;
   $('nodesRefresh').title = nodesWritable ? '' : 'Обновление серверов доступно только администратору';
   const box = $('nodesBody');
@@ -3055,7 +3087,7 @@ async function loadNodes() {
   }
 }
 $('nodesRefresh').onclick = async () => {
-  if (currentActor?.role !== 'admin') return toast('Обновление серверов доступно только администратору');
+  if (!canPermission('settings:nodes')) return toast('Нет права обновлять серверы');
   $('nodesRefresh').disabled = true;
   $('nodesRefresh').classList.add('is-loading');
   try { await mutate('/api/nodes/refresh', { method:'POST' }, 'Обновлено'); await loadNodes(); }
@@ -3131,7 +3163,7 @@ async function loadStats() {
 
   $('stats').innerHTML = `
     <div class="stats-tools"><div><b>Честный период</b><p class="hint">Импортированная история не входит в метрики.${s.resetAt ? ` Новый отсчёт начат ${fmtDate(s.resetAt)}.` : ' Можно начать новый отсчёт без удаления диалогов.'}</p></div>
-      ${currentActor?.role === 'admin' ? '<button class="btn danger" data-reset-stats>Начать отсчёт заново</button>' : ''}</div>
+      ${canPermission('stats:reset') ? '<button class="btn danger" data-reset-stats>Начать отсчёт заново</button>' : ''}</div>
     <section class="stats-overview" aria-label="Ключевые показатели">
       <div class="metric-lead"><span>Медиана первого ответа</span><strong>${fmtDur(s.medianFirstResponseMs)}</strong><small>p90 ${fmtDur(s.p90FirstResponseMs)} · ${s.answered} диалогов с ответом</small></div>
       <div class="metric-list">
@@ -3205,47 +3237,35 @@ function parseFilter(value) {
 }
 
 function renderSavedFilters() {
-  const box = $('savedFilters');
-  if (!box) return;
-  box.innerHTML = savedQueueFilters.length ? `<div class="ops-head"><div><b>Мои фильтры</b><span class="hint">Быстрые представления очереди</span></div></div>
-    <div class="ops-actions" style="justify-content:flex-start">${savedQueueFilters.map((f) => {
-      const query = parseFilter(f.query);
-      return `<span class="saved-filter">
-        <button class="btn quiet" data-filter-open="${Number(f.id)}">${esc(f.name)}</button>
-        ${canWrite() ? `<button class="btn quiet danger" data-filter-delete="${Number(f.id)}" aria-label="Удалить фильтр ${esc(f.name)}">×</button>` : ''}
-        <span class="sr-only">${esc(JSON.stringify(query))}</span></span>`;
-    }).join('')}</div>` : '';
-  for (const button of box.querySelectorAll('[data-filter-open]')) button.onclick = () => {
-    const row = savedQueueFilters.find((item) => Number(item.id) === Number(button.dataset.filterOpen));
+  const select = $('queueSavedFilter');
+  if (!select) return;
+  select.innerHTML = `<option value="">Представления</option>${savedQueueFilters.map((filter) => `<option value="${Number(filter.id)}">${esc(filter.name)}</option>`).join('')}`;
+  select.hidden = savedQueueFilters.length === 0;
+  select.onchange = () => {
+    const row = savedQueueFilters.find((item) => Number(item.id) === Number(select.value));
     const query = parseFilter(row?.query);
     queueMode = ['all','overdue','unassigned'].includes(query.mode) ? query.mode : 'all';
     queuePriority = ['all','urgent','high','normal','low'].includes(query.priority) ? query.priority : 'all';
     renderQueue();
   };
-  for (const button of box.querySelectorAll('[data-filter-delete]')) button.onclick = () => confirmAction(
-    'Удалить фильтр?', 'Это удалит только сохранённое представление, диалоги не изменятся.', async () => {
-      const result = await mutate(`/api/filters/${button.dataset.filterDelete}`, { method:'DELETE' }, 'Фильтр удалён');
-      if (result) { savedQueueFilters = savedQueueFilters.filter((item) => Number(item.id) !== Number(button.dataset.filterDelete)); renderSavedFilters(); }
-    });
 }
 
 function renderSlaPolicies() {
-  const box = $('slaPolicies');
-  if (!box) return;
-  const editable = currentActor?.role === 'admin' || currentActor?.role === 'lead';
-  box.innerHTML = `<details class="sla-panel"><summary><div><b>Сроки обслуживания</b><p>Внутренние цели команды; статусы каналов не меняются.</p></div><span class="summary-action">Настроить</span></summary>
-    <div class="sla-panel-body"><div class="sla-policy-list">${queuePolicies.map((p) => `<div class="sla-policy-row">
+  const editable = canPermission('queue:manage');
+  sheet('Сроки обслуживания', `<p class="sheet-intro">Внутренние цели команды. Настройки не меняют статусы обращений в подключённых каналах.</p>
+    <div class="sla-policy-list">${queuePolicies.map((p) => `<div class="sla-policy-row">
       <div class="sla-priority"><span class="status-dot ${p.priority === 'urgent' ? 'danger' : ''}"></span><b>${esc(PRIORITY_LABELS[p.priority] ?? p.priority)}</b></div>
       <div class="frow"><label for="sla-first-${p.priority}">Первый ответ, мин</label><input id="sla-first-${p.priority}" type="number" min="1" max="10080" value="${Number(p.first_response_minutes)}" ${editable ? '' : 'disabled'}></div>
       <div class="frow"><label for="sla-resolution-${p.priority}">Решение, мин</label><input id="sla-resolution-${p.priority}" type="number" min="1" max="10080" value="${Number(p.resolution_minutes)}" ${editable ? '' : 'disabled'}></div>
       ${editable ? `<button class="btn" data-sla-save="${esc(p.priority)}">Сохранить</button>` : '<span class="hint">Только lead и admin</span>'}
-    </div>`).join('')}</div></div></details>`;
-  for (const button of box.querySelectorAll('[data-sla-save]')) button.onclick = async () => {
+    </div>`).join('')}</div>`, '<button class="btn primary" id="slaDone">Готово</button>', 'wide');
+  $('slaDone').onclick = closeSheet;
+  for (const button of $('sheet').querySelectorAll('[data-sla-save]')) button.onclick = async () => {
     const priority = button.dataset.slaSave;
     const result = await mutate(`/api/sla/${priority}`, { method:'PUT', body:JSON.stringify({
       firstResponseMinutes:Number($(`sla-first-${priority}`).value), resolutionMinutes:Number($(`sla-resolution-${priority}`).value),
     }) }, 'SLA сохранён');
-    if (result?.policies) { queuePolicies = result.policies; renderSlaPolicies(); await loadQueue(); }
+    if (result?.policies) queuePolicies = result.policies;
   };
 }
 
@@ -3257,10 +3277,10 @@ function renderQueue() {
   const overdue = queueRows.filter((row) => row.overdue).length;
   const unassigned = queueRows.filter((row) => !row.assignee && !row.owner_name).length;
   const urgent = queueRows.filter((row) => row.priority === 'urgent').length;
-  $('cntOverdue').textContent = overdue || '';
+  $('cntOverdue').textContent = String(overdue);
   box.innerHTML = `<section class="queue-summary" aria-label="Сводка очереди"><div><span>В очереди</span><b>${queueRows.length}</b></div><div class="${overdue ? 'danger-text' : ''}"><span>Просрочено</span><b>${overdue}</b></div><div><span>Без ответственного</span><b>${unassigned}</b></div><div><span>Срочные</span><b>${urgent}</b></div></section>
     <div class="table-toolbar"><div><b>Рабочая очередь</b><span>${filtered.length} обращений в текущем представлении</span></div>
-    <div class="ops-actions"><select class="ctl" id="queueMode" aria-label="Состояние очереди"><option value="all">Все</option><option value="overdue">Просроченные</option><option value="unassigned">Без ответственного</option></select>
+    <div class="ops-actions"><select class="ctl" id="queueSavedFilter" aria-label="Сохранённое представление"></select><select class="ctl" id="queueMode" aria-label="Состояние очереди"><option value="all">Все</option><option value="overdue">Просроченные</option><option value="unassigned">Без ответственного</option></select>
     <select class="ctl" id="queuePriority"><option value="all">Любой приоритет</option>${Object.entries(PRIORITY_LABELS).map(([value,label]) => `<option value="${value}">${label}</option>`).join('')}</select></div></div>
     ${filtered.length ? `<div class="table-scroll"><table class="ops-table queue-table"><thead><tr><th>Диалог</th><th>Канал</th><th>Приоритет</th><th>Ответственный</th><th>SLA</th><th><span class="sr-only">Открыть</span></th></tr></thead><tbody>${filtered.map((row) => {
       const left = Number(row.due_at) - Date.now();
@@ -3273,6 +3293,7 @@ function renderQueue() {
   $('queuePriority').value = queuePriority;
   $('queueMode').onchange = (event) => { queueMode = event.target.value; renderQueue(); };
   $('queuePriority').onchange = (event) => { queuePriority = event.target.value; renderQueue(); };
+  renderSavedFilters();
   for (const row of box.querySelectorAll('[data-queue-open]')) {
     row.onclick = async () => { show('inbox'); await open(Number(row.dataset.queueOpen)); };
     row.onkeydown = async (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); show('inbox'); await open(Number(row.dataset.queueOpen)); } };
@@ -3286,19 +3307,46 @@ async function loadQueue() {
   queueRows = queue.conversations ?? [];
   queuePolicies = queue.policies ?? [];
   savedQueueFilters = filtersData?.filters ?? [];
-  renderSavedFilters(); renderSlaPolicies(); renderQueue();
+  renderQueue();
+}
+
+/** Счётчики навигации загружаются при старте, а не после первого клика. */
+async function loadNavigationCounts() {
+  const [queue, knowledge] = await Promise.all([
+    canPermission('queue:read') ? json('/api/queue') : Promise.resolve(null),
+    canPermission('knowledge:read') ? json('/api/kb') : Promise.resolve(null),
+  ]);
+  if (queue) {
+    const overdue = (queue.conversations ?? []).filter((row) => row.overdue).length;
+    $('cntOverdue').textContent = String(overdue);
+  }
+  if (knowledge) $('cntKb').textContent = String((knowledge.kb ?? []).length);
 }
 $('queueRefresh').onclick = loadQueue;
-$('saveFilterBtn').onclick = () => {
-  if (!canWrite()) return;
-  sheet('Сохранить фильтр', `<div class="frow"><label for="filterName">Название</label><input id="filterName" maxlength="60" placeholder="Например, срочные без ответственного"></div>
-    <div class="hint">Сохранится текущее представление: ${esc(queueMode)}, ${esc(queuePriority)}.</div>`,
-    '<button class="btn" id="filterCancel">Отмена</button><button class="btn primary" id="filterSave">Сохранить</button>');
-  $('filterCancel').onclick = closeSheet;
-  $('filterSave').onclick = async () => {
-    const result = await mutate('/api/filters', { method:'POST', body:JSON.stringify({ name:$('filterName').value, query:{ mode:queueMode, priority:queuePriority } }) }, 'Фильтр сохранён');
-    if (result?.filters) { savedQueueFilters = result.filters; closeSheet(); renderSavedFilters(); }
-  };
+$('slaPoliciesBtn').onclick = renderSlaPolicies;
+$('closeAllTickets').onclick = () => {
+  const count = queueRows.length;
+  document.querySelector('.queue-actions-menu')?.removeAttribute('open');
+  if (!count) { toast('В очереди нет открытых тикетов'); return; }
+  confirmAction('Закрыть все тикеты?', `Будут закрыты все открытые тикеты в очереди: ${count}. Действие затронет и подключённые каналы.`, async () => {
+    let closed = 0;
+    const errors = [];
+    for (const row of [...queueRows]) {
+      try {
+        const response = await api(`/api/conversations/${row.id}/state`, { method:'POST', body:JSON.stringify({ status:'resolved' }) });
+        if (response.ok) closed += 1;
+        else {
+          const body = await response.json().catch(() => ({}));
+          errors.push(body.error ?? `Тикет #${row.id}`);
+        }
+      } catch {
+        errors.push(`Тикет #${row.id}: нет связи`);
+      }
+    }
+    await loadQueue();
+    await refresh();
+    toast(errors.length ? `Закрыто ${closed} из ${count}. Ошибок: ${errors.length}` : `Закрыты все тикеты: ${closed}`);
+  });
 };
 
 /* ═══ команда, роли и аудит ═══ */
@@ -3311,36 +3359,117 @@ function showOperatorToken(name, value) {
   $('tokenDone').onclick = closeSheet;
 }
 
+let teamOperators = [], teamRoles = null, operatorStatsDays = 30;
+
+function closeOperatorMenu() { document.getElementById('operatorActionMenu')?.remove(); }
+function editOperator(row) {
+  sheet('Изменить оператора', `<div class="frow"><label for="editOperatorName">Имя</label><input id="editOperatorName" maxlength="80" value="${esc(row.name)}"></div>
+    <div class="frow"><label for="editOperatorRole">Роль</label><select id="editOperatorRole">${Object.entries(ROLE_LABELS).map(([value,label]) => `<option value="${value}" ${row.role === value ? 'selected' : ''}>${label}</option>`).join('')}</select></div>`,
+    '<button class="btn" id="editOperatorCancel">Отмена</button><button class="btn primary" id="editOperatorSave">Сохранить</button>');
+  $('editOperatorCancel').onclick = closeSheet;
+  $('editOperatorSave').onclick = async () => {
+    const result = await mutate(`/api/operators/${row.id}`, { method:'POST', body:JSON.stringify({ name:$('editOperatorName').value, role:$('editOperatorRole').value }) }, 'Оператор обновлён');
+    if (result) { closeSheet(); await loadTeam(); }
+  };
+}
+
+function openOperatorMenu(trigger, row) {
+  closeOperatorMenu();
+  const menu = document.createElement('div');
+  menu.id = 'operatorActionMenu'; menu.className = 'operator-popover'; menu.setAttribute('role','menu');
+  menu.innerHTML = `<button data-action="edit">Изменить имя и роль</button><button data-action="rotate">Выпустить новый токен</button>
+    <button data-action="active" class="${row.active ? 'danger-text' : ''}">${row.active ? 'Отключить доступ' : 'Включить доступ'}</button>`;
+  document.body.append(menu);
+  const anchor = trigger.getBoundingClientRect(), size = menu.getBoundingClientRect();
+  menu.style.left = `${Math.max(12, Math.min(innerWidth - size.width - 12, anchor.right - size.width))}px`;
+  menu.style.top = `${Math.max(12, anchor.bottom + size.height + 8 < innerHeight ? anchor.bottom + 6 : anchor.top - size.height - 6)}px`;
+  menu.onclick = (event) => {
+    const action = event.target.closest('button')?.dataset.action; if (!action) return;
+    closeOperatorMenu();
+    if (action === 'edit') editOperator(row);
+    if (action === 'rotate') confirmAction('Перевыпустить токен?', 'Старый токен сразу перестанет работать.', async () => {
+      const result = await mutate(`/api/operators/${row.id}`, { method:'POST', body:JSON.stringify({ rotate:true }) });
+      if (result?.token) showOperatorToken(row.name, result.token);
+    });
+    if (action === 'active') confirmAction(row.active ? 'Отключить оператора?' : 'Включить оператора?',
+      row.active ? 'Его текущий доступ будет закрыт.' : 'Оператор снова сможет войти со своим токеном.', async () => {
+        const result = await mutate(`/api/operators/${row.id}`, { method:'POST', body:JSON.stringify({ active:!row.active }) }, 'Доступ изменён');
+        if (result) loadTeam();
+      });
+  };
+  setTimeout(() => document.addEventListener('pointerdown', (event) => {
+    if (!menu.contains(event.target) && event.target !== trigger) closeOperatorMenu();
+  }, { once:true }), 0);
+}
+
 function renderOperators(rows) {
   const box = $('operatorsBody');
-  const admin = currentActor?.role === 'admin';
-  if (!admin) {
+  if (!canPermission('team:read')) {
     box.innerHTML = `<article class="ops-card"><header><b>${esc(currentActor?.name || 'Оператор')}</b><span class="badge">${esc(ROLE_LABELS[currentActor?.role] ?? currentActor?.role ?? '')}</span></header>
-      <p class="hint">Управление учётными записями доступно только администратору.</p></article>`;
+      <p class="hint">Нет права просматривать состав команды.</p></article>`;
     return;
   }
+  const manageable = canPermission('operators:manage');
   box.innerHTML = `<div class="team-note">У каждого сотрудника собственная учётная запись. Новый токен показывается один раз.</div>
     <div class="table-toolbar"><div><b>Сотрудники</b><span>Роли и доступ к рабочей панели</span></div></div>
-    ${rows.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Имя</th><th>Роль</th><th>Состояние</th><th>Создан</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr>
+    ${rows.length ? `<div class="team-table-wrap"><table class="ops-table"><thead><tr><th>Имя</th><th>Роль</th><th>Состояние</th><th>Создан</th>${manageable ? '<th></th>' : ''}</tr></thead><tbody>${rows.map((row) => `<tr>
       <td><b>${esc(row.name)}</b></td><td>${esc(ROLE_LABELS[row.role] ?? row.role)}</td><td><span class="status-text ${row.active ? 'ok' : 'danger'}"><i></i>${row.active ? 'Активен' : 'Отключён'}</span></td>
-      <td>${fmtTime(Number(row.created_at))}</td><td><details class="row-menu"><summary aria-label="Действия с оператором ${esc(row.name)}">•••</summary><div><button data-op-rotate="${Number(row.id)}" data-op-name="${esc(row.name)}">Выпустить новый токен</button>
-      <button class="${row.active ? 'danger-text' : ''}" data-op-active="${Number(row.id)}" data-op-next="${row.active ? '0' : '1'}">${row.active ? 'Отключить доступ' : 'Включить доступ'}</button></div></details></td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Отдельных операторов пока нет — используется токен владельца.</p>'}`;
-  for (const button of box.querySelectorAll('[data-op-rotate]')) button.onclick = () => confirmAction('Перевыпустить токен?', 'Старый токен сразу перестанет работать.', async () => {
-    const result = await mutate(`/api/operators/${button.dataset.opRotate}`, { method:'POST', body:JSON.stringify({ rotate:true }) });
-    if (result?.token) showOperatorToken(button.dataset.opName, result.token);
-  });
-  for (const button of box.querySelectorAll('[data-op-active]')) button.onclick = () => confirmAction(
-    button.dataset.opNext === '1' ? 'Включить оператора?' : 'Отключить оператора?',
-    button.dataset.opNext === '1' ? 'Оператор снова сможет войти со своим токеном.' : 'Его текущий доступ будет закрыт.', async () => {
-      const result = await mutate(`/api/operators/${button.dataset.opActive}`, { method:'POST', body:JSON.stringify({ active:button.dataset.opNext === '1' }) }, 'Доступ изменён');
-      if (result) loadTeam();
-    });
+      <td>${fmtTime(Number(row.created_at))}</td>${manageable ? `<td><button class="row-actions-trigger" data-operator-menu="${Number(row.id)}" aria-label="Действия с оператором ${esc(row.name)}">•••</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<p class="empty">Отдельных операторов пока нет — используется токен владельца.</p>'}`;
+  for (const button of box.querySelectorAll('[data-operator-menu]')) button.onclick = (event) => {
+    event.stopPropagation();
+    const row = rows.find((item) => Number(item.id) === Number(button.dataset.operatorMenu));
+    if (row) openOperatorMenu(button, row);
+  };
+}
+
+function renderOperatorStats(data) {
+  const box = $('performanceBody');
+  if (!canPermission('operator_stats:read')) { box.innerHTML = ''; return; }
+  const rows = data?.operators ?? [];
+  const totalResolved = rows.reduce((sum,row) => sum + Number(row.resolved || 0), 0);
+  const totalReplies = rows.reduce((sum,row) => sum + Number(row.replies || 0), 0);
+  box.innerHTML = `<div class="team-stats-head"><div><b>Эффективность команды</b><span>Учитываются действия из панели начиная с версии 2.4.7</span></div><div class="seg" id="operatorStatsRange">${[7,30,90].map((days) => `<button data-days="${days}" aria-pressed="${operatorStatsDays === days}">${days} дней</button>`).join('')}</div></div>
+    <div class="team-kpis"><article><span>Закрыто тикетов</span><b>${totalResolved}</b></article><article><span>Ответов операторов</span><b>${totalReplies}</b></article><article><span>Активных назначений</span><b>${rows.reduce((sum,row) => sum + Number(row.active_assigned || 0), 0)}</b></article></div>
+    <div class="team-table-wrap"><table class="ops-table performance-table"><thead><tr><th>Сотрудник</th><th>Тикетов в работе</th><th>Обработано</th><th>Закрыто</th><th>Ответов</th><th>Средний ответ</th><th>Медиана</th><th>Последняя активность</th></tr></thead><tbody>${rows.map((row) => `<tr><td><b>${esc(row.name)}</b><span class="hint">${esc(ROLE_LABELS[row.role] ?? row.role)}</span></td><td>${Number(row.active_assigned || 0)}</td><td>${Number(row.handled || 0)}</td><td>${Number(row.resolved || 0)}</td><td>${Number(row.replies || 0)}</td><td>${fmtDur(row.average_response_ms)}</td><td>${fmtDur(row.median_response_ms)}</td><td>${row.last_activity_at ? fmtTime(Number(row.last_activity_at)) : '—'}</td></tr>`).join('')}</tbody></table></div>`;
+  $('operatorStatsRange').onclick = async (event) => {
+    const button = event.target.closest('button'); if (!button) return;
+    operatorStatsDays = Number(button.dataset.days);
+    renderOperatorStats(await json(`/api/operator-stats?days=${operatorStatsDays}`));
+  };
+}
+
+function renderRoles(data, selectedRole = 'agent') {
+  const box = $('rolesBody');
+  if (!canPermission('roles:manage') || !data) { box.innerHTML = ''; return; }
+  const selected = new Set(data.roles?.[selectedRole] ?? []);
+  const groups = (data.catalog ?? []).reduce((result,item) => {
+    (result[item.group] ??= []).push(item); return result;
+  }, {});
+  box.innerHTML = `<div class="role-toolbar"><div><b>Права роли</b><span>Каждый флаг проверяется сервером, включая отдельные параметры AI</span></div><select id="permissionRole">${Object.entries(ROLE_LABELS).map(([role,label]) => `<option value="${role}" ${role === selectedRole ? 'selected' : ''}>${label}</option>`).join('')}</select></div>
+    <div class="permission-groups">${Object.entries(groups).map(([group,items]) => `<section class="permission-group"><header><b>${esc(group)}</b><span>${items.length} прав</span></header>${items.map((item) => `<label class="permission-row"><span>${esc(item.label)}</span><input type="checkbox" data-permission="${esc(item.id)}" ${selected.has(item.id) ? 'checked' : ''}></label>`).join('')}</section>`).join('')}</div>
+    <div class="role-actions"><button class="btn" id="resetRolePermissions">Вернуть стандартные</button><button class="btn primary" id="saveRolePermissions">Сохранить права роли</button></div>`;
+  $('permissionRole').onchange = (event) => renderRoles(data, event.target.value);
+  $('resetRolePermissions').onclick = () => {
+    const defaults = new Set(data.defaults?.[selectedRole] ?? []);
+    for (const input of box.querySelectorAll('[data-permission]')) input.checked = defaults.has(input.dataset.permission);
+  };
+  $('saveRolePermissions').onclick = async () => {
+    const permissions = [...box.querySelectorAll('[data-permission]:checked')].map((input) => input.dataset.permission);
+    const result = await mutate(`/api/roles/${selectedRole}`, { method:'PUT', body:JSON.stringify({ permissions }) }, 'Права роли сохранены');
+    if (result) {
+      data.roles[selectedRole] = result.permissions;
+      const identity = await json('/api/me');
+      currentActor = identity?.actor ?? currentActor; applyRoleUi();
+      if (canPermission('roles:manage')) renderRoles(data, selectedRole);
+      else box.innerHTML = '<p class="empty">Новые права уже применены. Доступ к настройке ролей для вашей роли отключён.</p>';
+    }
+  };
 }
 
 function renderAudit(events) {
   const box = $('auditBody');
   if (!box) return;
-  if (!(currentActor?.role === 'admin' || currentActor?.role === 'lead')) { box.innerHTML = ''; return; }
+  if (!canPermission('audit:read')) { box.innerHTML = ''; return; }
   box.innerHTML = `<div class="table-toolbar"><div><b>Журнал действий</b><span>Последние ${events.length} событий без секретов</span></div></div>
     ${events.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Когда</th><th>Кто</th><th>Действие</th><th>Объект</th><th>Детали</th></tr></thead><tbody>${events.map((event) => `<tr>
       <td>${fmtTime(Number(event.created_at))}</td><td>${esc(event.actor_name)}<div class="hint">${esc(ROLE_LABELS[event.actor_role] ?? event.actor_role)}</div></td>
@@ -3349,16 +3478,26 @@ function renderAudit(events) {
 }
 
 async function loadTeam() {
-  const me = currentActor ? { actor:currentActor } : await json('/api/me');
+  const me = await json('/api/me');
   currentActor = me?.actor ?? currentActor;
   $('meLabel').textContent = currentActor ? `${currentActor.name} · ${ROLE_LABELS[currentActor.role] ?? currentActor.role}` : '';
-  $('newOperator').hidden = currentActor?.role !== 'admin';
-  $('teamTabs').querySelector('[data-team-tab="audit"]').hidden = !(currentActor?.role === 'admin' || currentActor?.role === 'lead');
-  const [operatorsData, auditData] = await Promise.all([
-    currentActor?.role === 'admin' ? json('/api/operators') : Promise.resolve(null),
-    currentActor?.role === 'admin' || currentActor?.role === 'lead' ? json('/api/audit?limit=200') : Promise.resolve(null),
+  applyRoleUi();
+  $('newOperator').hidden = !canPermission('operators:manage');
+  const visibility = { operators:'team:read', performance:'operator_stats:read', roles:'roles:manage', audit:'audit:read' };
+  for (const [tab,permission] of Object.entries(visibility)) $('teamTabs').querySelector(`[data-team-tab="${tab}"]`).hidden = !canPermission(permission);
+  let activeTab = $('teamTabs').querySelector('[aria-pressed="true"]:not([hidden])')?.dataset.teamTab;
+  if (!activeTab) activeTab = $('teamTabs').querySelector('button:not([hidden])')?.dataset.teamTab;
+  for (const button of $('teamTabs').children) button.setAttribute('aria-pressed', String(button.dataset.teamTab === activeTab));
+  for (const name of ['operators','performance','roles','audit']) $(`${name}Body`).hidden = activeTab !== name;
+  document.querySelector('.team-workspace').dataset.teamView = activeTab ?? '';
+  const [operatorsData, statsData, rolesData, auditData] = await Promise.all([
+    canPermission('team:read') ? json('/api/operators') : Promise.resolve(null),
+    canPermission('operator_stats:read') ? json(`/api/operator-stats?days=${operatorStatsDays}`) : Promise.resolve(null),
+    canPermission('roles:manage') ? json('/api/roles') : Promise.resolve(null),
+    canPermission('audit:read') ? json('/api/audit?limit=200') : Promise.resolve(null),
   ]);
-  renderOperators(operatorsData?.operators ?? []);
+  teamOperators = operatorsData?.operators ?? []; teamRoles = rolesData;
+  renderOperators(teamOperators); renderOperatorStats(statsData); renderRoles(teamRoles);
   renderAudit(auditData?.events ?? []);
 }
 function openOperatorSheet() {
@@ -3377,8 +3516,7 @@ $('teamTabs').onclick = (event) => {
   if (!button) return;
   const tab = button.dataset.teamTab;
   for (const item of $('teamTabs').children) item.setAttribute('aria-pressed', String(item === button));
-  $('operatorsBody').hidden = tab !== 'operators';
-  $('auditBody').hidden = tab !== 'audit';
+  for (const name of ['operators','performance','roles','audit']) $(`${name}Body`).hidden = tab !== name;
   document.querySelector('.team-workspace').dataset.teamView = tab;
 };
 
@@ -3558,8 +3696,8 @@ async function requestUpdate(action, force = false) {
 
 async function loadUpdateState(force = false) {
   const panel = $('updatePanel');
-  if (currentActor && currentActor.role !== 'admin') {
-    panel.innerHTML = '<div><b>Центр обновлений</b><span class="hint">Проверка, установка и откат доступны только администратору.</span></div>';
+  if (!canPermission('settings:update')) {
+    panel.innerHTML = '<div><b>Центр обновлений</b><span class="hint">У вашей роли нет права управлять обновлениями.</span></div>';
     return;
   }
   if (panel && !panel.querySelector('.ops-head, .ops-card')) panel.innerHTML = '<span class="hint">Проверяю обновления…</span>';
@@ -3624,7 +3762,7 @@ function watchSourceApply() {
 }
 
 function openSourceWizard() {
-  if (!canAdmin()) return;
+  if (!canPermission('settings:sources')) return;
   const botSources = inboxSources.filter((source) => source.kind === 'telegram_bot');
   sheet('Добавить источник',
     `<div class="source-wizard-intro"><b>Новый канал в едином инбоксе</b><span>Секреты передаются только ограниченному host-исполнителю и не возвращаются в браузер.</span></div>
@@ -3689,29 +3827,31 @@ function openSourceWizard() {
 function renderSourceFoldersPanel() {
   const box = $('sourceFolders');
   if (!box) return;
-  const writable = canAdmin();
+  const sourceWritable = canPermission('settings:sources');
+  const serviceWritable = canPermission('settings:services');
   const profiles = settings?.serviceProfiles ?? {};
   const sourceRows = inboxSources.length ? inboxSources.map((source) => `<div class="source-row">
     <span class="source-kind">${esc(sourceKind(source.kind).slice(0, 3).toUpperCase())}</span>
     <div><b>${esc(profiles[source.id]?.serviceName || source.name)}</b><span>${esc(sourceKind(source.kind))} · ${esc(source.name)} · ${esc(source.id)}</span></div>
     <div class="source-actions"><span class="badge ok">${profiles[source.id] ? 'свой профиль' : 'общий профиль'}</span>
-      ${writable ? `<button class="btn" data-edit-service="${esc(source.id)}">Настроить</button>` : ''}</div>
+      ${serviceWritable ? `<button class="btn" data-edit-service="${esc(source.id)}">Настроить</button>` : ''}</div>
   </div>`).join('') : '<div class="source-row"><div><b>Входящие источники не подключены</b><span>Панель продолжает работать в голом режиме.</span></div></div>';
   const folderRows = inboxFolders.length ? inboxFolders.map((folder) => {
     const names = folder.source_ids.map((id) => inboxSources.find((source) => source.id === id)?.name ?? id);
     return `<div class="folder-row">
       <span class="folder-dot" style="--folder-color:${safeColor(folder.color)}"></span>
       <div><b>${esc(folder.name)}</b><span>${esc(names.join(' · ') || 'Источники пока не выбраны')}</span></div>
-      ${writable ? `<button class="btn" data-edit-folder="${folder.id}">Изменить</button>` : ''}
+      ${sourceWritable ? `<button class="btn" data-edit-folder="${folder.id}">Изменить</button>` : ''}
     </div>`;
   }).join('') : '<div class="folder-row"><div><b>Своих папок пока нет</b><span>Один источник можно включить в несколько папок.</span></div></div>';
-  box.innerHTML = `${sourceProgressMarkup()}<div class="source-folders-head"><div><b>Подключённые источники</b><span>${inboxSources.length} активных подключений</span></div>${writable ? '<button class="btn primary" id="newSource">Добавить источник</button>' : ''}</div>
+  box.innerHTML = `${sourceProgressMarkup()}<div class="source-folders-head"><div><b>Подключённые источники</b><span>${inboxSources.length} активных подключений</span></div>${sourceWritable ? '<button class="btn primary" id="newSource">Добавить источник</button>' : ''}</div>
     <div class="source-list">${sourceRows}</div>
-    <div class="source-folders-head"><div><b>Папки инбокса</b><span>Состав может пересекаться</span></div>${writable ? '<button class="btn primary" id="newInboxFolder">Новая папка</button>' : ''}</div>
+    <div class="source-folders-head"><div><b>Папки инбокса</b><span>Состав может пересекаться</span></div>${sourceWritable ? '<button class="btn primary" id="newInboxFolder">Новая папка</button>' : ''}</div>
     <div class="folder-list">${folderRows}</div>`;
-  if (!writable) return;
-  $('newSource').onclick = openSourceWizard;
-  $('newInboxFolder').onclick = () => openFolderEditor();
+  if (sourceWritable) {
+    $('newSource').onclick = openSourceWizard;
+    $('newInboxFolder').onclick = () => openFolderEditor();
+  }
   for (const button of box.querySelectorAll('[data-edit-service]')) {
     button.onclick = () => openServiceEditor(inboxSources.find((source) => source.id === button.dataset.editService));
   }
@@ -3721,7 +3861,7 @@ function renderSourceFoldersPanel() {
 }
 
 function openServiceEditor(source) {
-  if (!canAdmin() || !source) return;
+  if (!canPermission('settings:services') || !source) return;
   const profile = settings?.serviceProfiles?.[source.id] ?? {};
   const serviceName = profile.serviceName || (source.kind === 'remnawave' ? source.name : settings.runtime.brand);
   const greetingMessage = profile.greetingMessage || '';
@@ -3753,7 +3893,7 @@ function openServiceEditor(source) {
 }
 
 function openFolderEditor(folder = null) {
-  if (!canAdmin()) return;
+  if (!canPermission('settings:sources')) return;
   const selected = new Set(folder?.source_ids ?? []);
   const checks = inboxSources.length ? inboxSources.map((source) => `<label class="folder-check">
     <input type="checkbox" value="${esc(source.id)}"${selected.has(source.id) ? ' checked' : ''}>
@@ -3794,19 +3934,19 @@ async function loadSettings() {
   renderInboxTabs();
   renderSourceFoldersPanel();
   watchSourceApply();
-  const settingsWritable = currentActor?.role === 'admin';
   $('ver').textContent = 'v' + settings.version;
   const settingRows = new Map(FIELDS.map((f) => {
     const value = settings.runtime[f.key];
     const inactive = f.active && !f.active(settings.runtime);
+    const fieldWritable = canPermission(`setting:${f.key}`);
     // Сравниваем строками: в runtime булево true, в option — строка 'true',
     // и строгое равенство ничего не подсвечивало.
     const selected = f.kind === 'level' ? nearestLevel(value) : String(value);
     const control = (f.kind === 'select' || f.kind === 'level')
-      ? `<select class="ctl" id="setting-${f.key}" data-key="${f.key}" aria-describedby="setting-hint-${f.key}">${f.options.map(([v,t]) =>
+      ? `<select class="ctl" id="setting-${f.key}" data-key="${f.key}" aria-describedby="setting-hint-${f.key}" ${fieldWritable ? '' : 'disabled'}>${f.options.map(([v,t]) =>
           `<option value="${v}"${String(v)===selected?' selected':''}>${esc(t)}</option>`).join('')}</select>`
       : `<input class="ctl" id="setting-${f.key}" type="${f.kind}" data-key="${f.key}" value="${esc(value)}" aria-describedby="setting-hint-${f.key}"${f.attrs
-          ? ` min="${f.attrs.min}" max="${f.attrs.max}" step="${f.attrs.step}"` : ''}>`;
+          ? ` min="${f.attrs.min}" max="${f.attrs.max}" step="${f.attrs.step}"` : ''} ${fieldWritable ? '' : 'disabled'}>`;
     return [f.key, `<div class="setting-row${inactive ? ' is-inactive' : ''}" data-setting="${f.key}">
       <div class="setting-main"><label class="setting-label" for="setting-${f.key}">${esc(f.label)}</label><span class="setting-control">${control}</span></div>
       <div class="setting-meta"><button class="why" data-why="${f.key}" aria-expanded="false">Зачем это?</button>${inactive ? '<span class="setting-badge">Только в авто</span>' : ''}</div>
@@ -3835,13 +3975,12 @@ async function loadSettings() {
         </div>
       </div>
     </section>`;
-  if (!settingsWritable) {
-    $('aiSettings').insertAdjacentHTML('afterbegin', '<div class="ops-note"><b>Режим просмотра</b><span class="hint">Изменять настройки может только администратор.</span></div>');
+  if (!FIELDS.some((field) => canPermission(`setting:${field.key}`))) {
+    $('aiSettings').insertAdjacentHTML('afterbegin', '<div class="ops-note"><b>Режим просмотра</b><span class="hint">У роли нет прав на изменение этих параметров.</span></div>');
   }
   for (const el of $('aiSettings').querySelectorAll('[data-key]')) {
-    if (!settingsWritable) {
-      el.disabled = true;
-      el.title = 'Изменение настроек доступно только администратору';
+    if (!canPermission(`setting:${el.dataset.key}`)) {
+      el.title = 'Это поле запрещено настройками роли';
       continue;
     }
     el.onchange = async () => {
@@ -3883,7 +4022,7 @@ async function loadSettings() {
     ['fallbackModel', 'fallbackKey', 'Запасная модель'],
   ]) {
     const input = $('aiSettings').querySelector(`[data-key="${field}"]`);
-    if (!input || !settingsWritable) continue;
+    if (!input || !canPermission(`setting:${field}`) || !canPermission(`setting:${keyField}`) || !canPermission('settings:ai_tools')) continue;
     const pick = document.createElement('button');
     pick.className = 'btn model-pick';
     pick.innerHTML = '<svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 6h12M4 10h8M4 14h10"/></svg><span>Выбрать</span>';
@@ -3919,20 +4058,20 @@ async function loadSettings() {
     input.after(pick);
   }
 
-  if (settingsWritable) {
+  if (canPermission('setting:replyStyle')) {
     $('styleSave').onclick = async () => {
       showSettingsSaveState('saving', 'Сохраняю…'); $('styleSave').disabled = true;
       const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ replyStyle: $('styleBox').value }) }, 'Манера сохранена');
       $('styleSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
     };
+  } else { $('styleBox').disabled = true; $('styleSave').disabled = true; }
+  if (canPermission('setting:handoffMessage')) {
     $('handoffSave').onclick = async () => {
       showSettingsSaveState('saving', 'Сохраняю…'); $('handoffSave').disabled = true;
       const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ handoffMessage: $('handoffBox').value }) }, 'Текст сохранён');
       $('handoffSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
     };
-  } else {
-    for (const id of ['styleBox', 'handoffBox', 'styleSave', 'handoffSave']) $(id).disabled = true;
-  }
+  } else { $('handoffBox').disabled = true; $('handoffSave').disabled = true; }
 
   const caps = settings.remnawave;
   const business = settings.businessConnectionLive;
@@ -3951,7 +4090,7 @@ async function loadSettings() {
   ];
   $('health').innerHTML = healthCards.map((card) => `<article class="health-card ${card.tone}"><span class="health-status"><i></i></span><div><b>${esc(card.label)}</b><span>${esc(card.value)}</span></div></article>`).join('')
     + `<div class="health-action"><div><b>Проверка уведомлений</b><span>Отправим тестовое сообщение в служебный чат.</span></div><button class="btn" id="testAlert">Отправить тест</button></div>`;
-  if (settingsWritable) {
+  if (canPermission('settings:alerts')) {
     $('testAlert').onclick = async () => {
       $('testAlert').disabled = true;
       await mutate('/api/settings/test-alert', { method:'POST' }, 'Отправлено — проверьте чат');
@@ -3960,7 +4099,7 @@ async function loadSettings() {
     };
   } else {
     $('testAlert').disabled = true;
-    $('testAlert').title = 'Проверка доступна только администратору';
+    $('testAlert').title = 'Проверка запрещена настройками роли';
   }
   requestAnimationFrame(() => scrollToSettingsCategory(requestedSettingsSection, false));
   void loadUpdateState();
@@ -4037,25 +4176,28 @@ async function openFromHash() {
 window.addEventListener('hashchange', openFromHash);
 
 async function boot() {
-  await refreshTicket();
-  // Билет живёт десять минут — обновляем заранее, чтобы картинки и события
-  // не отваливались посреди работы.
-  setInterval(refreshTicket, 8 * 60_000);
-  currentActor = (await json('/api/me'))?.actor ?? null;
+  const identity = await json('/api/me');
+  currentActor = identity?.actor ?? null;
+  if (identity?.version) $('ver').textContent = 'v' + identity.version;
   applyRoleUi();
-  templates = (await json('/api/templates'))?.templates ?? [];
+  if (canPermission('conversation:read')) {
+    await refreshTicket();
+    // Билет живёт десять минут — обновляем заранее, чтобы картинки и события
+    // не отваливались посреди работы.
+    setInterval(refreshTicket, 8 * 60_000);
+  }
+  templates = canPermission('templates:read') ? (await json('/api/templates'))?.templates ?? [] : [];
   $('templates').innerHTML = '<option value="">Шаблон…</option>';
   $('templates').append(...templates.map(t => Object.assign(document.createElement('option'), { value:String(t.id), textContent:t.title })));
-  settings = await json('/api/settings');
+  settings = canPermission('settings:read') ? await json('/api/settings') : null;
   if (settings) $('ver').textContent = 'v' + settings.version;
-  await loadInboxMeta();
-  await refresh();
-  await openFromHash();
-  connect();
+  if (canPermission('conversation:read')) { await loadInboxMeta(); await refresh(); }
+  await loadNavigationCounts();
+  if (canPermission('conversation:read')) { await openFromHash(); connect(); }
   // WebSocket даёт обновление почти мгновенно. Контрольный опрос раз в пять
   // секунд закрывает редкий разрыв мобильной сети и гарантирует, что новый
   // чат появится без перезагрузки даже при потерянном push-событии.
-  setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 5000);
+  if (canPermission('conversation:read')) setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 5000);
   setInterval(renderWindow, 30000);
 }
 
