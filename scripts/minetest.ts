@@ -116,7 +116,18 @@ const server = createServer((req, res) => {
     return res.end();
   }
   res.writeHead(200, { 'content-type': 'application/json' });
-  if (url.pathname === '/tickets') return res.end(JSON.stringify(url.searchParams.get('status') === 'closed' ? tickets : []));
+  if (url.pathname === '/tickets') {
+    const status = url.searchParams.get('status');
+    const items = status === 'closed'
+      ? tickets
+      : (status === 'answered' ? [{ id: 4, title: 'живой тикет', status: 'answered', messages: [] }] : []);
+    return res.end(JSON.stringify({
+      items,
+      total: items.length,
+      limit: Number(url.searchParams.get('limit') ?? 200),
+      offset: Number(url.searchParams.get('offset') ?? 0),
+    }));
+  }
   const match = /^\/tickets\/(\d+)$/.exec(url.pathname);
   if (match) return res.end(JSON.stringify(tickets.find((t) => t.id === Number(match[1]))));
   res.end(JSON.stringify({}));
@@ -125,8 +136,11 @@ await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
 const port = (server.address() as { port: number }).port;
 const client = new BedolagaClient(`http://127.0.0.1:${port}`, 'k');
 const closed = await client.ticketsByStatus('closed', 100);
-check('закрытые тикеты забираются', closed.length === 3, closed.length);
+check('закрытые тикеты забираются из объектного контракта', closed.length === 3, closed.length);
 check('живые статусы отдельно', (await client.ticketsByStatus('open', 100)).length === 0);
+const active = await client.activeTickets();
+check('активные тикеты забираются из объектного контракта',
+  active.length === 1 && active[0]?.id === 4, active);
 const transactions = await client.transactions(42, 25, 10);
 check('транзакции идут через канонический /transactions',
   transactionRequest.includes('user_id=42')

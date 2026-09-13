@@ -185,6 +185,8 @@ export async function tryDraft(question: string, hits: KbHit[], provider = new A
 
 export class Responder {
   private readonly timers = new Map<number, NodeJS.Timeout>();
+  private readonly running = new Map<number, Promise<void>>();
+  private readonly rerun = new Set<number>();
 
   constructor(
     private readonly store: Store,
@@ -238,8 +240,37 @@ export class Responder {
     return this.store.humanHoldActive(conversationId, runtime.humanHoldMinutes);
   }
 
-  /** Разбирает накопившиеся сообщения клиента. Ошибки наружу не идут. */
+  /**
+   * В одном диалоге модель работает строго последовательно. Новое событие во
+   * время активного запроса не запускает второго конкурирующего ответа, а
+   * ставит один повтор по самому свежему состоянию.
+   */
   async handleInbound(conversation: Conversation): Promise<void> {
+    const active = this.running.get(conversation.id);
+    if (active) {
+      this.rerun.add(conversation.id);
+      await active;
+      return;
+    }
+    const task = this.processInbound(conversation);
+    this.running.set(conversation.id, task);
+    try {
+      await task;
+    } finally {
+      this.running.delete(conversation.id);
+      if (this.rerun.delete(conversation.id)) {
+        const fresh = this.store.getConversation(conversation.id);
+        if (fresh) await this.handleInbound(fresh);
+      }
+    }
+  }
+
+  private inboundStillCurrent(conversationId: number, messageId: number): boolean {
+    return this.store.lastInboundMessage(conversationId)?.id === messageId;
+  }
+
+  /** Разбирает накопившиеся сообщения клиента. Ошибки наружу не идут. */
+  private async processInbound(conversation: Conversation): Promise<void> {
     const pending = this.store.pendingInbound(conversation.id);
     const message = pending.at(-1);
     if (!message) return;
@@ -338,6 +369,12 @@ export class Responder {
       ];
 
       const raw = await this.provider.complete(messages);
+      // Пока модель думала, клиент мог уточнить вопрос. Ответ на прежнюю
+      // версию диалога не отправляем: debounce уже поставил свежий проход.
+      if (!this.inboundStillCurrent(conversation.id, message.id)) {
+        this.store.logEvent('ai_superseded_inbound', conversation.id, { message: message.id });
+        return;
+      }
       const draft = parseDraft(raw);
       if (!draft) {
         log.warn(`Диалог ${conversation.id}: ответ модели не разобран`);
@@ -462,6 +499,11 @@ export class Responder {
       }
 
 
+      if (!this.inboundStillCurrent(conversation.id, message.id)) {
+        this.store.decideSuggestion(suggestion.id, 'superseded');
+        this.store.logEvent('ai_superseded_inbound', conversation.id, { message: message.id, suggestion: suggestion.id });
+        return;
+      }
       if (this.claimedByOperator(conversation.id, message.created_at)) {
         this.store.decideSuggestion(suggestion.id, 'superseded');
         this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id, suggestion: suggestion.id });
@@ -485,6 +527,10 @@ export class Responder {
       this.store.decideSuggestion(suggestion.id, 'sent');
       log.info(`Диалог ${conversation.id}: автоответ отправлен (${verdict.reason})`);
     } catch (err) {
+      if (!this.inboundStillCurrent(conversation.id, message.id)) {
+        this.store.logEvent('ai_superseded_inbound', conversation.id, { message: message.id });
+        return;
+      }
       if (err instanceof OperatorActiveError) {
         log.info(`Диалог ${conversation.id}: оператор перехватил AI — отправка отменена`);
         this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id });

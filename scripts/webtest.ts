@@ -10,6 +10,7 @@ process.env.LOG_LEVEL = 'error';
 const dir = mkdtempSync(join(tmpdir(), 'web-'));
 process.env.DB_PATH = join(dir, 'w.db');
 process.env.MEDIA_DIR = join(dir, 'media');
+process.env.DRAFT_DIR = join(dir, 'draft');
 const sourceRequestPath = join(dir, 'source-request.json');
 process.env.SOURCE_REQUEST_FILE = sourceRequestPath;
 process.env.SOURCE_STATUS_FILE = join(dir, 'source-status.json');
@@ -379,6 +380,10 @@ const traverse = await fetch(`${B}/api/kb/kb/${encodeURIComponent('../../../etc/
 ok('выход за каталог не проходит', traverse.status === 404);
 const notMd = await fetch(`${B}/api/kb/kb/evil.sh`,{method:'PUT',headers:{...h,'content-type':'application/json'},body:JSON.stringify({text:'x'})});
 ok('не-markdown записать нельзя', notMd.status === 400);
+const draftProbe = await fetch(`${B}/api/kb/draft/access-probe.md`, {
+  method:'PUT', headers:{...h,'content-type':'application/json'}, body:JSON.stringify({text:'# Служебный черновик'}),
+});
+ok('владелец создаёт служебный черновик', draftProbe.status === 200);
 
 // Регрессия: Fastify отбивает POST с content-type: application/json и пустым
 // телом (FST_ERR_CTP_EMPTY_JSON_BODY) ещё до обработчика. Так молча ломалась
@@ -418,6 +423,44 @@ const viewerH = roleHeaders(viewer.body.token);
 const agentH = roleHeaders(agent.body.token);
 const leadH = roleHeaders(lead.body.token);
 ok('viewer читает диалоги', (await fetch(`${B}/api/conversations`, { headers: viewerH })).status === 200);
+const viewerKb = await (await fetch(`${B}/api/kb`, { headers: viewerH })).json() as any;
+const viewerDraft = await fetch(`${B}/api/kb/draft/access-probe.md`, { headers: viewerH });
+const leadDraft = await fetch(`${B}/api/kb/draft/access-probe.md`, { headers: leadH });
+ok('черновики базы знаний доступны только проверяющим',
+  Array.isArray(viewerKb.drafts) && viewerKb.drafts.length === 0
+    && viewerDraft.status === 403 && leadDraft.status === 200,
+  { viewerDraft:viewerDraft.status, leadDraft:leadDraft.status, drafts:viewerKb.drafts });
+await fetch(`${B}/api/conversations/${id}/profile`, { headers:h });
+const profileId = store.getConversation(id)!.customer_profile_id!;
+store.db.prepare('UPDATE customer_profile SET email = ? WHERE id = ?').run('private-search-probe@example.invalid', profileId);
+const rootPrivateSearch = await (await fetch(`${B}/api/search?q=private-search-probe`, { headers:h })).json() as any;
+const viewerPrivateSearch = await (await fetch(`${B}/api/search?q=private-search-probe`, { headers:viewerH })).json() as any;
+ok('глобальный поиск не раскрывает viewer персональные данные клиента',
+  rootPrivateSearch.customers.length === 1 && viewerPrivateSearch.customers.length === 0,
+  { root:rootPrivateSearch.customers, viewer:viewerPrivateSearch.customers });
+
+// Билет WebSocket связан с учётной записью: отключение оператора должно
+// отозвать уже открытый канал, а не только запретить следующий HTTP-запрос.
+const viewerTicket = await (await fetch(`${B}/api/ticket`, { headers:viewerH })).json() as { ticket:string };
+const viewerWs = new WS(`ws://127.0.0.1:8099/ws?token=${encodeURIComponent(viewerTicket.ticket)}`);
+await new Promise<void>((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error('таймаут открытия viewer WS')), 4000);
+  viewerWs.once('open', () => { clearTimeout(timeout); resolve(); });
+  viewerWs.once('error', reject);
+});
+const viewerWsClosed = new Promise<number>((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error('таймаут отзыва viewer WS')), 4000);
+  viewerWs.once('close', (code) => { clearTimeout(timeout); resolve(code); });
+});
+await fetch(`${B}/api/operators/${viewer.body.operator.id}`, {
+  method:'POST', headers:{...h,'content-type':'application/json'}, body:JSON.stringify({active:false}),
+});
+store.recordInbound({ channel:'tg_dm', externalId:'ws-revoke', text:'проверка отзыва', externalMsgId:'ws-revoke-1', sentAt:Date.now() });
+const viewerCloseCode = await viewerWsClosed.catch(() => 0);
+ok('отключение оператора отзывает уже открытый WebSocket', viewerCloseCode === 1008, viewerCloseCode);
+await fetch(`${B}/api/operators/${viewer.body.operator.id}`, {
+  method:'POST', headers:{...h,'content-type':'application/json'}, body:JSON.stringify({active:true}),
+});
 const viewerSettings = await (await fetch(`${B}/api/settings`, { headers: viewerH })).json() as any;
 const viewerHealth = await (await fetch(`${B}/api/health`, { headers: viewerH })).json() as any;
 ok('viewer не получает внутренний id Telegram Business',

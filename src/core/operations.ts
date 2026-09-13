@@ -121,6 +121,19 @@ export class Operations {
     return actor;
   }
 
+  /** Перечитывает роль и active для долгоживущих соединений. */
+  actorByKey(key: string): Actor | null {
+    if (key === 'root') return this.rootActor();
+    const match = /^op:(\d+)$/.exec(key);
+    if (!match) return null;
+    const row = this.db.prepare(`
+      SELECT id, name, role, active FROM operator_account WHERE id = ?
+    `).get(Number(match[1])) as { id: number; name: string; role: OperatorRole; active: number } | undefined;
+    if (!row?.active || !Object.hasOwn(ROLE_PERMISSIONS, row.role)) return null;
+    const actor: Actor = { key: `op:${row.id}`, id: row.id, name: row.name, role: row.role };
+    return { ...actor, permissions: this.permissionsFor(actor) };
+  }
+
   listOperators(): Array<Record<string, unknown>> {
     return this.db.prepare(`
       SELECT id, name, role, active, created_at, updated_at
@@ -433,7 +446,7 @@ export class Operations {
     return this.db.prepare(`SELECT * FROM audit_log ORDER BY id DESC LIMIT ?`).all(Math.min(1000, Math.max(1, limit))) as Array<Record<string, unknown>>;
   }
 
-  search(queryRaw: unknown, limit = 40): Record<string, unknown> {
+  search(actor: Actor, queryRaw: unknown, limit = 40): Record<string, unknown> {
     const query = cleanText(queryRaw, 120);
     if (query.length < 2) return { query, conversations: [], messages: [], customers: [], knowledge: [] };
     const like = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
@@ -449,17 +462,17 @@ export class Operations {
       SELECT id, conversation_id, direction, author, substr(text, 1, 300) AS text, created_at
         FROM message WHERE text LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?
     `).all(like, n);
-    const customers = this.db.prepare(`
+    const customers = this.can(actor, 'conversation:profile') ? this.db.prepare(`
       SELECT id, username, display_name, email, phone, company
         FROM customer_profile
        WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\'
           OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR company LIKE ? ESCAPE '\\'
        ORDER BY updated_at DESC LIMIT ?
-    `).all(like, like, like, like, like, n);
-    const knowledge = this.db.prepare(`
+    `).all(like, like, like, like, like, n) : [];
+    const knowledge = this.can(actor, 'knowledge:read') ? this.db.prepare(`
       SELECT id, title, substr(body, 1, 300) AS excerpt FROM kb_doc
        WHERE title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT ?
-    `).all(like, like, n);
+    `).all(like, like, n) : [];
     return { query, conversations, messages, customers, knowledge };
   }
 

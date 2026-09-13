@@ -203,22 +203,39 @@ export class MediaFetcher {
     let saved = 0;
     try {
       await mkdir(config.mediaDir, { recursive: true });
-      for (const item of this.store.pendingAttachments()) {
+      for (const item of this.store.pendingAttachments(20, Date.now(), config.transcribe.enabled)) {
         try {
-          const bytes = await this.fetch(item.file_ref);
-          if (!bytes) throw new Error('Источник вложения временно недоступен');
-          if (this.store.mediaBytes() + bytes.byteLength > config.mediaMaxTotalBytes) {
-            throw new Error(`Каталог вложений достиг лимита ${config.mediaMaxTotalBytes} байт`);
+          let bytes: Buffer;
+          let path: string;
+          let downloadedNow = false;
+          try {
+            // После неудачной расшифровки файл уже лежит локально. Берём его
+            // повторно, не полагаясь на успевшую истечь ссылку Telegram.
+            bytes = await readMediaFile(item.file_ref);
+            path = mediaPath(item.file_ref);
+          } catch {
+            const downloaded = await this.fetch(item.file_ref);
+            if (!downloaded) throw new Error('Источник вложения временно недоступен');
+            if (this.store.mediaBytes() + downloaded.byteLength > config.mediaMaxTotalBytes) {
+              throw new Error(`Каталог вложений достиг лимита ${config.mediaMaxTotalBytes} байт`);
+            }
+            bytes = downloaded;
+            path = await saveMediaFile(item.file_ref, bytes);
+            downloadedNow = true;
           }
-          const path = await saveMediaFile(item.file_ref, bytes);
+
+          // Файл готов независимо от состояния Whisper: оператор должен
+          // видеть и прослушивать его, а размер обязан попасть в квоту.
           this.store.markAttachmentDownloaded(
             item.id,
             path,
             bytes.byteLength,
             downloadedMediaMime(bytes, item.media_type),
           );
-          saved += 1;
+          if (downloadedNow) saved += 1;
 
+          // Если провайдер недоступен, deferAttachment оставит отдельно
+          // расшифровку в очереди, не скрывая уже скачанный файл.
           if (config.transcribe.enabled && VOICE_TYPES.has(item.media_type ?? '')) {
             await this.transcribe(item.id, item.message_id, bytes, item.media_type ?? 'voice');
           }
@@ -239,15 +256,11 @@ export class MediaFetcher {
    * невидимы: текста в сообщении нет, отвечать не на что.
    */
   private async transcribe(attachmentId: number, messageId: number, bytes: Buffer, kind: string): Promise<void> {
-    try {
-      const extension = kind === 'video_note' ? 'mp4' : 'ogg';
-      const text = await this.provider.transcribe(bytes, `voice-${attachmentId}.${extension}`);
-      if (!text) return;
-      this.store.attachTranscript(messageId, text);
-      log.info(`Голосовое ${attachmentId} расшифровано: ${text.slice(0, 60)}…`);
-    } catch (err) {
-      log.warn('Не удалось расшифровать голосовое', err);
-    }
+    const extension = kind === 'video_note' ? 'mp4' : 'ogg';
+    const text = await this.provider.transcribe(bytes, `voice-${attachmentId}.${extension}`);
+    if (!text?.trim()) throw new Error('Провайдер вернул пустую расшифровку голосового');
+    this.store.attachTranscript(messageId, text);
+    log.info(`Голосовое ${attachmentId} расшифровано: ${text.slice(0, 60)}…`);
   }
 
   private async fetch(ref: string): Promise<Buffer | null> {

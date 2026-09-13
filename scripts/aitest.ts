@@ -23,6 +23,7 @@ process.env.LOG_LEVEL = 'error';
 const dir = mkdtempSync(join(tmpdir(), 'ai-support-ai-'));
 process.env.DB_PATH = join(dir, 'ai.db');
 process.env.KB_DIR = join(dir, 'kb');
+process.env.MEDIA_DIR = join(dir, 'media');
 
 const { decide, isSensitive, resolveMode } = await import('../src/ai/gate.js');
 const { parseDraft } = await import('../src/ai/provider.js');
@@ -366,6 +367,10 @@ const port = (server.address() as { port: number }).port;
 
 const client = new BedolagaClient(`http://127.0.0.1:${port}`, 'secret');
 const poller = new BedolagaPoller(client, store, 60_000);
+const bedolagaEvents: { text: string | null; backfill: boolean }[] = [];
+store.on('message', ({ conversation, message, backfill }) => {
+  if (conversation.channel === 'bedolaga') bedolagaEvents.push({ text: message.text, backfill });
+});
 await poller.tick();
 
 const ticketConversation = store.findConversation('bedolaga', '77', 'bedolaga-default');
@@ -381,6 +386,8 @@ check('время взято из тикета', ticketMessages[0]?.created_at =
 check('вложение зарегистрировано', store.pendingAttachments().some((a) => a.file_ref === 'bedolaga:file-abc'));
 check('вложение ответа администратора зарегистрировано',
   store.pendingAttachments().some((a) => a.file_ref === 'bedolaga:file-admin'));
+check('холодный импорт активных тикетов не рассылает старую переписку',
+  bedolagaEvents.length === 2 && bedolagaEvents.every((event) => event.backfill), bedolagaEvents);
 check('одноразовый repair восстанавливает фото закрытого тикета',
   store.pendingAttachments().some((a) => a.file_ref === 'bedolaga:file-closed'));
 check('repair не дублирует сообщение закрытого тикета', store.listMessages(archivedConversation.id).length === 1);
@@ -392,6 +399,33 @@ await poller.tick();
 check('повторный опрос ничего не дублирует', store.listMessages(ticketConversation!.id).length === 2);
 check('повторный опрос восстанавливает пропущенное фото',
   store.pendingAttachments().filter((a) => a.file_ref === 'bedolaga:file-abc').length === 1);
+
+// После успешного baseline новый тикет — уже не архив. Старые сообщения в
+// его первом слепке сохраняем как контекст, но только последнее входящее
+// должно разбудить уведомления и AI.
+const liveStartedAt = Date.now();
+tickets.push({
+  id: 79,
+  title: 'Новый тикет после baseline',
+  status: 'open',
+  priority: 'normal',
+  user_id: 0,
+  messages: [
+    { id: 4, message_text: 'Сначала уточню детали', is_from_admin: false, created_at: new Date(liveStartedAt).toISOString(), has_media: false, media_type: '', media_file_id: '' },
+    { id: 5, message_text: 'Нужна помощь сейчас', is_from_admin: false, created_at: new Date(liveStartedAt + 1_000).toISOString(), has_media: false, media_type: '', media_file_id: '' },
+  ],
+});
+const beforeLiveTicket = bedolagaEvents.length;
+await poller.tick();
+const liveTicketEvents = bedolagaEvents.slice(beforeLiveTicket);
+const liveTicket = store.findConversation('bedolaga', '79', 'bedolaga-default');
+check('новый тикет после baseline создаётся сразу', Boolean(liveTicket));
+check('у нового тикета только последнее входящее становится live-событием',
+  liveTicketEvents.length === 2
+    && liveTicketEvents.filter((event) => !event.backfill).length === 1
+    && liveTicketEvents.find((event) => !event.backfill)?.text === 'Нужна помощь сейчас',
+  liveTicketEvents);
+check('живое сообщение нового тикета увеличивает непрочитанные', liveTicket?.unread === 1, liveTicket?.unread);
 
 const sender = new BedolagaSender(client);
 const sent = await sender.send(store.getConversation(ticketConversation!.id)!, { text: 'проверьте прошивку роутера' });
@@ -705,6 +739,35 @@ console.log('\n[ передача человеку ]');
   check('ошибка провайдера не превращается в игнор',
     sent.length === beforeFailed + 1 && sent.at(-1)!.includes('специалисту'), sent.slice(beforeFailed));
 
+  // Два webhook-события одного диалога могут прийти, пока первый запрос к
+  // модели ещё выполняется. Старый ответ нельзя отправлять после уточнения.
+  const raced = store.upsertConversation({ channel:'tg_dm', externalId:'ai-race', tgUserId:8650, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'ai-race', text:'первый вопрос', externalMsgId:'race-1', sentAt: Date.now() });
+  let raceCalls = 0;
+  let releaseFirst!: () => void;
+  let signalFirst!: () => void;
+  const firstStarted = new Promise<void>((resolve) => { signalFirst = resolve; });
+  const firstGate = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const racingProvider = {
+    lastModel: 'race-model',
+    complete: async () => {
+      raceCalls += 1;
+      if (raceCalls === 1) { signalFirst(); await firstGate; }
+      return '{"reply":"актуальный ответ","confidence":0.99,"needs_human":false,"used":[]}';
+    },
+  } as never;
+  const racingResponder = new Responder(store, box, customersStub, undefined, undefined, racingProvider);
+  const sentBeforeRace = sent.length;
+  const firstRun = racingResponder.handleInbound(store.getConversation(raced.id)!);
+  await firstStarted;
+  store.recordInbound({ channel:'tg_dm', externalId:'ai-race', text:'важное уточнение', externalMsgId:'race-2', sentAt: Date.now() + 1 });
+  const secondRun = racingResponder.handleInbound(store.getConversation(raced.id)!);
+  releaseFirst();
+  await Promise.all([firstRun, secondRun]);
+  check('устаревший параллельный ответ AI не отправляется',
+    raceCalls === 2 && sent.length === sentBeforeRace + 1,
+    { raceCalls, sent: sent.slice(sentBeforeRace) });
+
   rt3.aiMode = 'suggest'; rt3.requireKb = true;
   stubServer.close();
 }
@@ -760,6 +823,9 @@ const oldOverdue = store.overdueConversations(30, 24).some((c) => c.remote_exter
 check('SLA игнорирует диалоги старше суток', !oldOverdue);
 store.recordInbound({ channel: 'tg_dm', externalId: 'sla', text: 'жду', externalMsgId: 's1', sentAt: Date.now() - 3_600_000 });
 check('SLA видит свежий неотвеченный диалог', store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'sla'));
+store.recordInbound({ channel: 'tg_dm', externalId: 'sla', text: 'есть новости?', externalMsgId: 's2', sentAt: Date.now() });
+check('повтор клиента не переносит срок первого ответа',
+  store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'sla'));
 
 // 4. Для отметки прочитанным берётся последнее ВХОДЯЩЕЕ, а не наш же ответ.
 store.recordOutbound({ conversationId: metric.id, author: 'agent', text: 'последним говорим мы', externalMsgId: 'out9' });
@@ -775,6 +841,70 @@ check('вложение не молотит источник до истечен
   !store.pendingAttachments(20, retryAt - 1).some((a) => a.id === attId));
 check('вложение остаётся в очереди после пяти неудач',
   store.pendingAttachments(20, retryAt).some((a) => a.id === attId));
+
+// 6. Удаление прочитанного старого сообщения не уменьшает новые unread.
+const deletion = store.upsertConversation({ channel:'tg_dm', externalId:'delete-unread', tgUserId:8700 });
+const oldDeleteAt = Date.now() - 10_000;
+store.recordInbound({ channel:'tg_dm', externalId:'delete-unread', text:'старое 1', externalMsgId:'du-old-1', sentAt:oldDeleteAt });
+store.recordInbound({ channel:'tg_dm', externalId:'delete-unread', text:'старое 2', externalMsgId:'du-old-2', sentAt:oldDeleteAt + 1 });
+store.markRead(deletion.id);
+store.recordInbound({ channel:'tg_dm', externalId:'delete-unread', text:'новое 1', externalMsgId:'du-new-1', sentAt:oldDeleteAt + 2 });
+store.recordInbound({ channel:'tg_dm', externalId:'delete-unread', text:'новое 2', externalMsgId:'du-new-2', sentAt:oldDeleteAt + 3 });
+store.deleteExternalMessages(deletion.id, ['du-old-1']);
+check('удаление старого прочитанного не уменьшает unread', store.getConversation(deletion.id)?.unread === 2);
+check('после удаления первого сообщения метрика начала пересчитана',
+  store.getConversation(deletion.id)?.first_inbound_at === oldDeleteAt + 1);
+store.deleteExternalMessages(deletion.id, ['du-new-1']);
+check('удаление действительно непрочитанного уменьшает unread', store.getConversation(deletion.id)?.unread === 1);
+
+// 7. Запись running от умершего процесса не блокирует следующий запуск.
+const abandonedJob = store.startJob('regression-stale-job');
+const restartedStore = new Store(db);
+const replacementJob = restartedStore.startJob('regression-stale-job');
+const abandonedRow = db.prepare('SELECT status FROM job WHERE id = ?').get(abandonedJob) as { status:string };
+check('зависшая фоновая задача восстанавливается после рестарта',
+  replacementJob > 0 && abandonedRow.status === 'failed', { replacementJob, abandonedRow });
+restartedStore.finishJob(replacementJob, { ok:true });
+
+// 8. Ошибка Whisper оставляет голосовое в очереди и повтор использует уже
+// скачанный локальный файл, даже если временный URL источника больше не жив.
+{
+  const { config } = await import('../src/config.js');
+  const { MediaFetcher } = await import('../src/core/media.js');
+  const transcribeWasEnabled = config.transcribe.enabled;
+  config.transcribe.enabled = true;
+  let mediaDownloads = 0;
+  let transcriptionCalls = 0;
+  const voice = store.recordInbound({ channel:'bedolaga', externalId:'voice-retry', text:undefined,
+    mediaType:'voice', mediaFileId:'voice-file', externalMsgId:'voice-1', sentAt:Date.now() })!;
+  const voiceAttachment = store.addAttachment(voice.message.id, 'voice', 'bedolaga:voice-file');
+  const mediaSource = { downloadMedia: async (ref: string) => {
+    if (ref !== 'voice-file') return null;
+    mediaDownloads += 1;
+    return Buffer.from('OggSvoice');
+  } } as never;
+  const transcriptionProvider = {
+    transcribe: async () => {
+      transcriptionCalls += 1;
+      if (transcriptionCalls === 1) throw new Error('temporary whisper outage');
+      return 'расшифрованный вопрос клиента';
+    },
+  } as never;
+  const fetcher = new MediaFetcher(store, undefined, mediaSource, transcriptionProvider);
+  await fetcher.drain();
+  check('ошибка расшифровки оставляет файл доступным, но ставит текст в повторную очередь',
+    store.getAttachment(voiceAttachment)?.local_path != null
+      && store.lastInboundMessage(voice.conversation.id)?.text == null
+      && !store.pendingAttachments(20, Date.now(), true).some((item) => item.id === voiceAttachment));
+  db.prepare('UPDATE attachment SET next_attempt_at = 0 WHERE id = ?').run(voiceAttachment);
+  await fetcher.drain();
+  check('расшифровка повторяется без повторного скачивания временного URL',
+    mediaDownloads === 1 && transcriptionCalls === 2
+      && store.getAttachment(voiceAttachment)?.local_path != null
+      && store.lastInboundMessage(voice.conversation.id)?.text === 'расшифрованный вопрос клиента',
+    { mediaDownloads, transcriptionCalls });
+  config.transcribe.enabled = transcribeWasEnabled;
+}
 
 // ---------- ретраи AI ----------
 console.log('\n[ поведение при лимитах ]');

@@ -191,6 +191,8 @@ export type StoreEvents = {
 };
 
 export class Store extends EventEmitter<StoreEvents> {
+  private readonly activeJobs = new Set<number>();
+
   constructor(readonly db: Database.Database) {
     super();
   }
@@ -741,7 +743,8 @@ export class Store extends EventEmitter<StoreEvents> {
           WHERE status NOT IN ('closed','resolved')
             AND (
               (first_response_at IS NULL AND last_inbound_at IS NOT NULL
-                 AND last_inbound_at < ? AND last_inbound_at > ?)
+                 AND COALESCE(first_inbound_at, last_inbound_at) < ?
+                 AND COALESCE(first_inbound_at, last_inbound_at) > ?)
               OR
               (handoff_at IS NOT NULL AND handoff_at < ? AND handoff_at > ?
                  AND NOT EXISTS (
@@ -1072,17 +1075,35 @@ export class Store extends EventEmitter<StoreEvents> {
       `SELECT * FROM message WHERE conversation_id = ? AND external_msg_id IN (${placeholders})`,
     ).all(conversationId, ...ids) as Message[];
     if (!messages.length) return 0;
+    const unread = Number((this.db.prepare('SELECT unread FROM conversation WHERE id = ?').get(conversationId) as { unread: number } | undefined)?.unread ?? 0);
+    const unreadIds = unread > 0
+      ? new Set((this.db.prepare(`
+          SELECT id FROM message
+           WHERE conversation_id = ? AND direction = 'in' AND is_backfill = 0
+           ORDER BY id DESC LIMIT ?
+        `).all(conversationId, unread) as Array<{ id: number }>).map((row) => row.id))
+      : new Set<number>();
+    const deletedUnread = messages.filter((message) => unreadIds.has(message.id)).length;
     this.db.transaction(() => {
       this.db.prepare(`DELETE FROM message WHERE id IN (${messages.map(() => '?').join(',')})`)
         .run(...messages.map((message) => message.id));
-      const deletedInbound = messages.filter((message) => message.direction === 'in').length;
       this.db.prepare(
         `UPDATE conversation
             SET last_message_at = (SELECT MAX(created_at) FROM message WHERE conversation_id = ?),
                 last_inbound_at = (SELECT MAX(created_at) FROM message WHERE conversation_id = ? AND direction = 'in'),
+                first_inbound_at = (SELECT MIN(created_at) FROM message WHERE conversation_id = ? AND direction = 'in'),
+                first_response_at = CASE
+                  WHEN EXISTS (SELECT 1 FROM message WHERE conversation_id = ? AND direction = 'in')
+                  THEN (SELECT MIN(outbound.created_at) FROM message outbound
+                         WHERE outbound.conversation_id = ? AND outbound.direction = 'out'
+                           AND outbound.created_at >= (SELECT MIN(inbound.created_at) FROM message inbound
+                             WHERE inbound.conversation_id = ? AND inbound.direction = 'in'))
+                  ELSE NULL END,
                 unread = MAX(0, unread - ?), updated_at = MAX(updated_at + 1, ?)
           WHERE id = ?`,
-      ).run(conversationId, conversationId, deletedInbound, Date.now(), conversationId);
+      ).run(conversationId, conversationId, conversationId,
+        conversationId, conversationId, conversationId,
+        deletedUnread, Date.now(), conversationId);
     })();
     const conversation = this.getConversation(conversationId)!;
     for (const message of messages) this.emit('message_deleted', { conversation, message });
@@ -1103,13 +1124,22 @@ export class Store extends EventEmitter<StoreEvents> {
     return Number(row.n) || 0;
   }
 
-  /** Невыкачанные вложения, чей сохранённый backoff уже истёк. */
-  pendingAttachments(limit = 20, now = Date.now()): { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[] {
+  /**
+   * Невыкачанные вложения и, по запросу MediaFetcher, уже сохранённые
+   * голосовые без текста. Второй вариант нужен для повторной расшифровки:
+   * файл остаётся доступен оператору и учитывается в дисковой квоте.
+   */
+  pendingAttachments(limit = 20, now = Date.now(), retryVoice = false): { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[] {
     return this.db
-      .prepare(`SELECT id, message_id, media_type, file_ref, attempts FROM attachment
-                 WHERE local_path IS NULL AND next_attempt_at <= ?
-                 ORDER BY next_attempt_at, id LIMIT ?`)
-      .all(now, limit) as { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[];
+      .prepare(`SELECT attachment.id, attachment.message_id, attachment.media_type,
+                       attachment.file_ref, attachment.attempts
+                  FROM attachment JOIN message ON message.id = attachment.message_id
+                 WHERE attachment.next_attempt_at <= ?
+                   AND (attachment.local_path IS NULL
+                     OR (? = 1 AND attachment.media_type IN ('voice','audio','video_note')
+                         AND (message.text IS NULL OR trim(message.text) = '')))
+                 ORDER BY attachment.next_attempt_at, attachment.id LIMIT ?`)
+      .all(now, retryVoice ? 1 : 0, limit) as { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[];
   }
 
   deferAttachment(id: number, error: unknown, now = Date.now()): number {
@@ -1312,11 +1342,19 @@ export class Store extends EventEmitter<StoreEvents> {
     const running = this.db
       .prepare(`SELECT id FROM job WHERE kind = ? AND status = 'running'`)
       .get(kind) as { id: number } | undefined;
-    if (running) return -running.id;
+    if (running && this.activeJobs.has(running.id)) return -running.id;
+    if (running) {
+      this.db.prepare(`
+        UPDATE job SET status = 'failed', error = ?, ended_at = ?
+         WHERE kind = ? AND status = 'running'
+      `).run('Процесс был перезапущен до завершения задачи', Date.now(), kind);
+    }
     const result = this.db
       .prepare(`INSERT INTO job (kind, started_at) VALUES (?, ?)`)
       .run(kind, Date.now());
-    return Number(result.lastInsertRowid);
+    const id = Number(result.lastInsertRowid);
+    this.activeJobs.add(id);
+    return id;
   }
 
   updateJob(id: number, progress: string): void {
@@ -1327,6 +1365,7 @@ export class Store extends EventEmitter<StoreEvents> {
     this.db
       .prepare(`UPDATE job SET status = ?, result = ?, error = ?, ended_at = ? WHERE id = ?`)
       .run(error ? 'failed' : 'done', result ? JSON.stringify(result) : null, error ?? null, Date.now(), id);
+    this.activeJobs.delete(id);
   }
 
   latestJob(kind: string): Record<string, unknown> | undefined {

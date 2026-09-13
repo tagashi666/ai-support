@@ -192,14 +192,13 @@ export class BedolagaClient {
     const seen = new Map<number, BedolagaTicket>();
     for (const status of ACTIVE_STATUSES) {
       for (let page = 0; page < MAX_PAGES; page += 1) {
-        const batch = await this.json<BedolagaTicket[]>('/tickets', {
+        const batch = await this.collection<BedolagaTicket & Record<string, unknown>>('/tickets', {
           status,
           limit: PAGE_LIMIT,
           offset: page * PAGE_LIMIT,
-        });
-        if (!Array.isArray(batch)) break;
-        for (const ticket of batch) seen.set(ticket.id, ticket);
-        if (batch.length < PAGE_LIMIT) break;
+        }, ['tickets']);
+        for (const ticket of batch.items) seen.set(ticket.id, ticket);
+        if (!batch.items.length || batch.offset + batch.items.length >= batch.total) break;
         if (page === MAX_PAGES - 1) {
           log.warn(`Тикетов в статусе ${status} больше ${MAX_PAGES * PAGE_LIMIT} — хвост не обработан`);
         }
@@ -214,15 +213,18 @@ export class BedolagaClient {
    */
   async ticketsByStatus(status: string, limit: number): Promise<BedolagaTicket[]> {
     const collected: BedolagaTicket[] = [];
+    let offset = 0;
     for (let page = 0; page < MAX_PAGES && collected.length < limit; page += 1) {
-      const batch = await this.json<BedolagaTicket[]>('/tickets', {
+      const requested = Math.min(PAGE_LIMIT, limit - collected.length);
+      const batch = await this.collection<BedolagaTicket & Record<string, unknown>>('/tickets', {
         status,
-        limit: Math.min(PAGE_LIMIT, limit - collected.length),
-        offset: page * PAGE_LIMIT,
-      });
-      if (!Array.isArray(batch) || !batch.length) break;
-      collected.push(...batch);
-      if (batch.length < PAGE_LIMIT) break;
+        limit: requested,
+        offset,
+      }, ['tickets']);
+      if (!batch.items.length) break;
+      collected.push(...batch.items);
+      offset += batch.items.length;
+      if (offset >= batch.total) break;
     }
     return collected.slice(0, limit);
   }
@@ -420,11 +422,16 @@ export class BedolagaPoller {
     if (this.running) return 0;
     this.running = true;
     let ingested = 0;
+    // Наличие успешного предыдущего прохода отделяет холодный импорт от
+    // действительно новых тикетов. Сам timestamp здесь не используется как
+    // граница: часы Bedolaga и панели могут расходиться, а API часто округляет
+    // время сообщения до секунд.
+    const baselineReady = Boolean(this.store.getState('bedolaga:last_poll'));
     try {
       const tickets = await this.client.activeTickets();
       for (const summary of tickets) {
         try {
-          ingested += await this.ingestTicket(summary);
+          ingested += await this.ingestTicket(summary, false, baselineReady);
         } catch (err) {
           log.error(`Тикет ${summary.id}: не удалось обработать`, err);
         }
@@ -506,15 +513,31 @@ export class BedolagaPoller {
     }
   }
 
-  private async ingestTicket(summary: BedolagaTicket, forceBackfill = false): Promise<number> {
+  private async ingestTicket(
+    summary: BedolagaTicket,
+    forceBackfill = false,
+    baselineReady = false,
+  ): Promise<number> {
     const ticket = summary.messages?.length ? summary : await this.client.ticket(summary.id);
     const externalId = String(ticket.id);
 
     let conversation = this.store.findConversation('bedolaga', externalId, 'bedolaga-default');
-    // Первая встреча с тикетом — вся его переписка это история, а не новые
-    // события. Без этой отметки AI ответил бы на каждое сообщение архива,
-    // а SLA прислал бы уведомление по каждому старому тикету.
-    const backfill = forceBackfill || !conversation;
+    const firstSeen = !conversation;
+    // На холодном старте вся найденная переписка остаётся историей. После
+    // первого успешного опроса ранее неизвестный активный тикет уже новый:
+    // его прошлые сообщения импортируем тихо, а только самое свежее входящее
+    // выпускаем как live-событие. Так оператор получает уведомление сразу,
+    // но AI не отвечает по очереди на всю историю тикета.
+    const latest = firstSeen && baselineReady && !forceBackfill
+      ? (ticket.messages ?? []).reduce<BedolagaMessage | undefined>((best, message) => {
+          if (!best) return message;
+          const messageAt = parseTimestamp(message, 0);
+          const bestAt = parseTimestamp(best, 0);
+          if (messageAt !== bestAt) return messageAt > bestAt ? message : best;
+          return Number(message.id) >= Number(best.id) ? message : best;
+        }, undefined)
+      : undefined;
+    const liveMessageId = latest && !latest.is_from_admin ? String(latest.id) : undefined;
     if (!conversation) {
       conversation = this.store.upsertConversation({
         channel: 'bedolaga',
@@ -542,6 +565,8 @@ export class BedolagaPoller {
       const at = parseTimestamp(message);
       const text = message.message_text ?? '';
       const fileId = await this.resolveMediaFileId(ticket.id, message);
+      const backfill = forceBackfill
+        || (firstSeen && (!baselineReady || String(message.id) !== liveMessageId));
 
       if (message.is_from_admin) {
         const recorded = this.store.recordOutbound({

@@ -252,6 +252,8 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   const sockets = new Set<WebSocket>();
   const socketIps = new Map<string, number>();
   const socketOwners = new WeakMap<WebSocket, string>();
+  const socketActors = new WeakMap<WebSocket, string>();
+  const socketExpires = new WeakMap<WebSocket, number>();
   const removeSocket = (socket: WebSocket): void => {
     if (!sockets.delete(socket)) return;
     const ip = socketOwners.get(socket);
@@ -260,9 +262,19 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (count <= 1) socketIps.delete(ip);
     else socketIps.set(ip, count - 1);
   };
-  const broadcast = (frame: unknown): void => {
+  const broadcast = (frame: unknown, permission: Permission = 'conversation:read'): void => {
     const payload = JSON.stringify(frame);
-    for (const socket of sockets) if (socket.readyState === socket.OPEN) socket.send(payload);
+    for (const socket of sockets) {
+      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
+      if (!actor || !operations.can(actor, 'conversation:read')) {
+        socket.close(1008, 'Permission revoked');
+        continue;
+      }
+      // События фоновых задач видят только роли с соответствующим правом,
+      // но отсутствие этого дополнительного права не должно ронять сокет.
+      if (!operations.can(actor, permission)) continue;
+      if (socket.readyState === socket.OPEN) socket.send(payload);
+    }
   };
 
   const expected = Buffer.from(config.panelToken);
@@ -344,20 +356,27 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
    * ни отправить сообщение, ни поменять настройку.
    */
   const ticketSecret = randomBytes(32);
-  const makeTicket = (): string => {
+  const makeTicket = (actor: Actor): string => {
     const until = Date.now() + 10 * 60_000;
-    const mac = createHmac('sha256', ticketSecret).update(String(until)).digest('base64url').slice(0, 32);
-    return `${until}.${mac}`;
+    const actorKey = Buffer.from(actor.key).toString('base64url');
+    const mac = createHmac('sha256', ticketSecret).update(`${until}.${actorKey}`).digest('base64url').slice(0, 32);
+    return `${until}.${actorKey}.${mac}`;
   };
-  const validTicket = (value: unknown): boolean => {
-    if (typeof value !== 'string') return false;
-    const [untilRaw, mac] = value.split('.');
+  const ticketGrant = (value: unknown): { actor: Actor; until: number } | null => {
+    if (typeof value !== 'string') return null;
+    const [untilRaw, actorRaw, mac] = value.split('.');
     const until = Number(untilRaw);
-    if (!Number.isFinite(until) || until < Date.now() || !mac) return false;
-    const expected = createHmac('sha256', ticketSecret).update(String(until)).digest('base64url').slice(0, 32);
+    if (!Number.isFinite(until) || until < Date.now() || !actorRaw || !mac) return null;
+    const expected = createHmac('sha256', ticketSecret).update(`${until}.${actorRaw}`).digest('base64url').slice(0, 32);
     const a = Buffer.from(mac);
     const b = Buffer.from(expected);
-    return a.length === b.length && timingSafeEqual(a, b);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+    let key: string;
+    try { key = Buffer.from(actorRaw, 'base64url').toString('utf8'); }
+    catch { return null; }
+    const actor = operations.actorByKey(key);
+    if (!actor || !operations.can(actor, 'conversation:read')) return null;
+    return { actor, until };
   };
 
   const authorizedRoot = (token: unknown): boolean => {
@@ -394,7 +413,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (url.startsWith('/api/templates') && method !== 'GET') return 'templates:manage';
     if (url.startsWith('/api/templates')) return 'templates:read';
     if (url.startsWith('/api/suggestions')) return 'conversation:reply';
-    if (url.startsWith('/api/kb') && method !== 'GET') return url.startsWith('/api/kb/mine') ? 'knowledge:mine' : 'knowledge:manage';
+    if (url.startsWith('/api/kb/mine')) return 'knowledge:mine';
+    if (method === 'GET' && /^\/api\/kb\/draft(?:\/|\?|$)/.test(url)) return 'knowledge:review';
+    if (url.startsWith('/api/kb') && method !== 'GET') return 'knowledge:manage';
     if (url.startsWith('/api/kb')) return 'knowledge:read';
     if (/^\/api\/conversations\/\d+\/bedolaga\/subscriptions\/\d+\/extend(?:\?|$)/.test(url)) {
       return 'bedolaga:extend';
@@ -440,7 +461,8 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       || /^\/api\/conversations\/\d+\/avatar(?:\?|$)/.test(request.url)
       || request.url.startsWith('/ws');
     if (readOnlyRoute) {
-      if (validTicket(query)) return;
+      const grant = ticketGrant(query);
+      if (grant) { actors.set(request, grant.actor); return; }
       const actor = identify(header);
       if (actor) { actors.set(request, actor); return; }
       return reply.code(401).send({ error: 'Нужен действующий билет' });
@@ -764,15 +786,15 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
           try {
             const report = await runMining(store, { source: 'panel', conversationIds: [id], all: true, limit: 1 }, (message) => {
               store.updateJob(jobId, message);
-              broadcast({ type: 'job', kind: 'auto-learn', status: 'running', progress: message });
+              broadcast({ type: 'job', kind: 'auto-learn', status: 'running', progress: message }, 'knowledge:review');
             });
             store.finishJob(jobId, report);
             if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, 'auto-learn');
-            broadcast({ type: 'job', kind: 'auto-learn', status: 'done', report });
+            broadcast({ type: 'job', kind: 'auto-learn', status: 'done', report }, 'knowledge:review');
           } catch (err) {
             const message = (err as Error).message;
             store.finishJob(jobId, undefined, message);
-            broadcast({ type: 'job', kind: 'auto-learn', status: 'failed', error: message });
+            broadcast({ type: 'job', kind: 'auto-learn', status: 'failed', error: message }, 'knowledge:review');
           }
         })();
       }
@@ -1052,7 +1074,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return { events: operations.listAudit(Number(request.query.limit ?? 200)) };
   });
 
-  app.get<{ Querystring: { q?: string } }>('/api/search', async (request) => operations.search(request.query.q));
+  app.get<{ Querystring: { q?: string } }>('/api/search', async (request) => (
+    operations.search(actorOf(request), request.query.q)
+  ));
 
   app.get('/api/queue', async () => ({ conversations: operations.queue(), policies: operations.slaPolicies() }));
   app.get('/api/sla', async () => ({ policies: operations.slaPolicies() }));
@@ -1385,7 +1409,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return { ok: true };
   });
 
-  app.get('/api/ticket', async () => ({ ticket: makeTicket() }));
+  app.get('/api/ticket', async (request) => ({ ticket: makeTicket(actorOf(request)) }));
 
   app.get('/api/settings', async () => ({
     version,
@@ -1528,9 +1552,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   // --- база знаний -------------------------------------------------------
 
-  app.get('/api/kb', async () => ({
+  app.get('/api/kb', async (request) => ({
     kb: await listDocs('kb'),
-    drafts: await listDocs('draft'),
+    drafts: operations.can(actorOf(request), 'knowledge:review') ? await listDocs('draft') : [],
   }));
 
   app.get<{ Params: { area: string; name: string } }>('/api/kb/:area/:name', async (request, reply) => {
@@ -1626,16 +1650,16 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         try {
           const report = await runMining(store, { source: 'export', exchanges }, (message) => {
             store.updateJob(jobId, message);
-            broadcast({ type: 'job', kind: 'mine', status: 'running', progress: message });
+            broadcast({ type: 'job', kind: 'mine', status: 'running', progress: message }, 'knowledge:mine');
           });
           store.finishJob(jobId, report);
           if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, 'telegram-export');
           if (report.articles.length) onKbChanged?.();
-          broadcast({ type: 'job', kind: 'mine', status: 'done', report });
+          broadcast({ type: 'job', kind: 'mine', status: 'done', report }, 'knowledge:mine');
         } catch (err) {
           const message = (err as Error).message;
           store.finishJob(jobId, undefined, message);
-          broadcast({ type: 'job', kind: 'mine', status: 'failed', error: message });
+          broadcast({ type: 'job', kind: 'mine', status: 'failed', error: message }, 'knowledge:mine');
         }
       })();
 
@@ -1669,17 +1693,17 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
             },
             (message) => {
               store.updateJob(jobId, message);
-              broadcast({ type: 'job', kind: 'mine', status: 'running', progress: message });
+              broadcast({ type: 'job', kind: 'mine', status: 'running', progress: message }, 'knowledge:mine');
             },
           );
           store.finishJob(jobId, report);
           if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, String(options.source ?? 'archive'));
           if (!report.dryRun && report.articles.length) onKbChanged?.();
-          broadcast({ type: 'job', kind: 'mine', status: 'done', report });
+          broadcast({ type: 'job', kind: 'mine', status: 'done', report }, 'knowledge:mine');
         } catch (err) {
           const message = (err as Error).message;
           store.finishJob(jobId, undefined, message);
-          broadcast({ type: 'job', kind: 'mine', status: 'failed', error: message });
+          broadcast({ type: 'job', kind: 'mine', status: 'failed', error: message }, 'knowledge:mine');
         }
       })();
 
@@ -1690,6 +1714,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   // --- живое обновление ------------------------------------------------
 
   app.get('/ws', { websocket: true }, (socket, request) => {
+    const grant = ticketGrant((request.query as Record<string, unknown> | undefined)?.token);
+    if (!grant) {
+      socket.close(1008, 'Ticket expired');
+      return;
+    }
     const origin = request.headers.origin;
     if (origin) {
       let validOrigin = false;
@@ -1712,6 +1741,8 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
     sockets.add(socket);
     socketOwners.set(socket, request.ip);
+    socketActors.set(socket, grant.actor.key);
+    socketExpires.set(socket, grant.until);
     socketIps.set(request.ip, ipCount + 1);
     socket.once('close', () => removeSocket(socket));
   });
@@ -1720,7 +1751,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   // Ping держит канал живым; клиент всё равно имеет короткий HTTP fallback.
   const socketHeartbeat = setInterval(() => {
     for (const socket of sockets) {
-      if (socket.readyState === socket.OPEN) socket.ping();
+      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
+      if ((socketExpires.get(socket) ?? 0) < Date.now()
+          || !actor || !operations.can(actor, 'conversation:read')) {
+        socket.close(1008, 'Ticket expired or permission revoked');
+      } else if (socket.readyState === socket.OPEN) socket.ping();
       else removeSocket(socket);
     }
   }, 25_000);

@@ -39,7 +39,10 @@ export class SlaWatcher {
       if (this.store.getState(key)) continue;
       attempted += 1;
 
-      const waited = Math.round((Date.now() - (conversation.last_inbound_at ?? 0)) / 60_000);
+      const waitingSince = conversation.first_response_at == null
+        ? (conversation.first_inbound_at ?? conversation.last_inbound_at ?? 0)
+        : (conversation.handoff_at ?? conversation.last_inbound_at ?? 0);
+      const waited = Math.round((Date.now() - waitingSince) / 60_000);
       const last = this.store.lastInboundMessage(conversation.id);
       const delivered = await this.notifier.notify('sla', conversation, {
         reason: `без ответа ${waited} мин`,

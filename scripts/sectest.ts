@@ -197,7 +197,8 @@ console.log('\n[ доступ к панели ]');
   check('неизвестное действие обновления отвергается', invalidUpdateAction.status === 400, invalidUpdateAction.status);
 
   const { ticket } = await (await fetch(`${B}/api/ticket`, { headers: H })).json() as { ticket: string };
-  check('билет выдаётся', /^\d+\.[A-Za-z0-9_-]+$/.test(ticket), ticket);
+  check('билет выдаётся и содержит подписанную учётную запись',
+    /^\d+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(ticket), ticket);
 
   // Билет открывает только чтение вложений, но не изменение состояния.
   const withTicket = await fetch(`${B}/api/attachments/999?token=${encodeURIComponent(ticket)}`);
