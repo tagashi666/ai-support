@@ -67,6 +67,29 @@ check('у списка и треда есть min-height:0',
 
 // 8. Экраны переключаются по атрибуту, а не удалением из DOM.
 check('переключение экранов через hidden', /\$\(`view-\$\{v\}`\)\.hidden = v !== view/.test(html));
+check('вкладки используют единый асинхронный lifecycle без пустого кадра',
+  /const VIEW_LOADERS = Object\.freeze/.test(html)
+  && /prepareViewLoading\(view, token\)/.test(html)
+  && /await Promise\.all\(\[runViewLoader\(view\), minimumPaint\]\)/.test(html)
+  && /finishViewLoading\(target, token\)/.test(html));
+check('переключение workspace использует View Transition с CSS fallback',
+  /document\.startViewTransition\(activate\)/.test(html)
+  && /::view-transition-new\(workspace\)/.test(uiCss)
+  && /:root\s*\{[^}]*view-transition-name:none/s.test(uiCss)
+  && /\.supports-view-transitions \.view:not\(\[hidden\]\)/.test(uiCss)
+  && /\.view:not\(\[hidden\]\)\s*\{[^}]*animation:view-fallback-in/s.test(uiCss));
+check('повторная загрузка сохраняет контент и показывает тонкий progress',
+  /section\.dataset\.loaded === 'true'/.test(html)
+  && /const viewLoadTasks = new Map\(\)/.test(html)
+  && /\.view\.is-refreshing \.view-progress\s*\{[^}]*animation:view-progress/s.test(uiCss)
+  && /\.view\.is-refreshing \.view-skeleton\s*\{\s*display:none/.test(uiCss)
+  && /\.view\[data-loaded="true"\]:not\(\.is-settling\) \.view-skeleton/.test(uiCss)
+  && /view-stats'\)\.dataset\.loaded !== 'true'/.test(html));
+check('локальные вкладки меняют содержимое без резкого скачка',
+  /function animateContentChange\(element\)/.test(html)
+  && /animateContentChange\(\$\('docs'\)\)/.test(html)
+  && /animateContentChange\(\$\(`\$\{tab\}Body`\)\)/.test(html)
+  && /@keyframes content-switch-in/.test(uiCss));
 
 // 9. Правая колонка прячется вне инбокса.
 check('контекстная колонка скрывается вне инбокса',

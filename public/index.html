@@ -1056,8 +1056,11 @@ function applyLook() {
 $('themePick').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   const change = () => { localStorage.setItem('theme', b.dataset.theme); applyLook(); };
-  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) document.startViewTransition(change);
-  else change();
+  if (document.startViewTransition && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.documentElement.classList.add('theme-transition');
+    const transition = document.startViewTransition(change);
+    void transition.finished.finally(() => document.documentElement.classList.remove('theme-transition'));
+  } else change();
 };
 $('accentPick').onclick = () => {};
 applyLook();
@@ -1218,31 +1221,112 @@ applyLayout();
 
 /* ═══ навигация ═══ */
 const VIEWS = ['inbox','queue','kb','lab','nodes','stats','team','diagnostics','settings'];
-function show(view) {
-  for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
-  for (const b of document.querySelectorAll('.nav')) b.setAttribute('aria-current', String(b.dataset.view === view));
-  $('app').dataset.context = view === 'inbox' ? 'on' : 'off';
-  closeInspector();
-  if (view === 'kb') loadDocs();
-  if (view === 'queue') loadQueue();
-  if (view === 'lab') $('labInput')?.focus();
-  if (view === 'nodes') loadNodes();
-  if (view === 'stats') loadStats();
-  if (view === 'team') loadTeam();
-  if (view === 'diagnostics') loadDiagnostics();
-  if (view === 'settings') {
+const VIEW_LOADERS = Object.freeze({
+  kb:loadDocs,
+  queue:loadQueue,
+  nodes:loadNodes,
+  stats:loadStats,
+  team:loadTeam,
+  diagnostics:loadDiagnostics,
+  settings:async () => {
     const resetSettingsPosition = () => {
       settingsScroller.scrollTop = 0;
       setSettingsCategory('settings-appearance');
     };
     resetSettingsPosition();
-    void loadSettings().finally(() => requestAnimationFrame(() => {
+    await loadSettings().finally(() => requestAnimationFrame(() => {
       resetSettingsPosition();
       requestAnimationFrame(resetSettingsPosition);
     }));
+  },
+});
+let viewNavigationToken = 0;
+const viewLoadTasks = new Map();
+const supportsViewTransitions = typeof document.startViewTransition === 'function';
+document.documentElement.classList.toggle('supports-view-transitions', supportsViewTransitions);
+
+const viewLoaderMarkup = () => `<div class="view-loading" role="status" aria-live="polite" aria-label="Загружаю раздел">
+  <span class="view-progress" aria-hidden="true"></span>
+  <div class="view-skeleton" aria-hidden="true">
+    <div class="view-skeleton-summary"><i></i><i></i><i></i></div>
+    <div class="view-skeleton-toolbar"><i></i><i></i></div>
+    <div class="view-skeleton-rows">${Array.from({ length:6 }, () => '<i></i>').join('')}</div>
+  </div>
+</div>`;
+
+function prepareViewLoading(view, token) {
+  const section = $(`view-${view}`);
+  if (!section || !VIEW_LOADERS[view]) return null;
+  clearTimeout(section._settleTimer);
+  section.classList.remove('is-settling');
+  if (!section.querySelector('.view-loading')) section.insertAdjacentHTML('beforeend', viewLoaderMarkup());
+  section.dataset.loadToken = String(token);
+  section.setAttribute('aria-busy', 'true');
+  section.classList.toggle('is-loading', section.dataset.loaded !== 'true');
+  section.classList.toggle('is-refreshing', section.dataset.loaded === 'true');
+  return section;
+}
+
+function finishViewLoading(section, token) {
+  if (!section || section.dataset.loadToken !== String(token)) return;
+  const wasInitialLoad = section.classList.contains('is-loading');
+  section.dataset.loaded = 'true';
+  section.removeAttribute('aria-busy');
+  section.classList.remove('is-loading', 'is-refreshing');
+  if (wasInitialLoad) {
+    section.classList.add('is-settling');
+    section._settleTimer = setTimeout(() => section.classList.remove('is-settling'), 180);
   }
 }
-for (const b of document.querySelectorAll('.nav[data-view]')) b.onclick = () => show(b.dataset.view);
+
+function runViewLoader(view) {
+  const pending = viewLoadTasks.get(view);
+  if (pending) return pending;
+  const task = Promise.resolve().then(() => VIEW_LOADERS[view]()).finally(() => {
+    if (viewLoadTasks.get(view) === task) viewLoadTasks.delete(view);
+  });
+  viewLoadTasks.set(view, task);
+  return task;
+}
+
+async function show(view) {
+  if (!VIEWS.includes(view)) return;
+  const token = ++viewNavigationToken;
+  const target = prepareViewLoading(view, token);
+  const activate = () => {
+    for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
+    for (const b of document.querySelectorAll('.nav')) b.setAttribute('aria-current', String(b.dataset.view === view));
+    $('app').dataset.context = view === 'inbox' ? 'on' : 'off';
+    closeInspector();
+  };
+  const active = document.querySelector('.view:not([hidden])')?.id;
+  let transition = null;
+  if (active !== `view-${view}` && supportsViewTransitions && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    transition = document.startViewTransition(activate);
+  } else activate();
+  if (view === 'lab') {
+    const focusLab = () => $('labInput')?.focus({ preventScroll:true });
+    if (transition) void transition.updateCallbackDone.then(focusLab, focusLab);
+    else focusLab();
+  }
+  const loader = VIEW_LOADERS[view];
+  if (!loader) return;
+  const minimumPaint = target?.dataset.loaded === 'true' ? Promise.resolve() : new Promise((resolve) => setTimeout(resolve, 180));
+  try { await Promise.all([runViewLoader(view), minimumPaint]); }
+  catch (error) {
+    console.error(`Не удалось загрузить раздел ${view}`, error);
+  }
+  finally { finishViewLoading(target, token); }
+}
+for (const b of document.querySelectorAll('.nav[data-view]')) b.onclick = () => void show(b.dataset.view);
+
+function animateContentChange(element) {
+  if (!element || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  element.classList.remove('content-switch-in');
+  void element.offsetWidth;
+  element.classList.add('content-switch-in');
+  element.addEventListener('animationend', () => element.classList.remove('content-switch-in'), { once:true });
+}
 
 function closeInspector() {
   $('app').dataset.inspector = 'closed';
@@ -2755,9 +2839,11 @@ $('escBtn').onclick = () => setState({ escalated: !current?.escalated });
 $('handoffBtn').onclick = () => setState({ handoff: !current?.handoff_at });
 $('filters').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
+  const changed = filter !== b.dataset.filter;
   filter = b.dataset.filter;
   for (const o of $('filters').children) o.setAttribute('aria-pressed', String(o === b));
   renderList();
+  if (changed) animateContentChange($('list'));
 };
 $('listSearch').oninput = (e) => {
   listQuery = e.target.value.trim();
@@ -2781,6 +2867,7 @@ $('kbTabs').onclick = (e) => {
   kbTab = b.dataset.tab;
   for (const o of $('kbTabs').children) o.setAttribute('aria-pressed', String(o === b));
   renderDocs();
+  animateContentChange($('docs'));
 };
 async function loadDocs() {
   const [data, learning] = await Promise.all([
@@ -2788,6 +2875,7 @@ async function loadDocs() {
     canReview() ? json('/api/learning/candidates?status=pending') : Promise.resolve(null),
   ]);
   if (data) { docs = { ...data, candidates: learning?.candidates ?? [] }; renderDocs(); }
+  else if ($('view-kb').dataset.loaded !== 'true') $('docs').innerHTML = '<p class="empty">База знаний сейчас недоступна.</p>';
 }
 function renderDocs() {
   const reviewer = canReview();
@@ -2987,10 +3075,12 @@ async function loadNodes() {
   $('nodesRefresh').title = nodesWritable ? '' : 'Обновление серверов доступно только администратору';
   const box = $('nodesBody');
   box.setAttribute('aria-busy', 'true');
-  box.innerHTML = `<div class="nodes-loading" aria-label="Загружаю состояние серверов">
-    <div class="nodes-summary">${Array.from({ length:4 }, () => '<span class="node-kpi skeleton-card"></span>').join('')}</div>
-    <div class="nodes-panel skeleton-panel"><i></i><i></i><i></i></div>
-  </div>`;
+  if ($('view-nodes').dataset.loaded !== 'true') {
+    box.innerHTML = `<div class="nodes-loading" aria-label="Загружаю состояние серверов">
+      <div class="nodes-summary">${Array.from({ length:4 }, () => '<span class="node-kpi skeleton-card"></span>').join('')}</div>
+      <div class="nodes-panel skeleton-panel"><i></i><i></i><i></i></div>
+    </div>`;
+  }
   let res;
   try { res = await api('/api/nodes'); }
   catch (err) {
@@ -3100,7 +3190,11 @@ $('statsRange').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   statsDays = Number(b.dataset.days);
   for (const o of $('statsRange').children) o.setAttribute('aria-pressed', String(o === b));
-  loadStats();
+  void (async () => {
+    const pending = viewLoadTasks.get('stats');
+    if (pending) await pending.catch(() => undefined);
+    await show('stats');
+  })();
 };
 
 const fmtDur = (ms) => {
@@ -3147,8 +3241,12 @@ function meters(rows, unit = '') {
 }
 
 async function loadStats() {
-  $('stats').innerHTML = '<p class="empty">Считаю…</p>';
-  const s = await json(`/api/stats?days=${statsDays}`); if (!s) return;
+  if ($('view-stats').dataset.loaded !== 'true') $('stats').innerHTML = '<p class="empty">Считаю…</p>';
+  const s = await json(`/api/stats?days=${statsDays}`);
+  if (!s) {
+    if ($('view-stats').dataset.loaded !== 'true') $('stats').innerHTML = '<p class="empty">Аналитика сейчас недоступна.</p>';
+    return;
+  }
 
   const acc = s.acceptanceRate == null ? '—' : Math.round(s.acceptanceRate * 100) + '%';
   const share = s.automationRate == null ? '—' : Math.round(s.automationRate * 100) + '%';
@@ -3301,7 +3399,7 @@ function renderQueue() {
 }
 
 async function loadQueue() {
-  $('queueBody').innerHTML = '<p class="empty">Загружаю очередь…</p>';
+  if ($('view-queue').dataset.loaded !== 'true') $('queueBody').innerHTML = '<p class="empty">Загружаю очередь…</p>';
   const [queue, filtersData] = await Promise.all([json('/api/queue'), json('/api/filters')]);
   if (!queue) { $('queueBody').innerHTML = '<p class="empty">Очередь недоступна.</p>'; return; }
   queueRows = queue.conversations ?? [];
@@ -3518,13 +3616,14 @@ $('teamTabs').onclick = (event) => {
   for (const item of $('teamTabs').children) item.setAttribute('aria-pressed', String(item === button));
   for (const name of ['operators','performance','roles','audit']) $(`${name}Body`).hidden = tab !== name;
   document.querySelector('.team-workspace').dataset.teamView = tab;
+  animateContentChange($(`${tab}Body`));
 };
 
 /* ═══ диагностика ═══ */
 const mb = (bytes) => `${(Number(bytes ?? 0) / 1048576).toFixed(1)} МБ`;
 async function loadDiagnostics() {
   const box = $('diagnosticsBody');
-  box.innerHTML = '<p class="empty">Проверяю компоненты…</p>';
+  if ($('view-diagnostics').dataset.loaded !== 'true') box.innerHTML = '<p class="empty">Проверяю компоненты…</p>';
   const data = await json('/api/diagnostics');
   if (!data) { box.innerHTML = '<p class="empty">Диагностика недоступна.</p>'; return; }
   const channelRows = Object.entries(data.channels).map(([key,on]) => `<div class="item"><span>${esc(channelLabel({channel:key}))}</span><span class="status-text ${on ? 'ok' : ''}"><i></i>${on ? 'Подключён' : 'Не подключён'}</span></div>`).join('');
