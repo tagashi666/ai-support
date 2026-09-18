@@ -1,6 +1,7 @@
 import { config, log, version } from '../config.js';
 import type { Conversation, Store } from '../core/store.js';
 import type { BedolagaClient } from '../channels/bedolaga.js';
+import type { MinishopClient, MinishopTicketDetail } from '../channels/minishop.js';
 import { displayNodeName, type RemnawaveClient } from './remnawave.js';
 import { detectSubLink } from '../ai/sublink.js';
 
@@ -18,6 +19,12 @@ export function bedolagaCustomerReader(client: BedolagaClient): BedolagaCustomer
     searchUsers: client.searchUsers.bind(client),
     userTransactions: client.userTransactions.bind(client),
   });
+}
+
+export type MinishopCustomerReader = Pick<MinishopClient, 'ticket'>;
+
+export function minishopCustomerReader(client: MinishopClient): MinishopCustomerReader {
+  return Object.freeze({ ticket: client.ticket.bind(client) });
 }
 
 /**
@@ -78,6 +85,7 @@ export class CustomerDirectory {
     private readonly store: Store,
     private readonly bedolaga?: BedolagaCustomerReader,
     remnawave?: RemnawaveClient | { id: string; name: string; client: RemnawaveClient }[],
+    private readonly minishop?: MinishopCustomerReader,
   ) {
     this.remnawaves = Array.isArray(remnawave)
       ? remnawave
@@ -96,6 +104,20 @@ export class CustomerDirectory {
       trace: [],
       builtBy: version,
     };
+
+    // --- MiniShop: карточка тикета уже содержит пользователя и снимок подписки ---
+    if (conversation.channel === 'minishop' && this.minishop) {
+      const ticketId = Number(conversation.remote_external_id ?? conversation.external_id);
+      try {
+        const detail = Number.isSafeInteger(ticketId) && ticketId > 0
+          ? await this.minishop.ticket(ticketId)
+          : undefined;
+        if (detail) this.mergeMinishopProfile(profile, detail);
+      } catch (err) {
+        profile.trace!.push(`MiniShop не отдал карточку тикета: ${(err as Error).message}`);
+        log.debug('MiniShop не отдал карточку клиента', err);
+      }
+    }
 
     // --- собственный Support API ---
     if (config.supportApi.enabled && telegramId) {
@@ -264,6 +286,37 @@ export class CustomerDirectory {
 
     if (telegramId) this.store.saveCustomer(telegramId, profile.found ? profile : null);
     return profile;
+  }
+
+  private mergeMinishopProfile(profile: Profile, detail: MinishopTicketDetail): void {
+    const ticketUser = detail.ticket.user ?? {};
+    const snapshot = detail.user_snapshot ?? {};
+    const telegramId = num(pick(snapshot, 'telegram_id')) ?? num(ticketUser.telegram_id);
+    const username = str(pick(snapshot, 'username')) ?? str(ticketUser.username);
+    const joinedName = [str(ticketUser.first_name), str(ticketUser.last_name)].filter(Boolean).join(' ').trim();
+    const name = (str(pick(snapshot, 'name')) ?? joinedName) || undefined;
+    profile.identity.telegramId ??= telegramId;
+    profile.identity.username ??= username;
+    profile.identity.name ??= name;
+
+    const regular = pick(snapshot, 'traffic_regular') as Record<string, unknown> | undefined;
+    const premium = pick(snapshot, 'traffic_premium') as Record<string, unknown> | undefined;
+    const used = (num(pick(regular, 'used_bytes')) ?? 0) + (num(pick(premium, 'used_bytes')) ?? 0);
+    const limit = (num(pick(regular, 'limit_bytes')) ?? 0) + (num(pick(premium, 'limit_bytes')) ?? 0);
+    const active = pick(snapshot, 'subscription_active');
+    profile.subscription = {
+      ...profile.subscription,
+      status: str(pick(snapshot, 'panel_status')) ?? (typeof active === 'boolean' ? (active ? 'active' : 'inactive') : undefined),
+      expiresAt: str(pick(snapshot, 'end_date')),
+      trafficUsed: used || undefined,
+      trafficLimit: limit || undefined,
+    };
+    profile.activity = {
+      ...profile.activity,
+      firstSeen: str(pick(snapshot, 'registration_date')) ?? str(ticketUser.registration_date),
+    };
+    profile.found = true;
+    if (!profile.sources.includes('MiniShop')) profile.sources.push('MiniShop');
   }
 
   /**

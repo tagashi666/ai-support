@@ -32,6 +32,7 @@ import { parseExportObject } from '../integrations/tgexport.js';
 import type { NodeState, RemnawaveClient } from '../integrations/remnawave.js';
 import { version } from '../config.js';
 import type { BedolagaClient, BedolagaTicketStatus } from '../channels/bedolaga.js';
+import { minishopStatusForLocal, minishopTicketId, type MinishopClient } from '../channels/minishop.js';
 import { UpdateManager } from '../core/update.js';
 import { SourceManager } from '../core/sources.js';
 import { Operations, PERMISSION_CATALOG, type Actor, type Permission } from '../core/operations.js';
@@ -140,11 +141,12 @@ export interface WebDeps {
   remnawave?: RemnawaveClient;
   remnawaves?: { id: string; name: string; client: RemnawaveClient; readOnly: boolean }[];
   bedolaga?: BedolagaClient;
+  minishop?: MinishopClient;
   onKbChanged?: () => void;
   onOpened?: (conversation: Conversation) => void;
 }
 
-export async function startWeb({ store, outbox, bot, notifier, customers, remnawave, remnawaves = [], bedolaga, nodes, onKbChanged, onOpened }: WebDeps) {
+export async function startWeb({ store, outbox, bot, notifier, customers, remnawave, remnawaves = [], bedolaga, minishop, nodes, onKbChanged, onOpened }: WebDeps) {
   // Доверяем заголовку X-Forwarded-For только от локального nginx: без этого
   // все запросы выглядят как 127.0.0.1, и блокировка за подбор токена заперла
   // бы оператора вместе с атакующим. Доверять произвольным адресам нельзя —
@@ -484,7 +486,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   app.get('/api/conversations', async () => ({
     conversations: store.listConversations().map((item) => decorate(item, store, operations)),
-    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga') },
+    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga'), minishop: outbox.has('minishop') },
     aiMode: runtime.aiMode,
   }));
 
@@ -762,6 +764,15 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         } catch (err) {
           log.error('Не удалось изменить статус тикета Bedolaga', err);
           return reply.code(502).send({ error: `Bedolaga не приняла статус: ${(err as Error).message}` });
+        }
+      }
+      if (status && before.channel === 'minishop') {
+        if (!minishop) return reply.code(503).send({ error: 'Интеграция MiniShop отключена' });
+        try {
+          await minishop.setStatus(minishopTicketId(before), minishopStatusForLocal(status));
+        } catch (err) {
+          log.error('Не удалось изменить статус тикета MiniShop', err);
+          return reply.code(502).send({ error: `MiniShop не принял статус: ${(err as Error).message}` });
         }
       }
       if (typeof handoff === 'boolean') store.setHandoff(id, handoff ? Date.now() : null);
@@ -1103,11 +1114,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   app.get('/api/diagnostics', async () => ({
     application: { version, uptime: process.uptime(), memory: process.memoryUsage() },
     database: operations.diagnostics(),
-    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga') },
+    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga'), minishop: outbox.has('minishop') },
     integrations: {
-      telegram: Boolean(bot), bedolaga: Boolean(bedolaga), remnawave: Boolean(remnawave), customers: Boolean(customers), nodes: Boolean(nodes),
+      telegram: Boolean(bot), bedolaga: Boolean(bedolaga), minishop: Boolean(minishop), remnawave: Boolean(remnawave), customers: Boolean(customers), nodes: Boolean(nodes),
     },
-    cursors: { bedolaga: store.getState('bedolaga:last_poll') ?? null },
+    cursors: { bedolaga: store.getState('bedolaga:last_poll') ?? null, minishop: store.getState('minishop:last_poll') ?? null },
     kb: store.kbCount(),
   }));
 
@@ -1214,6 +1225,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     kb: store.kbCount(),
     businessConnection: Boolean(store.activeBusinessConnectionId() ?? store.anyBusinessConnectionId()),
     lastBedolagaPoll: store.getState('bedolaga:last_poll') ?? null,
+    lastMinishopPoll: store.getState('minishop:last_poll') ?? null,
   }));
 
   // --- подписка клиента --------------------------------------------------
@@ -1415,7 +1427,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     version,
     runtime,
     businessConnectionLive: await businessConnectionState(),
-    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga') },
+    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga'), minishop: outbox.has('minishop') },
     remnawave: remnawave ? { ...remnawave.capabilities(), index: remnawave.indexState() } : null,
     remnawaves: remnawaves.map((panel) => ({
       id: panel.id,
@@ -1441,6 +1453,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     kb: store.kbCount(),
     businessConnection: Boolean(store.activeBusinessConnectionId() ?? store.anyBusinessConnectionId()),
     lastBedolagaPoll: store.getState('bedolaga:last_poll') ?? null,
+    lastMinishopPoll: store.getState('minishop:last_poll') ?? null,
   }));
 
   app.post<{ Body: Record<string, unknown> }>('/api/settings', async (request, reply) => {

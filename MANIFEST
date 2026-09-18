@@ -3,6 +3,11 @@ deploy/ai-support-source-updater.service
 deploy/ai-support-updater.path
 deploy/ai-support-updater.service
 deploy/ai-support.conf
+deploy/minishop-plugin/Dockerfile
+deploy/minishop-plugin/README.md
+deploy/minishop-plugin/docker-compose.override.example.yml
+deploy/minishop-plugin/minishop_ai_support/__init__.py
+deploy/minishop-plugin/pyproject.toml
 kb/00-подключение.md
 kb/10-подписка.md
 kb/20-устройства.md
@@ -16,6 +21,7 @@ scripts/baretest.ts
 scripts/host-updater.sh
 scripts/install-host-updater.sh
 scripts/minetest.ts
+scripts/minishoptest.ts
 scripts/notifytest.ts
 scripts/pack.sh
 scripts/releasecheck.sh
@@ -35,6 +41,7 @@ src/ai/responder.ts
 src/ai/scrub.ts
 src/ai/sublink.ts
 src/channels/bedolaga.ts
+src/channels/minishop.ts
 src/channels/tgdm.ts
 src/cli/kbmine.ts
 src/cli/rwprobe.ts

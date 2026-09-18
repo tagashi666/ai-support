@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { config, version } from '../config.js';
 
-export type AddableSourceKind = 'telegram_bot' | 'remnawave';
+export type AddableSourceKind = 'telegram_bot' | 'remnawave' | 'minishop';
 export type SourceApplyStatus = 'queued' | 'backing_up' | 'applying' | 'checking' | 'completed' | 'rolled_back' | 'failed';
 
 export interface SourceProgress {
@@ -42,7 +42,7 @@ export class SourceManager {
       if (!['queued', 'backing_up', 'applying', 'checking', 'completed', 'rolled_back', 'failed'].includes(String(value.status))) return null;
       return {
         status: value.status as SourceApplyStatus,
-        ...(value.kind === 'telegram_bot' || value.kind === 'remnawave' ? { kind: value.kind } : {}),
+        ...(value.kind === 'telegram_bot' || value.kind === 'remnawave' || value.kind === 'minishop' ? { kind: value.kind } : {}),
         ...(typeof value.id === 'string' ? { id: value.id.slice(0, 80) } : {}),
         ...(typeof value.name === 'string' ? { name: value.name.slice(0, 120) } : {}),
         ...(typeof value.stage === 'string' ? { stage: value.stage.slice(0, 200) } : {}),
@@ -66,10 +66,12 @@ export class SourceManager {
     const state = await this.state();
     if (state.queued) throw new Error('Другой источник уже добавляется');
     const kind = input.kind;
-    if (kind !== 'telegram_bot' && kind !== 'remnawave') throw new Error('Неизвестный тип источника');
+    if (kind !== 'telegram_bot' && kind !== 'remnawave' && kind !== 'minishop') throw new Error('Неизвестный тип источника');
     const name = clean(input.name, 'Название');
     const fallbackId = `${kind === 'telegram_bot' ? 'telegram' : 'remnawave'}-${randomBytes(6).toString('hex')}`;
-    const id = typeof input.id === 'string' && input.id.trim() ? input.id.trim() : fallbackId;
+    const id = kind === 'minishop'
+      ? 'minishop-default'
+      : typeof input.id === 'string' && input.id.trim() ? input.id.trim() : fallbackId;
     if (!ID_RE.test(id)) throw new Error('Технический ID: только буквы, цифры и . _ : -');
     if (existingIds.includes(id)) throw new Error('Источник с таким ID уже существует');
 
@@ -78,7 +80,7 @@ export class SourceManager {
       const token = clean(input.token, 'Токен бота', 256);
       if (!BOT_TOKEN_RE.test(token)) throw new Error('Токен Telegram выглядит некорректно');
       source = { kind, id, name, token };
-    } else {
+    } else if (kind === 'remnawave') {
       const url = clean(input.url, 'URL панели', 1000);
       let parsed: URL;
       try { parsed = new URL(url); } catch { throw new Error('Укажите полный URL панели'); }
@@ -87,6 +89,17 @@ export class SourceManager {
       }
       const token = clean(input.token, 'Токен API', 2000);
       source = { kind, id, name, url: parsed.toString().replace(/\/$/, ''), token, readOnly: input.readOnly !== false };
+    } else {
+      const url = clean(input.url, 'URL MiniShop', 1000);
+      let parsed: URL;
+      try { parsed = new URL(url); } catch { throw new Error('Укажите полный URL MiniShop'); }
+      if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(parsed.hostname))) {
+        throw new Error('Для внешнего MiniShop нужен HTTPS');
+      }
+      const token = clean(input.token, 'Service token', 2000);
+      const mode = input.mode === 'admin' ? 'admin' : 'plugin';
+      if (mode === 'plugin' && token.length < 24) throw new Error('Service token MiniShop должен быть не короче 24 символов');
+      source = { kind, id, name, url: parsed.toString().replace(/\/$/, ''), token, mode };
     }
 
     const targetDir = dirname(config.sourceManagement.requestFile);

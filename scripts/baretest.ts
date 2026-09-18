@@ -8,6 +8,7 @@ process.env.BOT_TOKEN = '';
 process.env.AI_API_KEY = '';
 process.env.AI_MODE = 'off';
 process.env.BEDOLAGA_ENABLED = 'false';
+process.env.MINISHOP_ENABLED = 'false';
 process.env.REMNAWAVE_ENABLED = 'false';
 process.env.NODES_STATUS_ENABLED = 'false';
 process.env.SUPPORT_API_ENABLED = 'false';
@@ -53,7 +54,8 @@ try {
   ok('health-check работает без интеграций', health.ok === true, health);
   const settings = await (await fetch(`${base}/api/settings`, { headers })).json() as any;
   ok('все внешние каналы действительно отключены',
-    settings.channels.tg_dm === false && settings.channels.tg_bot === false && settings.channels.bedolaga === false,
+    settings.channels.tg_dm === false && settings.channels.tg_bot === false
+      && settings.channels.bedolaga === false && settings.channels.minishop === false,
     settings.channels);
   ok('панель всё равно получает стартовые шаблоны',
     ((await (await fetch(`${base}/api/templates`, { headers })).json() as any).templates?.length ?? 0) >= 10);

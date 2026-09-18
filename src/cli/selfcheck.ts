@@ -9,6 +9,7 @@ import { config, version } from '../config.js';
 import { syncKbFromBedolaga, syncKbFromFiles } from '../ai/kb.js';
 import { AiProvider } from '../ai/provider.js';
 import { BedolagaClient } from '../channels/bedolaga.js';
+import { MinishopClient } from '../channels/minishop.js';
 import { Store } from '../core/store.js';
 import { openDatabase } from '../core/db.js';
 
@@ -75,6 +76,18 @@ if (config.bedolaga.enabled) {
   }, true);
 } else {
   report('skip', 'Бедолага', 'BEDOLAGA_ENABLED=false');
+}
+
+// --- MiniShop ----------------------------------------------------------
+if (config.minishop.enabled) {
+  const minishop = new MinishopClient(config.minishop.url, config.minishop.token, config.minishop.mode);
+  await step('MiniShop', async () => {
+    const probe = await minishop.probe();
+    const tickets = await minishop.activeTickets();
+    return `${probe}; активных тикетов ${tickets.length}`;
+  });
+} else {
+  report('skip', 'MiniShop', 'MINISHOP_ENABLED=false');
 }
 
 // --- Support API -------------------------------------------------------

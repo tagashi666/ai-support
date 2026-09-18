@@ -1,0 +1,7 @@
+services:
+  backend:
+    image: minishop-backend-ai-support:latest
+    environment:
+      MINISHOP_AI_SUPPORT_TOKEN: ${MINISHOP_AI_SUPPORT_TOKEN:?set a long random token}
+      MINISHOP_AI_SUPPORT_ADMIN_TELEGRAM_ID: ${MINISHOP_AI_SUPPORT_ADMIN_TELEGRAM_ID:-}
+      PLUGINS_STRICT: "true"

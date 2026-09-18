@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "minishop-ai-support-plugin"
+version = "1.0.0"
+description = "Stable service-token API for connecting AI Support to MiniShop"
+requires-python = ">=3.12"
+
+[project.entry-points."minishop.plugins"]
+ai_support = "minishop_ai_support:plugin"
+
+[tool.setuptools]
+packages = ["minishop_ai_support"]

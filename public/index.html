@@ -1441,6 +1441,7 @@ const fmtDate = (v) => { const t = Date.parse(v); return Number.isFinite(t) ? fm
 const nameOf = (c) => c.display_name || (c.username ? '@'+c.username : (c.subject || `#${c.external_id}`));
 const channelLabel = (c) => c.source?.name || (c.channel === 'tg_dm' ? 'Telegram · Business'
   : c.channel === 'tg_bot' ? 'Telegram · Бот'
+  : c.channel === 'minishop' ? 'Тикет MiniShop'
   : 'Тикет Bedolaga');
 const CONVERSATION_STATUS = Object.freeze({
   open:'Открыто',
@@ -1492,7 +1493,7 @@ const visible = () => {
 };
 
 const safeColor = (value) => /^#[0-9a-f]{6}$/i.test(String(value ?? '')) ? value : '#9298ff';
-const sourceKind = (kind) => ({ telegram_bot:'Бот', telegram_business:'Business', bedolaga:'Bedolaga', remnawave:'Remnawave' }[kind] ?? kind);
+const sourceKind = (kind) => ({ telegram_bot:'Бот', telegram_business:'Business', bedolaga:'Bedolaga', minishop:'MiniShop', remnawave:'Remnawave' }[kind] ?? kind);
 
 function renderInboxTabs() {
   const tabs = $('filters');
@@ -1927,7 +1928,7 @@ function renderCustomer(profile) {
     + (canPermission('conversation:profile') ? `<div class="item"><button class="btn wide" id="refreshCust">Обновить карточку</button></div>` : '')
     + (profile?.found
         ? `<div class="item"><span class="hint">Источники: ${esc((profile.sources ?? []).join(', ') || '—')}</span></div>`
-        : `<div class="item"><span class="hint">Клиент не найден ни в бедолаге, ни в Remnawave.</span></div>`)
+        : `<div class="item"><span class="hint">Клиент не найден в Bedolaga, MiniShop или Remnawave.</span></div>`)
     + ((profile?.trace ?? []).length
         ? `<div class="item col-item"><span class="hint">${(profile.trace).map((t) => esc(t)).join('<br>')}</span></div>` : '');
 
@@ -2820,13 +2821,15 @@ $('noteBtn').onclick = async () => {
 
 async function setState(patch) {
   if (!current || !canPermission('conversation:status')) return;
-  const bedolagaStatus = current.channel === 'bedolaga' && patch.status
-    ? patch.status === 'resolved' ? 'Тикет закрыт и в Bedolaga'
-      : patch.status === 'open' ? 'Тикет открыт и в Bedolaga'
-      : 'Статус тикета синхронизирован с Bedolaga'
+  const externalName = current.channel === 'bedolaga' ? 'Bedolaga'
+    : current.channel === 'minishop' ? 'MiniShop' : null;
+  const externalStatus = externalName && patch.status
+    ? patch.status === 'resolved' ? `Тикет закрыт и в ${externalName}`
+      : patch.status === 'open' ? `Тикет открыт и в ${externalName}`
+      : `Статус тикета синхронизирован с ${externalName}`
     : null;
   const data = await mutate(`/api/conversations/${current.id}/state`,
-    { method:'POST', body: JSON.stringify(patch) }, bedolagaStatus);
+    { method:'POST', body: JSON.stringify(patch) }, externalStatus);
   if (!data) { paintHeader(current); return; }
   current = data.conversation;
   paintHeader(current);
@@ -3866,7 +3869,7 @@ function openSourceWizard() {
   sheet('Добавить источник',
     `<div class="source-wizard-intro"><b>Новый канал в едином инбоксе</b><span>Секреты передаются только ограниченному host-исполнителю и не возвращаются в браузер.</span></div>
      <div class="frow"><label for="sourceType">Что подключаем</label><select id="sourceType">
-       <option value="telegram_bot">Telegram-бот</option><option value="telegram_business">Telegram Business-аккаунт</option><option value="remnawave">Панель Remnawave</option>
+       <option value="telegram_bot">Telegram-бот</option><option value="telegram_business">Telegram Business-аккаунт</option><option value="remnawave">Панель Remnawave</option><option value="minishop">MiniShop</option>
      </select></div><div id="sourceWizardFields"></div>`,
     '<button class="btn" id="sourceCancel">Отмена</button><button class="btn primary" id="sourceContinue">Подключить</button>');
   $('sourceCancel').onclick = closeSheet;
@@ -3886,6 +3889,12 @@ function openSourceWizard() {
         <div class="frow"><label for="sourceId">Технический ID · необязательно</label><input id="sourceId" maxlength="80" placeholder="remnawave-eu"></div>
         <label class="source-readonly"><input id="sourceReadOnly" type="checkbox" checked><span><b>Только чтение</b><small>Не разрешать сброс устройств и перевыпуск подписок из этой панели.</small></span></label>`;
       $('sourceContinue').textContent = 'Подключить панель';
+    } else if (kind === 'minishop') {
+      box.innerHTML = `<div class="frow"><label for="sourceName">Название магазина</label><input id="sourceName" maxlength="120" value="MiniShop"></div>
+        <div class="frow"><label for="sourceUrl">URL MiniShop</label><input id="sourceUrl" type="url" maxlength="1000" placeholder="https://shop.example.com"></div>
+        <div class="frow"><label for="sourceToken">Service token</label><input id="sourceToken" type="password" autocomplete="new-password" placeholder="MINISHOP_AI_SUPPORT_TOKEN"><span class="hint">Рекомендуется постоянный токен плагина ai-support.</span></div>
+        <div class="frow"><label for="sourceMode">Режим API</label><select id="sourceMode"><option value="plugin">Плагин ai-support</option><option value="admin">Временный AdminBearer</option></select></div>`;
+      $('sourceContinue').textContent = 'Подключить MiniShop';
     } else {
       const choices = botSources.length
         ? botSources.map((source) => `<li><b>${esc(source.name)}</b><span>${esc(source.id)}</span></li>`).join('')
@@ -3907,9 +3916,10 @@ function openSourceWizard() {
       else closeSheet();
       return;
     }
-    const payload = { kind, name:$('sourceName').value.trim(), token:$('sourceToken').value.trim(), id:$('sourceId').value.trim() };
+    const payload = { kind, name:$('sourceName').value.trim(), token:$('sourceToken').value.trim(), id:$('sourceId')?.value.trim() ?? '' };
     if (kind === 'remnawave') Object.assign(payload, { url:$('sourceUrl').value.trim(), readOnly:$('sourceReadOnly').checked });
-    if (!payload.name || !payload.token || (kind === 'remnawave' && !payload.url)) return toast('Заполните обязательные поля');
+    if (kind === 'minishop') Object.assign(payload, { url:$('sourceUrl').value.trim(), mode:$('sourceMode').value });
+    if (!payload.name || !payload.token || (['remnawave','minishop'].includes(kind) && !payload.url)) return toast('Заполните обязательные поля');
     $('sourceContinue').disabled = true;
     const result = await mutate('/api/sources/request', { method:'POST', body:JSON.stringify(payload) });
     if (!result) { $('sourceContinue').disabled = false; return; }
@@ -4177,7 +4187,8 @@ async function loadSettings() {
   const healthCards = [
     { label:'Telegram Business', value:settings.channels.tg_dm ? 'Подключён' : 'Не подключён', tone:settings.channels.tg_dm ? 'ok' : 'off' },
     { label:'Telegram-бот', value:settings.channels.tg_bot ? 'Принимает личные сообщения' : 'Не подключён', tone:settings.channels.tg_bot ? 'ok' : 'off' },
-    { label:'Тикеты', value:settings.channels.bedolaga ? 'Подключены' : 'Не подключены', tone:settings.channels.bedolaga ? 'ok' : 'off' },
+    { label:'Bedolaga', value:settings.channels.bedolaga ? 'Тикеты подключены' : 'Не подключена', tone:settings.channels.bedolaga ? 'ok' : 'off' },
+    { label:'MiniShop', value:settings.channels.minishop ? 'Тикеты подключены' : 'Не подключён', tone:settings.channels.minishop ? 'ok' : 'off' },
     { label:'Business Connection', value:business?.enabled ? (business.canReply ? 'Можно отвечать' : 'Нет права отвечать') : business ? 'Отключено в аккаунте' : 'Нет подключения', tone:business?.enabled && business.canReply ? 'ok' : business ? 'warn' : 'off' },
     { label:'Remnawave', value:caps ? (caps.index?.size ? `${caps.index.size} клиентов в индексе` : 'Подключён') : 'Не подключён', tone:caps ? 'ok' : 'off' },
     { label:'Уведомления', value:settings.alerts?.configured ? (settings.alerts.lastError ? `Ошибка: ${settings.alerts.lastError}` : `Работают · отправлено ${settings.alerts.sent}`) : 'ALERT_CHAT_ID не задан', tone:settings.alerts?.lastError ? 'error' : settings.alerts?.configured ? 'ok' : 'off' },
@@ -4185,7 +4196,8 @@ async function loadSettings() {
     { label:'Мониторинг узлов', value:settings.nodes ? `${settings.nodes.known} узлов${settings.nodes.at ? ` · ${fmtTime(settings.nodes.at)}` : ''}` : 'Выключен', tone:settings.nodes ? 'ok' : 'off' },
     { label:'База знаний', value:`${settings.kb} статей`, tone:settings.kb ? 'accent' : 'warn' },
     { label:'Доступ Remnawave', value:settings.readOnly ? 'Только чтение' : 'Действия разрешены', tone:settings.readOnly ? 'neutral' : 'warn' },
-    { label:'Последний опрос тикетов', value:settings.lastBedolagaPoll ? fmtTime(Number(settings.lastBedolagaPoll)) : 'Данных нет', tone:settings.lastBedolagaPoll ? 'ok' : 'off' },
+    { label:'Последний опрос Bedolaga', value:settings.lastBedolagaPoll ? fmtTime(Number(settings.lastBedolagaPoll)) : 'Данных нет', tone:settings.lastBedolagaPoll ? 'ok' : 'off' },
+    { label:'Последний опрос MiniShop', value:settings.lastMinishopPoll ? fmtTime(Number(settings.lastMinishopPoll)) : 'Данных нет', tone:settings.lastMinishopPoll ? 'ok' : 'off' },
   ];
   $('health').innerHTML = healthCards.map((card) => `<article class="health-card ${card.tone}"><span class="health-status"><i></i></span><div><b>${esc(card.label)}</b><span>${esc(card.value)}</span></div></article>`).join('')
     + `<div class="health-action"><div><b>Проверка уведомлений</b><span>Отправим тестовое сообщение в служебный чат.</span></div><button class="btn" id="testAlert">Отправить тест</button></div>`;

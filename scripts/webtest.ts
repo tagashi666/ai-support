@@ -23,9 +23,11 @@ const { startWeb } = await import('../src/panel/server.js');
 const db = openDatabase(); const store = new Store(db);
 const outbox = new Outbox(store);
 const bedolagaCalls: Array<{ id: number; status: string }> = [];
+const minishopCalls: Array<{ id: number; status: string }> = [];
 const bedolagaExtendCalls: Array<{ id: number; days: number }> = [];
 const bedolagaTransactionPageCalls: Array<{ userId: number; limit: number; offset: number }> = [];
 let failBedolagaStatus = false;
+let failMinishopStatus = false;
 let useLargeBedolagaTransactionPage = false;
 let useIncompleteBedolagaExtensionResponse = false;
 let failBedolagaExtensionAfterCommit = false;
@@ -111,6 +113,12 @@ const bedolaga = {
     return { ...bedolagaUser.subscription, id: subscriptionId, user_id: 42, end_date: '2026-10-08T10:00:00Z' };
   },
 };
+const minishop = {
+  setStatus: async (id: number, status: string) => {
+    if (failMinishopStatus) throw new Error('remote rejected');
+    minishopCalls.push({ id, status });
+  },
+};
 const attachmentCalls: any[] = [];
 outbox.register('tg_dm', {
   send: async () => ({ externalMsgId: '1' }),
@@ -133,7 +141,7 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   return nativeFetch(input, init);
 }) as typeof fetch;
 const fakeBot = { api: { getFile: async () => ({ file_path: 'photos/avatar.bin' }) } };
-const app = await startWeb({ store, outbox, bot: fakeBot as any, bedolaga: bedolaga as any });
+const app = await startWeb({ store, outbox, bot: fakeBot as any, bedolaga: bedolaga as any, minishop: minishop as any });
 const B = 'http://127.0.0.1:8099'; const T = process.env.PANEL_TOKEN!;
 const h = { authorization: `Bearer ${T}` };
 let fails = 0;
@@ -338,6 +346,22 @@ const failedBedolagaOpen = await fetch(`${B}/api/conversations/${bedolagaConvers
 ok('ошибка Bedolaga не рассинхронизирует локальный статус', failedBedolagaOpen.status === 502
   && store.getConversation(bedolagaConversation.id)?.status === 'resolved');
 failBedolagaStatus = false;
+store.recordInbound({ channel:'minishop', externalId:'88', sourceId:'minishop-default', sourceKind:'minishop',
+  displayName:'Тикет MiniShop', text:'вопрос из магазина', externalMsgId:'mini-1', sentAt: Date.now() });
+const minishopConversation = store.findConversation('minishop', '88', 'minishop-default')!;
+const waitMinishop = await fetch(`${B}/api/conversations/${minishopConversation.id}/state`, {
+  method:'POST', headers:{...h,'content-type':'application/json'}, body:JSON.stringify({ status:'pending' }),
+});
+ok('ожидание клиента в панели синхронизируется с MiniShop', waitMinishop.status === 200
+  && minishopCalls.some((call) => call.id === 88 && call.status === 'awaiting_user')
+  && store.getConversation(minishopConversation.id)?.status === 'pending');
+failMinishopStatus = true;
+const failedMinishopResolve = await fetch(`${B}/api/conversations/${minishopConversation.id}/state`, {
+  method:'POST', headers:{...h,'content-type':'application/json'}, body:JSON.stringify({ status:'resolved' }),
+});
+ok('ошибка MiniShop не рассинхронизирует локальный статус', failedMinishopResolve.status === 502
+  && store.getConversation(minishopConversation.id)?.status === 'pending');
+failMinishopStatus = false;
 const invalidState = await fetch(`${B}/api/conversations/${id}/state`,{method:'POST',headers:{...h,'content-type':'application/json'},body:JSON.stringify({status:'broken',handoff:true})});
 const stateAfterReject = await (await fetch(`${B}/api/conversations/${id}`,{headers:h})).json() as any;
 ok('невалидное состояние отклоняется целиком', invalidState.status === 400

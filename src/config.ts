@@ -194,6 +194,21 @@ export const config = {
     language: env('BEDOLAGA_FAQ_LANGUAGE', 'ru'),
   },
 
+  minishop: {
+    enabled: bool('MINISHOP_ENABLED', false),
+    name: env('MINISHOP_NAME', 'MiniShop'),
+    url: optional('MINISHOP_API_URL'),
+    token: optional('MINISHOP_API_TOKEN'),
+    mode: (() => {
+      const mode = env('MINISHOP_API_MODE', 'plugin');
+      if (mode !== 'plugin' && mode !== 'admin') {
+        throw new Error(`MINISHOP_API_MODE должен быть plugin или admin — получено "${mode}"`);
+      }
+      return mode;
+    })() as 'plugin' | 'admin',
+    pollSeconds: num('MINISHOP_POLL_SECONDS', 30),
+  },
+
   supportApi: {
     enabled: bool('SUPPORT_API_ENABLED', false),
     url: optional('SUPPORT_API_URL'),
@@ -317,6 +332,21 @@ if (!/^[\x21-\x7E]+$/.test(config.panelToken)) {
 
 if (config.bedolaga.enabled && !(config.bedolaga.url && config.bedolaga.token)) {
   throw new Error('BEDOLAGA_ENABLED=true, но не заданы BEDOLAGA_API_URL и BEDOLAGA_API_TOKEN');
+}
+
+if (config.minishop.enabled && !(config.minishop.url && config.minishop.token)) {
+  throw new Error('MINISHOP_ENABLED=true, но не заданы MINISHOP_API_URL и MINISHOP_API_TOKEN');
+}
+if (config.minishop.enabled) {
+  if (config.minishop.mode === 'plugin' && config.minishop.token.length < 24) {
+    throw new Error('MINISHOP_API_TOKEN в режиме plugin должен быть не короче 24 символов');
+  }
+  let minishopUrl: URL;
+  try { minishopUrl = new URL(config.minishop.url); } catch { throw new Error('MINISHOP_API_URL должен быть полным URL'); }
+  if (minishopUrl.protocol !== 'https:' && !(minishopUrl.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(minishopUrl.hostname))) {
+    throw new Error('Для внешнего MiniShop нужен HTTPS');
+  }
+  if (config.minishop.pollSeconds < 5) throw new Error('MINISHOP_POLL_SECONDS должен быть не меньше 5');
 }
 
 if (config.ai.mode !== 'off' && !config.ai.apiKeys.length) {

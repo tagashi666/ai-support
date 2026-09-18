@@ -2,6 +2,7 @@ import { config, log, version } from './config.js';
 import { syncKbFromBedolaga, syncKbFromFiles } from './ai/kb.js';
 import { Responder } from './ai/responder.js';
 import { BedolagaClient, BedolagaPoller, BedolagaSender } from './channels/bedolaga.js';
+import { MinishopClient, MinishopPoller, MinishopSender, minishopTicketId } from './channels/minishop.js';
 import { createBot, markReadInTelegram, refreshTelegramProfiles, TelegramBotRegistry, TelegramBotSender, TelegramDmSender } from './channels/tgdm.js';
 import { Store } from './core/store.js';
 import { detectSubLink } from './ai/sublink.js';
@@ -12,7 +13,7 @@ import { Outbox } from './core/outbox.js';
 import { SlaWatcher } from './core/sla.js';
 import { Notifier } from './core/notify.js';
 import { NodeWatch } from './core/nodes.js';
-import { bedolagaCustomerReader, CustomerDirectory } from './integrations/customers.js';
+import { bedolagaCustomerReader, CustomerDirectory, minishopCustomerReader } from './integrations/customers.js';
 import { RemnawaveClient } from './integrations/remnawave.js';
 import { loadSettings, runtime } from './core/settings.js';
 import { seedTemplates } from './core/templates.js';
@@ -42,10 +43,20 @@ async function main(): Promise<void> {
     ? new BedolagaClient(config.bedolaga.url, config.bedolaga.token)
     : undefined;
 
-  let poller: BedolagaPoller | undefined;
+  let bedolagaPoller: BedolagaPoller | undefined;
   if (bedolaga) {
     outbox.register('bedolaga', new BedolagaSender(bedolaga));
-    poller = new BedolagaPoller(bedolaga, store, config.bedolaga.pollSeconds * 1000);
+    bedolagaPoller = new BedolagaPoller(bedolaga, store, config.bedolaga.pollSeconds * 1000);
+  }
+
+  const minishop = config.minishop.enabled
+    ? new MinishopClient(config.minishop.url, config.minishop.token, config.minishop.mode)
+    : undefined;
+  let minishopPoller: MinishopPoller | undefined;
+  if (minishop) {
+    outbox.register('minishop', new MinishopSender(minishop));
+    minishopPoller = new MinishopPoller(minishop, store, config.minishop.pollSeconds * 1000, config.minishop.name);
+    store.syncSource({ id: 'minishop-default', kind: 'minishop', name: config.minishop.name });
   }
 
   const remnawaves = config.remnawavePanels.map((panel) => ({
@@ -62,8 +73,9 @@ async function main(): Promise<void> {
     store,
     bedolaga ? bedolagaCustomerReader(bedolaga) : undefined,
     remnawaves,
+    minishop ? minishopCustomerReader(minishop) : undefined,
   );
-  const media = new MediaFetcher(store, bot ? bots : undefined, bedolaga);
+  const media = new MediaFetcher(store, bot ? bots : undefined, bedolaga, undefined, minishop);
   const notifier = bot ? new Notifier(store, bot) : undefined;
   const sla = notifier ? new SlaWatcher(store, notifier) : undefined;
   const nodes = config.nodes.enabled && remnawaves.length ? new NodeWatch(store, remnawaves) : undefined;
@@ -134,23 +146,30 @@ async function main(): Promise<void> {
     remnawave,
     remnawaves,
     bedolaga,
+    minishop,
     nodes,
     onKbChanged: () => void syncKb(),
     onOpened: (conversation) => {
-      if (conversation.channel !== 'tg_dm' || !bot) return;
-      const last = store.lastInboundMessage(conversation.id);
-      if (last?.external_msg_id) void markReadInTelegram(bots, conversation, Number(last.external_msg_id));
+      if (conversation.channel === 'tg_dm' && bot) {
+        const last = store.lastInboundMessage(conversation.id);
+        if (last?.external_msg_id) void markReadInTelegram(bots, conversation, Number(last.external_msg_id));
+      }
+      if (conversation.channel === 'minishop' && minishop) {
+        void minishop.markRead(minishopTicketId(conversation)).catch((err) => log.debug('MiniShop: не удалось отметить тикет прочитанным', err));
+      }
     },
   });
 
   media.start();
   sla?.start();
-  poller?.start();
+  bedolagaPoller?.start();
+  minishopPoller?.start();
 
   const shutdown = async (signal: string): Promise<void> => {
     log.info(`${signal} — останавливаюсь`);
     clearInterval(kbTimer);
-    poller?.stop();
+    bedolagaPoller?.stop();
+    minishopPoller?.stop();
     media.stop();
     sla?.stop();
     responder.stop();

@@ -324,8 +324,9 @@ check('подозрительные видны в списке', /нет в ба
 // сразу удаляется из DOM после постановки root-only задания в очередь.
 check('в настройках есть явное добавление источника', /Добавить источник/.test(html)
   && /function openSourceWizard\(/.test(html));
-check('мастер поддерживает бота, Business и Remnawave', /value="telegram_bot"/.test(html)
-  && /value="telegram_business"/.test(html) && /value="remnawave"/.test(html));
+check('мастер поддерживает бота, Business, Remnawave и MiniShop', /value="telegram_bot"/.test(html)
+  && /value="telegram_business"/.test(html) && /value="remnawave"/.test(html)
+  && /value="minishop"/.test(html) && /id="sourceMode"/.test(html));
 check('токен источника скрыт и очищается', /id="sourceToken" type="password"/.test(html)
   && /\$\('sourceToken'\)\.value = ''/.test(html));
 check('подключение источника использует отдельный безопасный API', /\/api\/sources\/request/.test(html)

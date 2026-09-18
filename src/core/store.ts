@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 
-export type Channel = 'tg_dm' | 'tg_bot' | 'bedolaga';
+export type Channel = 'tg_dm' | 'tg_bot' | 'bedolaga' | 'minishop';
 export type Direction = 'in' | 'out' | 'note';
 export type Author = 'client' | 'agent' | 'ai' | 'system';
 export type SuggestionStatus = 'pending' | 'sent' | 'edited' | 'rejected' | 'superseded';
@@ -45,7 +45,7 @@ export interface Conversation {
 
 export interface SourceAccount {
   id: string;
-  kind: 'telegram_bot' | 'telegram_business' | 'bedolaga' | 'remnawave';
+  kind: 'telegram_bot' | 'telegram_business' | 'bedolaga' | 'minishop' | 'remnawave';
   name: string;
   enabled: number;
   metadata: string | null;
@@ -277,8 +277,16 @@ export class Store extends EventEmitter<StoreEvents> {
     avatarFileId?: string;
   }): Conversation {
     const now = Date.now();
-    const sourceId = input.sourceId ?? (input.channel === 'bedolaga' ? 'bedolaga-default' : 'telegram-default');
-    this.syncSource({ id: sourceId, kind: input.sourceKind ?? (input.channel === 'bedolaga' ? 'bedolaga' : input.channel === 'tg_dm' ? 'telegram_business' : 'telegram_bot'), name: input.sourceName ?? sourceId });
+    const sourceId = input.sourceId ?? (input.channel === 'bedolaga'
+      ? 'bedolaga-default'
+      : input.channel === 'minishop' ? 'minishop-default' : 'telegram-default');
+    this.syncSource({
+      id: sourceId,
+      kind: input.sourceKind ?? (input.channel === 'bedolaga'
+        ? 'bedolaga'
+        : input.channel === 'minishop' ? 'minishop' : input.channel === 'tg_dm' ? 'telegram_business' : 'telegram_bot'),
+      name: input.sourceName ?? sourceId,
+    });
     const sourceKey = `${sourceId}:${input.externalId}`;
     const legacy = this.findConversation(input.channel, input.externalId);
     const reusableLegacy = legacy && (
@@ -286,6 +294,7 @@ export class Store extends EventEmitter<StoreEvents> {
       || (legacy.source_id === 'telegram-business:legacy' && input.channel === 'tg_dm')
       || (legacy.source_id === 'telegram-default' && sourceId === 'telegram-default')
       || (legacy.source_id === 'bedolaga-default' && sourceId === 'bedolaga-default')
+      || (legacy.source_id === 'minishop-default' && sourceId === 'minishop-default')
     );
     const externalId = this.findConversation(input.channel, input.externalId, sourceId)?.external_id
       ?? (reusableLegacy ? legacy.external_id : sourceKey);
@@ -373,7 +382,9 @@ export class Store extends EventEmitter<StoreEvents> {
     if (input.mediaFileId) {
       const fileRef = input.channel === 'bedolaga'
         ? `bedolaga:${input.mediaFileId}`
-        : `tg:${encodeURIComponent(input.avatarSourceId ?? input.sourceId ?? 'telegram-default')}:${input.mediaFileId}`;
+        : input.channel === 'minishop'
+          ? `minishop:${input.mediaFileId}`
+          : `tg:${encodeURIComponent(input.avatarSourceId ?? input.sourceId ?? 'telegram-default')}:${input.mediaFileId}`;
       this.addAttachment(messageId, input.mediaType, fileRef, {
         width: input.mediaWidth,
         height: input.mediaHeight,
@@ -469,7 +480,9 @@ export class Store extends EventEmitter<StoreEvents> {
       const conversation = this.getConversation(input.conversationId);
       const fileRef = conversation?.channel === 'bedolaga'
         ? `bedolaga:${input.mediaFileId}`
-        : `tg:${encodeURIComponent(input.mediaSourceId ?? conversation?.avatar_source_id ?? conversation?.source_id ?? 'telegram-default')}:${input.mediaFileId}`;
+        : conversation?.channel === 'minishop'
+          ? `minishop:${input.mediaFileId}`
+          : `tg:${encodeURIComponent(input.mediaSourceId ?? conversation?.avatar_source_id ?? conversation?.source_id ?? 'telegram-default')}:${input.mediaFileId}`;
       this.addAttachment(messageId, input.mediaType, fileRef, {
         width: input.mediaWidth,
         height: input.mediaHeight,
@@ -1052,7 +1065,9 @@ export class Store extends EventEmitter<StoreEvents> {
         const conversation = this.getConversation(input.conversationId);
         const fileRef = conversation?.channel === 'bedolaga'
           ? `bedolaga:${input.mediaFileId}`
-          : `tg:${encodeURIComponent(input.mediaSourceId ?? conversation?.avatar_source_id ?? conversation?.source_id ?? 'telegram-default')}:${input.mediaFileId}`;
+          : conversation?.channel === 'minishop'
+            ? `minishop:${input.mediaFileId}`
+            : `tg:${encodeURIComponent(input.mediaSourceId ?? conversation?.avatar_source_id ?? conversation?.source_id ?? 'telegram-default')}:${input.mediaFileId}`;
         this.addAttachment(previous.id, input.mediaType, fileRef, {
           width: input.mediaWidth, height: input.mediaHeight,
         });

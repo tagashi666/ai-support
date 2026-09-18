@@ -7,6 +7,7 @@ import { config, log } from '../config.js';
 import { TelegramBotRegistry } from '../channels/tgdm.js';
 import type { Store } from './store.js';
 import type { BedolagaClient } from '../channels/bedolaga.js';
+import type { MinishopClient } from '../channels/minishop.js';
 import { AiProvider } from '../ai/provider.js';
 import { readLimitedBody } from './http.js';
 
@@ -186,6 +187,7 @@ export class MediaFetcher {
     private readonly bot?: Bot | TelegramBotRegistry,
     private readonly bedolaga?: BedolagaClient,
     private readonly provider = new AiProvider(),
+    private readonly minishop?: MinishopClient,
   ) {}
 
   start(intervalMs = 5_000): void {
@@ -266,6 +268,9 @@ export class MediaFetcher {
   private async fetch(ref: string): Promise<Buffer | null> {
     if (ref.startsWith('bedolaga:')) {
       return this.bedolaga ? this.bedolaga.downloadMedia(ref.slice('bedolaga:'.length)) : null;
+    }
+    if (ref.startsWith('minishop:')) {
+      return this.minishop ? this.minishop.downloadImage(ref.slice('minishop:'.length)) : null;
     }
     if (ref.startsWith('tg:')) {
       if (!this.bot) return null;

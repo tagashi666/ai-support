@@ -116,9 +116,10 @@ if (req.schema !== 1 || req.action !== 'add_source' || req.safety?.backupRequire
 const s = req.source;
 const idRe=/^[A-Za-z0-9][A-Za-z0-9._:-]{0,79}$/;
 const clean=(v,max=120)=>typeof v==='string'&&v.length>0&&v.length<=max&&!/[\r\n\0#]/.test(v);
-if(!s||!['telegram_bot','remnawave'].includes(s.kind)||!idRe.test(s.id||'')||!clean(s.name)||!clean(s.token,2000)) throw new Error('invalid source');
+if(!s||!['telegram_bot','remnawave','minishop'].includes(s.kind)||!idRe.test(s.id||'')||!clean(s.name)||!clean(s.token,2000)) throw new Error('invalid source');
 if(s.kind==='telegram_bot'&&!/^\d{5,15}:[A-Za-z0-9_-]{20,}$/.test(s.token))throw new Error('invalid bot token');
-if(s.kind==='remnawave'){
+if(s.kind==='minishop'&&s.mode!=='admin'&&s.token.length<24)throw new Error('invalid minishop service token');
+if(s.kind==='remnawave'||s.kind==='minishop'){
   const u=new URL(s.url); if(u.protocol!=='https:'&&!(u.protocol==='http:'&&['127.0.0.1','localhost'].includes(u.hostname)))throw new Error('invalid panel URL');
 }
 const raw=fs.readFileSync(envPath,'utf8');
@@ -126,22 +127,35 @@ const lines=raw.split(/\n/);
 const values={};
 for(const line of lines){const m=/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line.trim().replace(/\r$/,''));if(m)values[m[1]]=m[2].trim().replace(/^"(.*)"$/s,'$1').replace(/^'(.*)'$/s,'$1');}
 const array=(key)=>{if(!values[key])return [];const parsed=JSON.parse(values[key]);if(!Array.isArray(parsed))throw new Error(`${key} is not array`);return parsed;};
+const replacements={};
 let key, list;
 if(s.kind==='telegram_bot'){
   key='TELEGRAM_BOTS_JSON'; list=array(key);
   if(!list.length&&values.BOT_TOKEN)list.push({id:'telegram-default',name:'Telegram',token:values.BOT_TOKEN});
   if(list.some(x=>x.id===s.id))throw new Error('duplicate source id');
   list.push({id:s.id,name:s.name,token:s.token});
-}else{
+  replacements[key]=JSON.stringify(list);
+}else if(s.kind==='remnawave'){
   key='REMNAWAVE_PANELS_JSON'; list=array(key);
   if(!list.length&&/^(1|true|yes|on|да)$/i.test(values.REMNAWAVE_ENABLED||'')) list.push({id:'remnawave-default',name:'Remnawave',url:values.REMNAWAVE_URL||'',token:values.REMNAWAVE_TOKEN||'',readOnly:!(/^(0|false|no|off|нет)$/i.test(values.REMNAWAVE_READONLY||''))});
   if(list.some(x=>x.id===s.id))throw new Error('duplicate source id');
   list.push({id:s.id,name:s.name,url:s.url,token:s.token,readOnly:s.readOnly!==false});
+  replacements[key]=JSON.stringify(list);
+}else{
+  if(/^(1|true|yes|on|да)$/i.test(values.MINISHOP_ENABLED||''))throw new Error('minishop already configured');
+  Object.assign(replacements,{
+    MINISHOP_ENABLED:'true', MINISHOP_NAME:s.name, MINISHOP_API_URL:s.url,
+    MINISHOP_API_TOKEN:s.token, MINISHOP_API_MODE:s.mode==='admin'?'admin':'plugin',
+  });
 }
-const replacement=`${key}=${JSON.stringify(list)}`;
-let replaced=false;
-const next=lines.map(line=>{if(new RegExp(`^(?:export\\s+)?${key}\\s*=`).test(line.trim())&&!replaced){replaced=true;return replacement;}return line;});
-if(!replaced)next.push(replacement);
+const pending=new Set(Object.keys(replacements));
+const next=lines.map(line=>{
+  const match=/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=/.exec(line.trim());
+  const name=match?.[1];
+  if(!name||!pending.has(name))return line;
+  pending.delete(name);return `${name}=${replacements[name]}`;
+});
+for(const name of pending)next.push(`${name}=${replacements[name]}`);
 fs.writeFileSync(outputPath,next.join('\n'),{mode:0o600});fs.chmodSync(outputPath,0o600);
 fs.writeFileSync(metaPath,`${s.kind}\n${s.id}\n${s.name}\n`,{mode:0o600});
 NODE

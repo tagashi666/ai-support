@@ -222,7 +222,56 @@ docker compose up -d
 
 ---
 
-## 7. Карточка клиента
+## 7. Канал MiniShop
+
+Для стабильной серверной связи установите companion-плагин из
+[`deploy/minishop-plugin`](deploy/minishop-plugin/README.md). Он работает через
+официальный Plugin API v1 MiniShop и выдаёт отдельный namespace с постоянным
+service token. Коротко:
+
+```bash
+# из корня AI Support
+docker build -f deploy/minishop-plugin/Dockerfile \
+  -t minishop-backend-ai-support:latest .
+```
+
+В каталоге MiniShop подключите пример compose override и задайте в его `.env`:
+
+```ini
+MINISHOP_AI_SUPPORT_TOKEN=<случайная строка не короче 24 символов>
+MINISHOP_AI_SUPPORT_ADMIN_TELEGRAM_ID=<Telegram ID администратора>
+```
+
+После перезапуска backend настройте AI Support:
+
+```ini
+MINISHOP_ENABLED=true
+MINISHOP_NAME=MiniShop
+MINISHOP_API_URL=https://shop.example.com
+MINISHOP_API_TOKEN=<тот же service token>
+MINISHOP_API_MODE=plugin
+MINISHOP_POLL_SECONDS=30
+```
+
+`MINISHOP_API_URL` — публичный HTTPS URL MiniShop без пути API (финальный
+`/api` также допустим и будет нормализован). Первый успешный опрос импортирует
+активную историю как backfill: AI и SLA на старые сообщения не реагируют. Затем
+новые сообщения, картинки, прочтение и статусы синхронизируются в обе стороны.
+
+Проверьте интеграцию перед перезапуском:
+
+```bash
+docker compose run --rm ai-support node dist/cli/selfcheck.js
+```
+
+Режим `MINISHOP_API_MODE=admin` работает со штатным AdminBearer без плагина,
+но токен Web App-сессии истекает и подходит только для диагностики. Ответы и
+изменения статуса неидемпотентны, поэтому клиент намеренно не повторяет такие
+запросы после сетевой ошибки.
+
+---
+
+## 8. Карточка клиента
 
 Необязательный шаг. Подключает ваш Support API, чтобы оператор видел подписку
 и платежи рядом с диалогом:
@@ -238,12 +287,12 @@ SUPPORT_API_USER_PATH=/api/support/user_info
 как есть, поэтому подойдёт любая форма. Если API недоступен, карточка просто
 не заполнится — на работу поддержки это не влияет.
 
-Когда бедолага включена, она тоже отдаёт данные клиента, и оба источника
-объединяются в одну карточку.
+Когда Bedolaga или MiniShop включены, они тоже отдают данные клиента, и все
+источники объединяются в одну карточку.
 
 ---
 
-## 8. AI — только после всего остального
+## 9. AI — только после всего остального
 
 ```ini
 AI_MODE=suggest
@@ -282,7 +331,7 @@ AI_BRAND=Поддержка
 
 ---
 
-## 9. Уведомления о просрочке
+## 10. Уведомления о просрочке
 
 ```ini
 ALERT_CHAT_ID=-1001234567890
