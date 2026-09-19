@@ -172,6 +172,25 @@ check('статусы MiniShop отображаются без потерь',
 check('Telegram HTML превращается в безопасный plain text',
   minishopMessageText({ body: '<b>Текст</b><br>&lt;ok&gt;', body_format: 'html' }) === 'Текст\n<ok>');
 
+console.log('\n[ companion-образ MiniShop ]');
+const pluginDockerfile = readFileSync('deploy/minishop-plugin/Dockerfile', 'utf8');
+const pluginOverride = readFileSync('deploy/minishop-plugin/docker-compose.override.example.yml', 'utf8');
+const pluginSource = readFileSync('deploy/minishop-plugin/minishop_ai_support/__init__.py', 'utf8');
+check('базовый backend закреплён на проверенной версии',
+  pluginDockerfile.includes('remnawave-minishop-backend:3.7.1')
+    && !pluginDockerfile.includes('remnawave-minishop-backend:latest'));
+check('compose не смешивает companion-образ с плавающим latest',
+  pluginOverride.includes('MINISHOP_AI_SUPPORT_IMAGE:-minishop-backend-ai-support:3.7.1'));
+check('загрузка внешних плагинов включена явно',
+  pluginOverride.includes('PLUGINS_ENABLED: "true"') && pluginOverride.includes('PLUGINS_STRICT: "true"'));
+check('неподготовленный администратор получает диагностируемую ошибку',
+  pluginSource.includes('503, "admin_unavailable"'));
+check('повреждённое изображение не превращается в HTTP 500',
+  pluginSource.includes('(ValueError, MessageImageError, SyntaxError)'));
+check('service API регистрируется на backend и WebApp плоскостях',
+  pluginSource.includes('WEB_SCOPE_WEBAPP, WEB_SCOPE_WEBHOOKS')
+    && pluginSource.includes('{WEB_SCOPE_WEBAPP, WEB_SCOPE_WEBHOOKS}'));
+
 console.log('\n[ подключение MiniShop ]');
 const sourceToken = 'source-service-token-0123456789';
 const sourceState = await new SourceManager().request({

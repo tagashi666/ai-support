@@ -4,6 +4,18 @@
 [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/), версии следуют
 [Semantic Versioning](https://semver.org/lang/ru/).
 
+## [Unreleased]
+
+- Companion-образ MiniShop закреплён на проверенной версии `3.7.1`; пример
+  Compose требует тот же тег, что backend, worker и frontend установленного
+  MiniShop, чтобы не смешивать несовместимые версии.
+- Ошибка отсутствующего администратора MiniShop теперь возвращает понятный
+  `admin_unavailable`, а повреждённое изображение отклоняется как запрос
+  клиента вместо необработанного HTTP 500.
+- Service-token API MiniShop теперь регистрируется на обеих штатных HTTP-
+  плоскостях: webhook/backend и WebApp. Подключение больше не ломается из-за
+  выбора `WEBHOOK_BASE_URL` вместо `SUBSCRIPTION_MINI_APP_URL`.
+
 ## [2.5.0] — 2026-09-18
 
 - Добавлена полная поддержка тикетов MiniShop: безопасный холодный импорт,

@@ -122,12 +122,13 @@ docker compose logs -f ai-support
 ```bash
 docker build \
   -f deploy/minishop-plugin/Dockerfile \
-  -t minishop-backend-ai-support:latest \
+  -t minishop-backend-ai-support:3.7.1 \
   .
 ```
 
-Чтобы не зависеть от изменения `latest`, можно закрепить версию официального
-backend:
+По умолчанию Dockerfile закреплён на проверенном MiniShop `3.7.1`. Версия
+companion-backend должна совпадать с `IMAGE_TAG` установленного MiniShop. Для
+другой версии укажите её явно и в базовом, и в результирующем образе:
 
 ```bash
 docker build \
@@ -147,6 +148,7 @@ docker build \
 ```dotenv
 MINISHOP_AI_SUPPORT_TOKEN=<СЛУЧАЙНАЯ_СТРОКА_НЕ_КОРОЧЕ_24_СИМВОЛОВ>
 MINISHOP_AI_SUPPORT_ADMIN_TELEGRAM_ID=<TELEGRAM_ID_АДМИНИСТРАТОРА>
+MINISHOP_AI_SUPPORT_IMAGE=minishop-backend-ai-support:3.7.1
 ```
 
 Администратор должен хотя бы раз войти в MiniShop. Если отдельный ID не задан,
@@ -164,7 +166,7 @@ docker compose logs -f backend
 ```bash
 curl -fsS \
   -H "X-API-Key: $MINISHOP_AI_SUPPORT_TOKEN" \
-  https://shop.example.com/api/plugins/ai-support/v1/health
+  "$WEBHOOK_BASE_URL/api/plugins/ai-support/v1/health"
 ```
 
 ### 3. Настройте AI Support
@@ -174,14 +176,16 @@ curl -fsS \
 ```dotenv
 MINISHOP_ENABLED=true
 MINISHOP_NAME=MiniShop
-MINISHOP_API_URL=https://shop.example.com
+MINISHOP_API_URL=https://webhooks.example.com
 MINISHOP_API_TOKEN=<ТОТ_ЖЕ_SERVICE_TOKEN>
 MINISHOP_API_MODE=plugin
 MINISHOP_POLL_SECONDS=30
 ```
 
-`MINISHOP_API_URL` — публичный HTTPS URL магазина без обязательного `/api`:
-клиент нормализует оба варианта.
+`MINISHOP_API_URL` — публичный `WEBHOOK_BASE_URL` MiniShop без обязательного
+`/api`. Плагин также доступен через `SUBSCRIPTION_MINI_APP_URL`, но backend URL
+предпочтительнее: он не зависит от frontend proxy. Клиент нормализует оба
+варианта пути.
 
 ```bash
 docker compose run --rm ai-support node dist/cli/selfcheck.js

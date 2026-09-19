@@ -232,31 +232,43 @@ service token. Коротко:
 ```bash
 # из корня AI Support
 docker build -f deploy/minishop-plugin/Dockerfile \
-  -t minishop-backend-ai-support:latest .
+  -t minishop-backend-ai-support:3.7.1 .
 ```
+
+`3.7.1` здесь должен совпадать с `IMAGE_TAG` установленного MiniShop. Для
+другой версии передайте соответствующий официальный backend через
+`--build-arg MINISHOP_BACKEND_IMAGE=...:<IMAGE_TAG>` и используйте тот же тег
+для результирующего образа.
 
 В каталоге MiniShop подключите пример compose override и задайте в его `.env`:
 
 ```ini
 MINISHOP_AI_SUPPORT_TOKEN=<случайная строка не короче 24 символов>
 MINISHOP_AI_SUPPORT_ADMIN_TELEGRAM_ID=<Telegram ID администратора>
+MINISHOP_AI_SUPPORT_IMAGE=minishop-backend-ai-support:3.7.1
 ```
+
+Указанный администратор должен хотя бы раз войти в MiniShop и появиться в его
+базе. Иначе health вернёт диагностическую ошибку `admin_unavailable`.
 
 После перезапуска backend настройте AI Support:
 
 ```ini
 MINISHOP_ENABLED=true
 MINISHOP_NAME=MiniShop
-MINISHOP_API_URL=https://shop.example.com
+MINISHOP_API_URL=https://webhooks.example.com
 MINISHOP_API_TOKEN=<тот же service token>
 MINISHOP_API_MODE=plugin
 MINISHOP_POLL_SECONDS=30
 ```
 
-`MINISHOP_API_URL` — публичный HTTPS URL MiniShop без пути API (финальный
-`/api` также допустим и будет нормализован). Первый успешный опрос импортирует
-активную историю как backfill: AI и SLA на старые сообщения не реагируют. Затем
-новые сообщения, картинки, прочтение и статусы синхронизируются в обе стороны.
+`MINISHOP_API_URL` — публичный `WEBHOOK_BASE_URL` MiniShop без пути API
+(финальный `/api` также допустим и будет нормализован). Service-token API
+регистрируется и на webhook/backend `8080`, и на WebApp API `8081`, поэтому
+`SUBSCRIPTION_MINI_APP_URL` тоже работает, но прямой backend URL надёжнее.
+Первый успешный опрос импортирует активную историю как backfill: AI и SLA на
+старые сообщения не реагируют. Затем новые сообщения, картинки, прочтение и
+статусы синхронизируются в обе стороны.
 
 Проверьте интеграцию перед перезапуском:
 

@@ -15,7 +15,7 @@ from bot.app.web.support_schemas import (
     AdminSupportUserOut,
     SupportTicketOut,
 )
-from bot.plugins.spec import Plugin, PluginContext, WEB_SCOPE_WEBAPP
+from bot.plugins.spec import Plugin, PluginContext, WEB_SCOPE_WEBAPP, WEB_SCOPE_WEBHOOKS
 from bot.services.message_image_service import (
     MessageImageError,
     UploadedMessageImage,
@@ -64,7 +64,11 @@ class AiSupportPlugin(Plugin):
     plugin_api_max_version = 1
 
     def setup_web(self, ctx: PluginContext, app: web.Application, *, scope: str) -> None:
-        if scope != WEB_SCOPE_WEBAPP:
+        # MiniShop exposes two HTTP planes: webhook/backend on 8080 and WebApp
+        # API on 8081. Installations commonly publish them under different
+        # domains, so the service-token API must be reachable through either
+        # documented public base URL.
+        if scope not in {WEB_SCOPE_WEBAPP, WEB_SCOPE_WEBHOOKS}:
             return
         token = os.getenv("MINISHOP_AI_SUPPORT_TOKEN", "").strip()
         if len(token) < 24:
@@ -103,7 +107,10 @@ class AiSupportPlugin(Plugin):
         @routes.get(f"{PREFIX}/health")
         @protected
         async def health(_request: web.Request) -> web.Response:
-            admin_id = await resolve_admin_id()
+            try:
+                admin_id = await resolve_admin_id()
+            except RuntimeError as exc:
+                return _error(503, "admin_unavailable", str(exc))
             return _ok({"plugin": self.name, "version": self.version, "admin_id": admin_id})
 
         @routes.get(f"{PREFIX}/support/tickets")
@@ -208,7 +215,10 @@ class AiSupportPlugin(Plugin):
                     payload = await request.json()
                     body = str(payload.get("body", ""))
                     body_format = str(payload.get("body_format", "text"))
-            except (ValueError, MessageImageError) as exc:
+            # Pillow may raise SyntaxError for a container with a valid image
+            # signature but a broken chunk checksum. Treat it as bad input,
+            # not as an unhandled server failure.
+            except (ValueError, MessageImageError, SyntaxError) as exc:
                 return _error(400, "invalid_request", str(exc))
             if body_format not in {"text", "html"}:
                 return _error(400, "invalid_body_format", "body_format must be text or html")
@@ -227,6 +237,8 @@ class AiSupportPlugin(Plugin):
                 return _error(400, "invalid_body", "Message body is invalid")
             except TicketNotFound:
                 return _error(404, "not_found", "Ticket not found")
+            except RuntimeError as exc:
+                return _error(503, "admin_unavailable", str(exc))
             return _ok(
                 {
                     "ticket": _ticket_payload(ticket),
@@ -254,6 +266,8 @@ class AiSupportPlugin(Plugin):
                 )
             except TicketNotFound:
                 return _error(404, "not_found", "Ticket not found")
+            except RuntimeError as exc:
+                return _error(503, "admin_unavailable", str(exc))
             return _ok({"ticket": _ticket_payload(ticket)})
 
         @routes.post(PREFIX + r"/support/tickets/{id:\d+}/read")
