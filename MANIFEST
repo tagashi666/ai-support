@@ -8,6 +8,8 @@ deploy/minishop-plugin/README.md
 deploy/minishop-plugin/docker-compose.override.example.yml
 deploy/minishop-plugin/minishop_ai_support/__init__.py
 deploy/minishop-plugin/pyproject.toml
+interface-kb/assets/.gitkeep
+interface-kb/manifest.json
 kb/00-подключение.md
 kb/10-подписка.md
 kb/20-устройства.md
@@ -31,6 +33,7 @@ scripts/updatetest.ts
 scripts/webtest.ts
 src/ai/cluster.ts
 src/ai/gate.ts
+src/ai/interface-kb.ts
 src/ai/kb.ts
 src/ai/mining.ts
 src/ai/outbound.ts
