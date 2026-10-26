@@ -6,7 +6,7 @@
  *   npx tsx scripts/aitest.ts
  */
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -27,6 +27,7 @@ process.env.MEDIA_DIR = join(dir, 'media');
 
 const { decide, isSensitive, resolveMode } = await import('../src/ai/gate.js');
 const { parseDraft } = await import('../src/ai/provider.js');
+const { activeInterfaceKnowledge, parseInterfaceKnowledge, searchInterfaceKnowledge } = await import('../src/ai/interface-kb.js');
 const { BedolagaClient, BedolagaPoller, BedolagaSender, parseTimestamp } = await import('../src/channels/bedolaga.js');
 const { Store, REPLY_WINDOW_MS } = await import('../src/core/store.js');
 const { openDatabase } = await import('../src/core/db.js');
@@ -39,6 +40,73 @@ const check = (label: string, condition: boolean, detail?: unknown): void => {
 
 const db = openDatabase();
 const store = new Store(db);
+
+console.log('\n[ база интерфейса Bedolaga ]');
+const interfaceBase = parseInterfaceKnowledge({ version: 1, locale: 'ru', app: 'bedolaga', screens: [{
+  id:'devices', title:'Устройства', routeDescription:'Личный кабинет → Устройства',
+  keywords:['удалить устройство'], instructions:['Откройте карточку устройства.', 'Нажмите «Удалить».'],
+}] });
+check('текстовый экран валиден без изображения', interfaceBase?.screens[0]?.image === undefined);
+check('поиск находит проверенную инструкцию', searchInterfaceKnowledge(interfaceBase, 'как удалить устройство')[0]?.id === 'devices');
+const unsafeImage = parseInterfaceKnowledge({ version: 1, locale:'ru', app:'bedolaga', screens: [{
+  id:'unsafe', title:'Экран', routeDescription:'Кабинет', keywords:['экран'], instructions:['Откройте экран.'],
+  image:'https://example.com/tracker.png',
+}] });
+check('произвольный URL изображения не проходит whitelist', unsafeImage?.screens[0]?.image === undefined);
+
+// v2: полный и простой вид кабинета, правки инсталляции поверх поставки.
+{
+  const { parseInterfaceOverrides, safeImagePath } = await import('../src/ai/interface-kb.js');
+  const v2 = { version: 2, locale: 'ru', app: 'bedolaga', screens: [
+    { id: 'renewal', title: 'Продление', routeDescription: 'Подписка → Продлить', keywords: ['продлить'],
+      instructions: ['Откройте «Подписка».'],
+      modes: { lite: { routeDescription: 'Главная → Управление подпиской → Продлить подписку', instructions: ['Откройте «Управление подпиской».'] } } },
+    { id: 'lite-home', only: 'lite', title: 'Главная (простой вид)', routeDescription: 'Главная', keywords: ['главная'], instructions: ['Откройте «Главная».'] },
+    { id: 'gift', title: 'Подарок', routeDescription: 'Меню → Подарить', keywords: ['подарок'], instructions: ['Нажмите «Подарить».'] },
+  ] };
+  const full = parseInterfaceKnowledge(v2, 'full');
+  const lite = parseInterfaceKnowledge(v2, 'lite');
+  check('v2: полный вид берёт базовые поля', full?.screens.find((s) => s.id === 'renewal')?.routeDescription === 'Подписка → Продлить');
+  check('v2: простой вид накладывает modes.lite', lite?.screens.find((s) => s.id === 'renewal')?.instructions[0] === 'Откройте «Управление подпиской».');
+  check('v2: экран only:lite есть только в простом виде',
+    !full?.screens.some((s) => s.id === 'lite-home') && Boolean(lite?.screens.some((s) => s.id === 'lite-home')));
+  const overrides = parseInterfaceOverrides({
+    screens: { gift: { hidden: true }, renewal: { lite: { instructions: ['Нажмите «Продлить» на главной.'] }, evil: 1 }, 'Bad Id': { all: { title: 'x' } } },
+    added: [{ id: 'own-screen', title: 'Свой экран', routeDescription: 'Меню', instructions: ['Шаг.'] }, { id: 'broken' }],
+  });
+  const patched = parseInterfaceKnowledge(v2, 'lite', overrides);
+  check('правка оператора поверх поставки', patched?.screens.find((s) => s.id === 'renewal')?.instructions[0] === 'Нажмите «Продлить» на главной.');
+  check('скрытый оператором экран не попадает к AI', !patched?.screens.some((s) => s.id === 'gift'));
+  check('добавленный оператором экран доступен', Boolean(patched?.screens.some((s) => s.id === 'own-screen')));
+  check('битые правки отбрасываются', !('Bad Id' in overrides.screens) && overrides.added.length === 1);
+  check('картинка инсталляции только из local/', Boolean(safeImagePath('local/a.png'))
+    && !safeImagePath('local/../../etc/passwd') && !safeImagePath('/etc/passwd') && !safeImagePath('https://x.test/a.png'));
+}
+const interfaceManifest = join(dir, 'interface-manifest.json');
+writeFileSync(interfaceManifest, JSON.stringify(interfaceBase));
+check('при выключенном тумблере manifest не передаётся AI',
+  activeInterfaceKnowledge('удалить устройство', false, interfaceManifest).length === 0);
+check('при включённом тумблере выбирается релевантная инструкция',
+  activeInterfaceKnowledge('удалить устройство', true, interfaceManifest)[0]?.id === 'devices');
+writeFileSync(interfaceManifest, JSON.stringify({ version:2, locale:'ru', app:'bedolaga', screens:[{
+  id:'subscription', title:'Подписка', routeDescription:'Личный кабинет → Подписка',
+  keywords:['продлить подписку'], instructions:['Нажмите «Продлить».'],
+}] }));
+check('обновлённый manifest перечитывается без рестарта',
+  activeInterfaceKnowledge('продлить подписку', true, interfaceManifest)[0]?.id === 'subscription');
+
+const shippedInterfaceBase = (await import('../src/ai/interface-kb.js')).loadInterfaceKnowledge();
+for (const [query, expected] of [
+  ['продлить подписку', 'renewal'],
+  ['установка Windows Happ', 'connection-platforms'],
+  ['активировать промокод', 'promo'],
+  ['активировать подарок', 'gift-activate'],
+  ['настройки уведомлений об окончании подписки', 'profile'],
+] as const) {
+  const found = searchInterfaceKnowledge(shippedInterfaceBase, query);
+  check(`реальный manifest: ${expected} первый для «${query}»`, found[0]?.id === expected, found.map((item) => item.id));
+  check(`реальный manifest: навигация не засоряет «${query}»`, !found.some((item) => item.id === 'navigation'));
+}
 
 // ---------- разбор ответа модели ----------
 console.log('\n[ разбор ответа модели ]');
@@ -659,12 +727,12 @@ console.log('\n[ передача человеку ]');
   store.recordOutbound({ conversationId: waitConv.id, author:'ai', text:'ожидайте' });
   store.db.prepare('UPDATE conversation SET handoff_at = ? WHERE id = ?').run(Date.now() - 3600_000, waitConv.id);
   check('SLA видит ожидание человека, хотя AI уже писал',
-    store.overdueConversations(30, 24).some((c) => c.id === waitConv.id));
+    store.overdueConversations(24, 30).some((c) => c.id === waitConv.id));
 
   // А после ответа человека диалог из ожидания уходит.
   store.recordOutbound({ conversationId: waitConv.id, author:'agent', text:'решено' });
   check('после ответа человека SLA молчит',
-    !store.overdueConversations(30, 24).some((c) => c.id === waitConv.id));
+    !store.overdueConversations(24, 30).some((c) => c.id === waitConv.id));
 
   store.setHandoff(hand.id, null);
 
@@ -819,13 +887,30 @@ check('архивные сообщения помечены как бэкфил�
 check('свежее сообщение приходит как живое', liveEvents === 1, liveEvents);
 
 // 3. SLA не поднимает архив.
-const oldOverdue = store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'old');
+const oldOverdue = store.overdueConversations(24, 30).some((c) => c.remote_external_id === 'old');
 check('SLA игнорирует диалоги старше суток', !oldOverdue);
 store.recordInbound({ channel: 'tg_dm', externalId: 'sla', text: 'жду', externalMsgId: 's1', sentAt: Date.now() - 3_600_000 });
-check('SLA видит свежий неотвеченный диалог', store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'sla'));
+check('SLA видит свежий неотвеченный диалог', store.overdueConversations(24, 30).some((c) => c.remote_external_id === 'sla'));
 store.recordInbound({ channel: 'tg_dm', externalId: 'sla', text: 'есть новости?', externalMsgId: 's2', sentAt: Date.now() });
 check('повтор клиента не переносит срок первого ответа',
-  store.overdueConversations(30, 24).some((c) => c.remote_external_id === 'sla'));
+  store.overdueConversations(24, 30).some((c) => c.remote_external_id === 'sla'));
+
+// SLA-уведомления живут по той же sla_policy, что и экран очереди.
+{
+  const urgent = store.upsertConversation({ channel: 'tg_dm', externalId: 'sla-high', tgUserId: 8601, businessConnectionId: 'b1' });
+  store.recordInbound({ channel: 'tg_dm', externalId: 'sla-high', text: 'срочно', externalMsgId: 'h1', sentAt: Date.now() - 25 * 60_000 });
+  store.db.prepare(`UPDATE conversation SET priority = 'high' WHERE id = ?`).run(urgent.id);
+  store.upsertConversation({ channel: 'tg_dm', externalId: 'sla-normal', tgUserId: 8602, businessConnectionId: 'b1' });
+  store.recordInbound({ channel: 'tg_dm', externalId: 'sla-normal', text: 'вопрос', externalMsgId: 'n1', sentAt: Date.now() - 25 * 60_000 });
+  const overdue = store.overdueConversations(24);
+  check('SLA: high просрочен по политике (20 мин)', overdue.some((c) => c.remote_external_id === 'sla-high'));
+  check('SLA: normal ещё в сроке по политике (60 мин)', !overdue.some((c) => c.remote_external_id === 'sla-normal'));
+  store.seedSlaFirstResponse(15);
+  check('SLA: прежний глобальный срок переносится в normal', store.overdueConversations(24).some((c) => c.remote_external_id === 'sla-normal'));
+  store.db.prepare(`UPDATE sla_policy SET first_response_minutes = 60 WHERE priority = 'normal'`).run();
+  store.seedSlaFirstResponse(15);
+  check('SLA: перенос однократный', !store.overdueConversations(24).some((c) => c.remote_external_id === 'sla-normal'));
+}
 
 // 4. Для отметки прочитанным берётся последнее ВХОДЯЩЕЕ, а не наш же ответ.
 store.recordOutbound({ conversationId: metric.id, author: 'agent', text: 'последним говорим мы', externalMsgId: 'out9' });
@@ -856,6 +941,18 @@ check('после удаления первого сообщения метри�
   store.getConversation(deletion.id)?.first_inbound_at === oldDeleteAt + 1);
 store.deleteExternalMessages(deletion.id, ['du-new-1']);
 check('удаление действительно непрочитанного уменьшает unread', store.getConversation(deletion.id)?.unread === 1);
+store.deleteExternalMessages(deletion.id, ['du-old-2', 'du-new-2']);
+check('пустой Telegram-диалог исчезает из локального inbox', !store.getConversation(deletion.id));
+const hidden = store.recordInbound({ channel:'tg_dm', externalId:'hidden-old-chat', text:'старая история',
+  externalMsgId:'hidden-1', sentAt:Date.now() - 86_400_000 })!;
+store.hideConversation(hidden.conversation.id);
+check('скрытие сохраняет историю старого диалога', store.listMessages(hidden.conversation.id).length === 1);
+check('tombstone убирает старый диалог из inbox',
+  !store.listConversations().some((item) => item.id === hidden.conversation.id));
+store.recordInbound({ channel:'tg_dm', externalId:'hidden-old-chat', text:'новое обращение',
+  externalMsgId:'hidden-2', sentAt:Date.now() });
+check('новое входящее снимает tombstone', store.getConversation(hidden.conversation.id)?.hidden_at == null
+  && store.listConversations().some((item) => item.id === hidden.conversation.id));
 
 // 7. Запись running от умершего процесса не блокирует следующий запуск.
 const abandonedJob = store.startJob('regression-stale-job');
@@ -1049,6 +1146,17 @@ const gapSug = store.createSuggestion({ conversationId: gapConv.id, text: 'ми�
 store.decideSuggestion(gapSug.id, 'rejected');
 check('отклонённая предложка помечает диалог как дыру', store.gapConversations().includes(gapConv.id));
 check('диалог без отклонений в дыры не попал', !store.gapConversations().includes(mine.id));
+
+// Запрос к KB учитывает недавние реплики клиента.
+{
+  const { kbQuery } = await import('../src/ai/responder.js');
+  const said = (text: string) => ({ direction: 'in', text }) as Parameters<typeof kbQuery>[1][number];
+  const history = [said('не подключается vpn на телефоне'), said('пишет ошибка таймаут')];
+  check('KB: полный вопрос ищется как есть', kbQuery('как продлить подписку на месяц', history) === 'как продлить подписку на месяц');
+  check('KB: короткое уточнение дополняется историей', kbQuery('а на айфоне?', history).includes('таймаут'));
+  check('KB: фото без подписи ищет по последним репликам', kbQuery('', history).startsWith('пишет ошибка таймаут'));
+  check('KB: без истории — запасной запрос', kbQuery('', []).length > 0);
+}
 
 server.close();
 db.close();

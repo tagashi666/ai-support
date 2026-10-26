@@ -28,6 +28,10 @@ export interface Runtime {
   modelKey: number;
   fallbackKey: number;
   autoLearn: boolean;
+  /** Проверенная база интерфейса Bedolaga; по умолчанию не участвует в AI. */
+  bedolagaInterfaceKb: boolean;
+  /** Вид кабинета Bedolaga для справочника: auto — спросить у самого кабинета. */
+  bedolagaInterfaceMode: 'auto' | 'full' | 'lite';
 }
 
 export const runtime: Runtime = {
@@ -48,6 +52,8 @@ export const runtime: Runtime = {
   modelKey: -1,
   fallbackKey: -1,
   autoLearn: config.ai.autoLearn,
+  bedolagaInterfaceKb: false,
+  bedolagaInterfaceMode: 'auto',
 };
 
 export interface ResolvedService {
@@ -151,7 +157,26 @@ const FIELDS: Record<keyof Runtime, Validator> = {
     if (['false','0','off','no','нет'].includes(text)) return false;
     return undefined;
   },
+  bedolagaInterfaceKb: (value) => {
+    if (typeof value === 'boolean') return value;
+    const text = String(value).toLowerCase();
+    if (['true','1','on','yes','да'].includes(text)) return true;
+    if (['false','0','off','no','нет'].includes(text)) return false;
+    return undefined;
+  },  bedolagaInterfaceMode: (value) => (['auto', 'full', 'lite'] as const).find((mode) => mode === value),
 };
+
+// Значения из .env до наложения настроек панели — чтобы показывать, что
+// именно перекрыто. Иначе `AI_MODE=suggest` в .env при `auto` в панели
+// вводит в заблуждение: работает панель, а читают .env.
+const ENV_DEFAULTS: Readonly<Runtime> = { ...runtime };
+
+/** Параметры, которые панель перекрывает поверх .env, с обоими значениями. */
+export function settingOverrides(): Array<{ key: keyof Runtime; value: unknown; env: unknown }> {
+  return (Object.keys(FIELDS) as (keyof Runtime)[])
+    .filter((key) => JSON.stringify(runtime[key]) !== JSON.stringify(ENV_DEFAULTS[key]))
+    .map((key) => ({ key, value: runtime[key], env: ENV_DEFAULTS[key] }));
+}
 
 export function loadSettings(store: Store): void {
   for (const key of Object.keys(FIELDS) as (keyof Runtime)[]) {

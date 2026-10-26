@@ -18,6 +18,7 @@ import { RemnawaveClient } from './integrations/remnawave.js';
 import { loadSettings, runtime } from './core/settings.js';
 import { seedTemplates } from './core/templates.js';
 import { startWeb } from './panel/server.js';
+import { watchInterfaceMode } from './ai/interface-kb.js';
 
 const KB_SYNC_MS = 15 * 60 * 1000;
 
@@ -48,6 +49,9 @@ async function main(): Promise<void> {
     outbox.register('bedolaga', new BedolagaSender(bedolaga));
     bedolagaPoller = new BedolagaPoller(bedolaga, store, config.bedolaga.pollSeconds * 1000);
   }
+  // Вид кабинета (полный / простой) меняет пути к кнопкам в справочнике
+  // интерфейса; кабинет сообщает его публично, опрашиваем редко.
+  const stopInterfaceModeWatch = bedolaga ? watchInterfaceMode(config.bedolaga.url) : () => undefined;
 
   const minishop = config.minishop.enabled
     ? new MinishopClient(config.minishop.url, config.minishop.token, config.minishop.mode)
@@ -169,6 +173,7 @@ async function main(): Promise<void> {
     log.info(`${signal} — останавливаюсь`);
     clearInterval(kbTimer);
     bedolagaPoller?.stop();
+    stopInterfaceModeWatch();
     minishopPoller?.stop();
     media.stop();
     sla?.stop();

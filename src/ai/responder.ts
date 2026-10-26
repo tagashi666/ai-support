@@ -8,6 +8,7 @@ import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
 import { decide, resolveMode } from './gate.js';
 import { AiProvider, parseDraft, type ChatMessage, type ContentPart } from './provider.js';
+import { activeInterfaceKnowledge, effectiveInterfaceMode, renderInterfaceKnowledge } from './interface-kb.js';
 
 const SYSTEM_PROMPT = `Ты — оператор техподдержки сервиса {brand} (VPN по подписке).
 
@@ -72,11 +73,29 @@ function renderCustomer(profile: Profile | null): string {
   if (profile.activity?.dailyAverageBytes) lines.push(`В среднем в день: ${gb(profile.activity.dailyAverageBytes)}`);
   if (profile.activity?.firstSeen) lines.push(`Клиент с: ${profile.activity.firstSeen}`);
   if (profile.activity?.topNodes?.length) {
-    lines.push(`Чаще всего использует: ${profile.activity.topNodes.map((n) => n.name).join(', ')}`);
+    lines.push(`Чаще всего использует (внутренняя статистика, клиенту не называть): ${profile.activity.topNodes.map((n) => n.name).join(', ')}`);
   }
-  if (profile.activity?.lastNode) lines.push(`Последний сервер: ${profile.activity.lastNode}`);
+  if (profile.activity?.lastNode) lines.push(`Последний сервер (внутренняя статистика, клиенту не называть): ${profile.activity.lastNode}`);
   if (profile.balance?.amount !== undefined) lines.push(`Баланс: ${profile.balance.amount} ${profile.balance.currency ?? ''}`);
   return lines.length ? lines.join('\n') : 'Клиент найден, но данных о подписке нет.';
+}
+
+/**
+ * Запрос к KB. Короткий уточняющий вопрос («а на айфоне?») и фото без
+ * подписи сами по себе ничего не находят, поэтому добавляем последние
+ * реплики клиента. Раньше фото без подписи всегда искало одну и ту же
+ * фиксированную строку и получало одни и те же статьи.
+ */
+export function kbQuery(current: string, history: Message[]): string {
+  const text = current.trim();
+  const words = text.split(/\s+/).filter(Boolean).length;
+  if (words >= 4) return text;
+  const earlier = history
+    .filter((message) => message.direction === 'in' && message.text?.trim() && !text.includes(message.text.trim()))
+    .slice(-2)
+    .map((message) => message.text!.trim())
+    .reverse();
+  return [text, ...earlier].filter(Boolean).join(' ') || 'ошибка на скриншоте не подключается приложение';
 }
 
 function renderHistory(messages: Message[]): string {
@@ -165,12 +184,17 @@ export async function visionImages(
  * проверка в песочнице ничего не говорит о реальном поведении.
  */
 export async function tryDraft(question: string, hits: KbHit[], provider = new AiProvider()) {
-  const knowledge = hits.length
+  const interfaceScreens = activeInterfaceKnowledge(question, runtime.bedolagaInterfaceKb, undefined, effectiveInterfaceMode(runtime.bedolagaInterfaceMode));
+  const regularKnowledge = hits.length
     ? hits.map((hit, index) => {
         const body = hit.body.length > config.ai.kbChars ? `${hit.body.slice(0, config.ai.kbChars)}…` : hit.body;
         return `[${index + 1}] ${hit.title}\n${body}`;
       }).join('\n\n')
-    : 'База знаний ничего не нашла по этому вопросу. Отвечать клиенту нельзя — верни короткую версию для оператора.';
+    : '';
+  const interfaceKnowledge = interfaceScreens.map((screen, index) =>
+    `[${hits.length + index + 1}] ${screen.title}\n${renderInterfaceKnowledge([screen])}`).join('\n\n');
+  const knowledge = [regularKnowledge, interfaceKnowledge].filter(Boolean).join('\n\n')
+    || 'База знаний ничего не нашла по этому вопросу. Отвечать клиенту нельзя — верни короткую версию для оператора.';
 
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT.replace('{brand}', runtime.brand).replace('{style}', runtime.replyStyle) },
@@ -328,9 +352,9 @@ export class Responder {
     }
 
     try {
-      const searchText = plainText || 'ошибка на скриншоте не подключается приложение';
-      const hits = this.store.searchKb(searchText, config.ai.kbLimit);
       const history = this.store.listMessages(conversation.id, config.ai.historyLimit);
+      const searchText = kbQuery(plainText, history);
+      const hits = this.store.searchKb(searchText, config.ai.kbLimit);
       const snapshot = await this.customers.get(conversation).catch(() => null);
       // CustomerDirectory мог только что связать диалог с одной из панелей
       // Remnawave. Перечитываем карточку и выбираем её отдельный профиль.
@@ -339,7 +363,8 @@ export class Responder {
 
       // Выдержки режем: на бесплатных тарифах вход считается в тот же
       // дневной лимит, что и ответ, и длинная база съедает его за полдня.
-      const knowledge = hits.length
+      const interfaceScreens = activeInterfaceKnowledge(searchText, runtime.bedolagaInterfaceKb, undefined, effectiveInterfaceMode(runtime.bedolagaInterfaceMode));
+      const regularKnowledge = hits.length
         ? hits
             .map((hit, index) => {
               const body = hit.body.length > config.ai.kbChars
@@ -347,8 +372,15 @@ export class Responder {
                 : hit.body;
               return `[${index + 1}] ${hit.title}\n${body}`;
             })
-            .join('\n\n')
-        : 'База знаний ничего не нашла по этому вопросу. Отвечать клиенту нельзя — верни короткую версию для оператора.';
+            .join('\n\n') : '';
+      const interfaceKnowledge = interfaceScreens.map((screen, index) =>
+        `[${hits.length + index + 1}] ${screen.title}\n${renderInterfaceKnowledge([screen])}`).join('\n\n');
+      const knowledge = [regularKnowledge, interfaceKnowledge].filter(Boolean).join('\n\n')
+        || 'База знаний ничего не нашла по этому вопросу. Отвечать клиенту нельзя — верни короткую версию для оператора.';
+      const knowledgeSources = [
+        ...hits.map((hit) => hit.title),
+        ...interfaceScreens.map((screen) => `Интерфейс Bedolaga: ${screen.title}`),
+      ];
 
       const prompt = [
         `# Выдержки из базы знаний\n${knowledge}`,
@@ -422,7 +454,7 @@ export class Responder {
 
       const effectiveDraft = {
         ...draft,
-        needsHuman: draft.needsHuman || hits.length === 0,
+        needsHuman: draft.needsHuman || knowledgeSources.length === 0,
         reply: withServiceGreeting(draft.reply, service.greetingMessage, !liveConversation.first_response_at),
       };
 
@@ -435,7 +467,7 @@ export class Responder {
         reason: effectiveDraft.reason,
         model: this.provider.lastModel,
         sources: effectiveDraft.used.length
-          ? effectiveDraft.used.filter((n) => n >= 1 && n <= hits.length).map((n) => hits[n - 1]!.title)
+          ? effectiveDraft.used.filter((n) => n >= 1 && n <= knowledgeSources.length).map((n) => knowledgeSources[n - 1]!)
           : [],
       });
 
@@ -443,7 +475,7 @@ export class Responder {
       // Раньше хватало любого совпадения по словам: на вопрос «всё ли в
       // порядке с сервером Германии» поиск цеплялся за статью про скорость,
       // проверка пропускала, и модель дописывала правдоподобное от себя.
-      const grounded = effectiveDraft.used.filter((n) => n >= 1 && n <= hits.length).length;
+      const grounded = effectiveDraft.used.filter((n) => n >= 1 && n <= knowledgeSources.length).length;
       const verdict = decide(this.store, liveConversation, clientText, effectiveDraft, grounded);
       this.store.logEvent('ai_draft', conversation.id, {
         suggestion: suggestion.id,

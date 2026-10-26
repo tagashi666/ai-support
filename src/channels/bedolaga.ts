@@ -16,6 +16,8 @@ const MAX_PAGES = 50;
 /** Все состояния, в которых тикет ещё не закрыт. */
 const ACTIVE_STATUSES = ['open', 'answered', 'pending'] as const;
 const MEDIA_REPAIR_STATE = 'bedolaga:media_repair:rc6-outbound';
+const REPAIR_MAX_ATTEMPTS = 5;
+const MISSING_RECHECK_MS = 10 * 60_000;
 export type BedolagaTicketStatus = 'open' | 'answered' | 'closed' | 'pending';
 
 export function localStatusForTicket(status: unknown): 'open' | 'pending' | 'resolved' | undefined {
@@ -401,6 +403,12 @@ export class BedolagaPoller {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
   private mediaRepairFinished = false;
+  // Тикеты, которые восстановление медиа ещё должно пройти, и сколько раз
+  // каждый уже не удался. Раньше любой сбой (или битый диалог) запускал
+  // полный проход по архиву на каждом опросе, то есть раз в минуту навсегда.
+  private repairPending?: Map<number, number>;
+  // Когда пропавший из активных тикет последний раз проверяли точечно.
+  private readonly missingCheckedAt = new Map<number, number>();
 
   constructor(
     private readonly client: BedolagaClient,
@@ -455,6 +463,7 @@ export class BedolagaPoller {
    * снова откроют, он опять попадёт в обычный active poll.
    */
   private async syncMissingActiveTickets(checkedIds: Set<number>): Promise<void> {
+    const now = Date.now();
     for (const conversation of this.store.listConversationsByChannel('bedolaga')) {
       if (conversation.status === 'closed' || conversation.status === 'resolved') continue;
       let ticketId: number;
@@ -465,6 +474,10 @@ export class BedolagaPoller {
         continue;
       }
       if (checkedIds.has(ticketId)) continue;
+      // Тикет, который не отдаётся (удалён, нет прав), не должен стоить
+      // запроса каждую минуту: проверяем его не чаще MISSING_RECHECK_MS.
+      if (now - (this.missingCheckedAt.get(ticketId) ?? 0) < MISSING_RECHECK_MS) continue;
+      this.missingCheckedAt.set(ticketId, now);
       try {
         const ticket = await this.client.ticket(ticketId);
         checkedIds.add(ticketId);
@@ -482,34 +495,46 @@ export class BedolagaPoller {
       return;
     }
 
-    let failed = 0;
+    if (!this.repairPending) {
+      this.repairPending = new Map();
+      for (const conversation of this.store.listConversationsByChannel('bedolaga')) {
+        try {
+          this.repairPending.set(ticketIdOf(conversation), 0);
+        } catch (err) {
+          // Битый диалог не починится повтором — пропускаем его насовсем.
+          log.warn(`Диалог ${conversation.id}: repair Bedolaga пропущен`, err);
+        }
+      }
+    }
+
     let checked = 0;
-    for (const conversation of this.store.listConversationsByChannel('bedolaga')) {
-      let ticketId: number;
-      try {
-        ticketId = ticketIdOf(conversation);
-      } catch (err) {
-        failed += 1;
-        log.warn(`Диалог ${conversation.id}: repair Bedolaga пропущен`, err);
+    for (const [ticketId, attempts] of [...this.repairPending]) {
+      // Живые тикеты уже обработаны выше тем же проходом.
+      if (activeIds.has(ticketId)) {
+        this.repairPending.delete(ticketId);
         continue;
       }
-      // Живые тикеты уже обработаны выше тем же проходом.
-      if (activeIds.has(ticketId)) continue;
       try {
         const ticket = await this.client.ticket(ticketId);
         activeIds.add(ticketId);
         await this.ingestTicket(ticket, true);
+        this.repairPending.delete(ticketId);
         checked += 1;
       } catch (err) {
-        failed += 1;
-        log.warn(`Диалог ${conversation.id}: не удалось восстановить медиа Bedolaga`, err);
+        if (attempts + 1 >= REPAIR_MAX_ATTEMPTS) {
+          this.repairPending.delete(ticketId);
+          log.warn(`Тикет ${ticketId}: восстановление медиа Bedolaga брошено после ${REPAIR_MAX_ATTEMPTS} попыток`, err);
+        } else {
+          this.repairPending.set(ticketId, attempts + 1);
+          log.warn(`Тикет ${ticketId}: не удалось восстановить медиа Bedolaga`, err);
+        }
       }
     }
 
-    if (failed === 0) {
+    if (checked > 0) log.info(`Bedolaga: проверено архивных тикетов для восстановления медиа: ${checked}`);
+    if (this.repairPending.size === 0) {
       this.store.setState(MEDIA_REPAIR_STATE, String(Date.now()));
       this.mediaRepairFinished = true;
-      if (checked > 0) log.info(`Bedolaga: проверено архивных тикетов для восстановления медиа: ${checked}`);
     }
   }
 

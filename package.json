@@ -1,6 +1,6 @@
 {
   "name": "ai-support",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "Self-hosted Telegram support inbox with AI-assisted replies, knowledge base and operator dashboard",
   "private": true,
   "license": "MIT",
@@ -37,6 +37,7 @@
     "release:check": "bash scripts/releasecheck.sh"
   },
   "dependencies": {
+    "@fastify/compress": "^9.2.1",
     "@fastify/static": "^10.1.3",
     "@fastify/websocket": "^11.3.0",
     "better-sqlite3": "^13.0.3",

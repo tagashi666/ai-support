@@ -5,7 +5,7 @@
  * детьми, скрытие, перебитое классом, ссылки на несуществующие id. Браузера
  * здесь нет, поэтому проверяем инварианты структуры, а не пиксели.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
 // Проверки компонентов должны читать реально подключённые stylesheets. Иначе
@@ -419,7 +419,7 @@ check('подписка грузится по раскрытию раздела'
 check('новые диалоги сразу сливаются из WebSocket в список', /mergeLiveConversation\(frame\.conversation\)/.test(html));
 check('пропущенные WS-сообщения догружаются в открытый диалог',
   /function syncCurrentMessages/.test(html) && /last_message_at/.test(html)
-  && /void syncCurrentMessages\(openId\)/.test(html));
+  && /void syncCurrentMessages\(openId[,)]/.test(html));
 check('live-сообщения не дублируются', /data-message-id/.test(html)
   && /inner\.querySelector\(`\.msg\[data-message-id=/.test(html));
 check('видео-стикеры показываются зацикленным WebM-видео',
@@ -434,8 +434,9 @@ check('редактирование и удаление сообщений об�
   /frame\.type === 'message_updated'/.test(html) && /frame\.type === 'message_deleted'/.test(html));
 check('новое входящее в открытом диалоге сразу отмечается прочитанным',
   /markOpenConversationRead\(frame\.conversation\.id\)/.test(html));
-check('список имеет резервный опрос не реже пяти секунд',
-  /setInterval\(\(\) => \{ if \(document\.visibilityState === 'visible'\) void refresh\(\); \}, 5000\)/.test(html));
+check('резервный опрос списка работает только без живого WebSocket',
+  /setInterval\(\(\) => \{ if \(document\.visibilityState === 'visible' && !liveOpen\(\)\) void refresh\(\); \}, 5000\)/.test(html)
+  && !/setInterval\(\(\) => \{ if \(document\.visibilityState === 'visible'\) void refresh\(\); \}, 5000\)/.test(html));
 check('ошибка аватара повторяется, а не удаляет картинку навсегда',
   /function armAvatars/.test(html) && !/onerror="this\.remove\(\)"/.test(html));
 
@@ -499,6 +500,61 @@ check('карточка Bedolaga оформлена активным stylesheet,
       guardedByToken,
     });
 }
+
+check('интерфейсную базу Бедолаги можно посмотреть в панели',
+  /data-tab="interface"/.test(html) && /Интерфейс Бедолаги/.test(html) && /docs\.interfaceScreens/.test(html));
+check('в справочнике интерфейса есть переключатель вида Full/Lite и бейдж вида магазина',
+  /data-iface-mode="\$\{mode\}"/.test(html) && /full:'Полный вид', lite:'Простой вид'/.test(html)
+  && /У магазина сейчас:/.test(html) && /\/api\/interface-kb/.test(html));
+check('редактор экрана: поля, область правки, стандартное значение, картинка и сброс',
+  ['title','routeDescription','keywords','instructions','caption'].every((field) => new RegExp(`'${field}'`).test(html))
+  && /К чему применить правку/.test(html) && /<option value="all">Оба вида<\/option>/.test(html)
+  && /Стандартно:/.test(html) && /data-restore=/.test(html) && /image\/png,image\/jpeg,image\/webp/.test(html)
+  && /Сбросить к стандартному/.test(html) && /Скрыть экран/.test(html) && /Добавить свой экран/.test(html)
+  && /\/api\/interface-kb\/overrides/.test(html) && /method:'PUT'/.test(html));
+check('справочник интерфейса не вешает inline-обработчики и стили в разметке',
+  (() => {
+    const start = html.indexOf('/* ═══ справочник интерфейса Бедолаги ═══ */');
+    const block = html.slice(start, html.indexOf('function mineStarted()', start));
+    return start > 0 && !/\son[a-z]+="/.test(block) && !/style="/.test(block);
+  })());
+check('в настройках есть выбор вида кабинета рядом с тумблером справочника',
+  /key:'bedolagaInterfaceMode'[^}]*options:\[\['auto','Авто — как у магазина'\],\['full','Полный вид'\],\['lite','Простой вид'\]\]/.test(html)
+  && /'bedolagaInterfaceKb','bedolagaInterfaceMode'/.test(html));
+check('стили справочника интерфейса лежат в ui-v3.css',
+  /\.iface-bar\b/.test(uiCss) && /\.iface-default\b/.test(uiCss) && /\.iface-tag\b/.test(uiCss));
+check('AI-студия отмечает использованные интерфейсные источники',
+  /body\.usedSources\?\.includes\(x\)/.test(html));
+check('старый Telegram-диалог можно скрыть без удаления истории',
+  /id="hideConversationBtn"/.test(html) && /JSON\.stringify\(\{ hidden:true \}\)/.test(html));
+
+console.log('\n[ производительность панели ]');
+check('подключён только ui-v3.css, старых стилей нет',
+  activeStylesheets.length === 1 && activeStylesheets[0]?.href === 'ui-v3.css'
+  && !/ui(?:-v2)?\.css/.test(html.replace(/ui-v3\.css/g, ''))
+  && !existsSync(new URL('../public/ui.css', import.meta.url))
+  && !existsSync(new URL('../public/ui-v2.css', import.meta.url)), activeStylesheets);
+check('URL вложений и аватарок без токена — их авторизует cookie-билет',
+  /const attachmentUrl = \(id, suffix = ''\) => `\/api\/attachments\/\$\{id\}\$\{suffix\}`;/.test(html)
+  && /avatar\?v=\$\{encodeURIComponent\(c\.avatar_version/.test(html)
+  && !/avatar\?token=/.test(html) && !/&retry=\$\{Date\.now\(\)\}/.test(html));
+check('недокачанное вложение показывается скелетоном и ждёт по 202',
+  /box\.classList\.add\('media-pending'\)/.test(html) && /status === 202/.test(html)
+  && /method:'HEAD'/.test(html) && /\.bubble \.shot\.media-pending::after/.test(uiCss));
+check('WebSocket открывается сразу после билета, до загрузки списка', (() => {
+  const boot = html.slice(html.indexOf('async function boot()'), html.indexOf('let savedTokenCheck'));
+  const connectAt = boot.indexOf('connect();');
+  return connectAt > boot.indexOf('await refreshTicket()') && connectAt < boot.indexOf('await loadInboxMeta()');
+})());
+check('ротация билета открывает новый сокет до закрытия старого',
+  /async function rotateTicket\(\)/.test(html) && /if \(liveOpen\(\)\) connect\(\)/.test(html)
+  && /previous\.close\(1000/.test(html) && /refresh\(\{ fullThread:true \}\)/.test(html));
+check('кадр WS с карточкой не перезапрашивает весь список',
+  /if \(!frame\.conversation\) refreshSoon\(\);/.test(html));
+check('фоновая синхронизация переписки берёт только новые сообщения',
+  /\?after=\$\{lastId\}/.test(html));
+check('загруженные аватарки не пересоздаются при перерисовке списка',
+  /loadedAvatars\.get\(/.test(html) && /freshAvatar\.replaceWith\(keptAvatar\)/.test(html));
 
 console.log(failures === 0 ? '\nВсе проверки прошли' : `\nПровалено: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

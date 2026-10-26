@@ -173,6 +173,56 @@ export async function readMediaFile(fileRef: string): Promise<Buffer> {
   }
 }
 
+const AVATAR_KEY = /^[a-f0-9]{32}$/;
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Ключ аватарки: хэш источника и file_id Telegram. Он же версия в URL и
+ * имя файла в кэше — путь никогда не строится из пользовательского ввода.
+ */
+export function avatarKey(sourceId: string | null | undefined, fileId: string | null | undefined): string | null {
+  if (!fileId) return null;
+  return createHash('sha256').update(`${sourceId ?? ''}\0${fileId}`).digest('hex').slice(0, 32);
+}
+
+function avatarPath(key: string): string {
+  if (!AVATAR_KEY.test(key)) throw new Error('Недопустимый ключ аватарки');
+  return join(config.avatarDir, key);
+}
+
+/** Кэш читается так же осторожно, как вложения: без симлинков и не больше лимита. */
+export async function readCachedAvatar(key: string): Promise<Buffer | null> {
+  let handle: FileHandle;
+  try {
+    handle = await open(avatarPath(key), constants.O_RDONLY | constants.O_NOFOLLOW);
+  } catch {
+    return null;
+  }
+  try {
+    const info = await handle.stat();
+    if (!info.isFile() || info.size <= 0 || info.size > MAX_AVATAR_BYTES) return null;
+    return await handle.readFile();
+  } catch {
+    return null;
+  } finally {
+    await handle.close().catch(() => undefined);
+  }
+}
+
+export async function saveCachedAvatar(key: string, bytes: Buffer): Promise<void> {
+  if (bytes.byteLength > MAX_AVATAR_BYTES) return;
+  const target = avatarPath(key);
+  await mkdir(config.avatarDir, { recursive: true, mode: 0o700 });
+  const temporary = join(config.avatarDir, `.avatar-${process.pid}-${randomBytes(12).toString('hex')}.tmp`);
+  try {
+    await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+    await rename(temporary, target);
+  } catch (err) {
+    await unlink(temporary).catch(() => undefined);
+    throw err;
+  }
+}
+
 /**
  * Скачивает вложения в фоне. Ссылки на файлы Telegram живут около часа, а у
  * бедолаги отдача закрыта токеном — в обоих случаях URL клиенту отдать нельзя,
@@ -181,6 +231,12 @@ export async function readMediaFile(fileRef: string): Promise<Buffer> {
 export class MediaFetcher {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
+  private again = false;
+  private stopped = false;
+  private kickTimer: NodeJS.Timeout | undefined;
+  // Вложение может прийти и без media_type у сообщения (альбомы, внешние
+  // каналы), поэтому будим очередь на любое сообщение: проход дешёвый.
+  private readonly onMessage = (): void => this.kick();
 
   constructor(
     private readonly store: Store,
@@ -190,18 +246,48 @@ export class MediaFetcher {
     private readonly minishop?: MinishopClient,
   ) {}
 
+  /**
+   * Новое вложение качаем сразу по событию сообщения: иначе панель получала
+   * WS-кадр с картинкой раньше, чем файл появлялся на диске, и до пяти секунд
+   * опрашивала пустой ответ. Таймер остаётся подстраховкой для повторов.
+   */
   start(intervalMs = 5_000): void {
+    this.stopped = false;
     void this.drain();
     this.timer = setInterval(() => void this.drain(), intervalMs);
+    this.store.on('message', this.onMessage);
+    this.store.on('message_updated', this.onMessage);
   }
 
   stop(): void {
+    this.stopped = true;
     if (this.timer) clearInterval(this.timer);
+    if (this.kickTimer) clearTimeout(this.kickTimer);
+    this.kickTimer = undefined;
+    this.store.off('message', this.onMessage);
+    this.store.off('message_updated', this.onMessage);
+  }
+
+  /**
+   * Внеочередной проход очереди. Вызов во время текущего прохода не теряется:
+   * drain повторится сразу после него, потому что запись вложения могла
+   * появиться уже после выборки pendingAttachments.
+   */
+  kick(): void {
+    if (this.stopped) return;
+    if (this.running) { this.again = true; return; }
+    if (this.kickTimer) return;
+    // Отложенный запуск: событие сообщения приходит изнутри транзакции записи.
+    this.kickTimer = setTimeout(() => {
+      this.kickTimer = undefined;
+      void this.drain();
+    }, 0);
   }
 
   async drain(): Promise<number> {
-    if (this.running) return 0;
+    if (this.running) { this.again = true; return 0; }
     this.running = true;
+    this.again = false;
     let saved = 0;
     try {
       await mkdir(config.mediaDir, { recursive: true });
@@ -249,6 +335,7 @@ export class MediaFetcher {
       }
     } finally {
       this.running = false;
+      if (this.again) { this.again = false; this.kick(); }
     }
     return saved;
   }

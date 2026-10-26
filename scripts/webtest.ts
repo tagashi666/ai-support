@@ -140,8 +140,11 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
   }
   return nativeFetch(input, init);
 }) as typeof fetch;
-const fakeBot = { api: { getFile: async () => ({ file_path: 'photos/avatar.bin' }) } };
-const app = await startWeb({ store, outbox, bot: fakeBot as any, bedolaga: bedolaga as any, minishop: minishop as any });
+let avatarFetches = 0;
+const fakeBot = { api: { getFile: async () => { avatarFetches += 1; return { file_path: 'photos/avatar.bin' }; } } };
+const openedCalls: number[] = [];
+const app = await startWeb({ store, outbox, bot: fakeBot as any, bedolaga: bedolaga as any, minishop: minishop as any,
+  onOpened: (conversation) => { openedCalls.push(conversation.id); } });
 const B = 'http://127.0.0.1:8099'; const T = process.env.PANEL_TOKEN!;
 const h = { authorization: `Bearer ${T}` };
 let fails = 0;
@@ -312,6 +315,27 @@ store.deleteExternalMessages(liveEditTarget.conversation.id, ['live-edit-1']);
 const liveDeleted = await deletedFrame.catch((error) => ({ error:error.message }));
 ok('WS присылает удаление сообщения', liveDeleted.message?.id === liveEditTarget.message.id, liveDeleted);
 
+const vanishing = store.recordInbound({ channel:'tg_dm', externalId:'gone-chat', sourceId:'telegram-default',
+  tgUserId:778899, text:'единственное сообщение', externalMsgId:'gone-1', sentAt:Date.now() })!;
+const conversationDeletedFrame = new Promise<any>((resolve, reject) => {
+  const timeout = setTimeout(() => reject(new Error('таймаут удаления диалога WS')), 4000);
+  const receive = (data: any) => {
+    const next = JSON.parse(data.toString());
+    if (next.type !== 'conversation_deleted' || next.conversation.id !== vanishing.conversation.id) return;
+    clearTimeout(timeout); ws.off('message', receive); resolve(next);
+  };
+  ws.on('message', receive);
+});
+store.deleteExternalMessages(vanishing.conversation.id, ['gone-1']);
+const liveConversationDeleted = await conversationDeletedFrame.catch((error) => ({ error:error.message }));
+ok('WS присылает удаление опустевшего диалога',
+  liveConversationDeleted.conversation?.id === vanishing.conversation.id, liveConversationDeleted);
+ok('пустой диалог скрыт из списка', !store.listConversations().some((item) => item.id === vanishing.conversation.id));
+const revived = store.recordInbound({ channel:'tg_dm', externalId:'gone-chat', sourceId:'telegram-default',
+  tgUserId:778899, text:'новое обращение', externalMsgId:'gone-2', sentAt:Date.now() })!;
+ok('новое входящее заново создаёт удалённый диалог', revived.conversation.id !== vanishing.conversation.id
+  && store.listConversations().some((item) => item.id === revived.conversation.id));
+
 store.recordInbound({ channel:'tg_dm', externalId:'555', sourceId:'telegram-default',
   tgUserId:555, businessConnectionId:'b1', text:'прочитайте сразу', externalMsgId:'live-read-1', sentAt:Date.now() });
 const readLive = await fetch(`${B}/api/conversations/${id}/read`, { method:'POST', headers:h });
@@ -368,6 +392,108 @@ ok('невалидное состояние отклоняется целико�
   && stateAfterReject.conversation.status === 'pending' && stateAfterReject.conversation.handoff_at === null);
 ok('заметка добавляется', (await fetch(`${B}/api/conversations/${id}/note`,{method:'POST',headers:{...h,'content-type':'application/json'},body:JSON.stringify({text:'внутренняя'})})).status === 200);
 ok('вложение без файла даёт 404', (await fetch(`${B}/api/attachments/999`,{headers:h})).status === 404);
+
+// --- производительность панели: кэш медиа, cookie-билет, дозагрузка ---
+{
+  const pending = store.recordInbound({ channel:'tg_dm', externalId:'555', tgUserId:555, businessConnectionId:'b1',
+    username:'client', displayName:'Клиент', mediaType:'photo', mediaFileId:'pending-photo', externalMsgId:'perf-1', sentAt: Date.now() })!;
+  const pendingId = store.attachmentsFor([pending.message.id])[pending.message.id]?.[0]?.id;
+  const pendingResponse = await fetch(`${B}/api/attachments/${pendingId}`, { headers:h });
+  ok('недокачанное вложение отвечает 202 с Retry-After', pendingResponse.status === 202
+    && Number(pendingResponse.headers.get('retry-after')) >= 1
+    && pendingResponse.headers.get('cache-control') === 'no-store', pendingResponse.status);
+  ok('HEAD недокачанного вложения тоже 202',
+    (await fetch(`${B}/api/attachments/${pendingId}`, { method:'HEAD', headers:h })).status === 202);
+
+  const cached = await fetch(`${B}/api/attachments/${uploadedAttachment.id}`, { headers:h });
+  const etag = cached.headers.get('etag');
+  await cached.arrayBuffer();
+  ok('вложение кэшируется навсегда и имеет ETag', cached.status === 200
+    && cached.headers.get('cache-control') === 'private, max-age=31536000, immutable' && Boolean(etag),
+    Object.fromEntries(cached.headers));
+  ok('повтор с If-None-Match даёт 304', (await fetch(`${B}/api/attachments/${uploadedAttachment.id}`,
+    { headers:{ ...h, 'if-none-match': etag! } })).status === 304);
+
+  const ticketResponse = await fetch(`${B}/api/ticket`, { headers:h });
+  const setCookie = ticketResponse.headers.get('set-cookie') ?? '';
+  const mediaTicket = (await ticketResponse.json() as { ticket:string }).ticket;
+  ok('вместе с билетом выдаётся HttpOnly SameSite=Strict cookie на /api/',
+    setCookie.startsWith(`ais_media=${mediaTicket};`) && /;\s*HttpOnly/i.test(setCookie)
+    && /;\s*SameSite=Strict/i.test(setCookie) && /;\s*Path=\/api\//.test(setCookie) && /;\s*Max-Age=\d+/.test(setCookie), setCookie);
+  const cookie = { cookie: `ais_media=${mediaTicket}` };
+  ok('cookie-билет открывает вложение', (await fetch(`${B}/api/attachments/${uploadedAttachment.id}`, { headers:cookie })).status === 200);
+  ok('cookie с поддельным билетом отвергается',
+    (await fetch(`${B}/api/attachments/${uploadedAttachment.id}`, { headers:{ cookie:'ais_media=1.x.y' } })).status === 401);
+
+  const listed = (await (await fetch(`${B}/api/conversations`, { headers:h })).json() as any)
+    .conversations.find((item: any) => item.id === id);
+  const fetchesBefore = avatarFetches;
+  const avatar = await fetch(`${B}/api/conversations/${id}/avatar?v=${listed.avatar_version}`, { headers:cookie });
+  const avatarEtag = avatar.headers.get('etag');
+  ok('cookie-билет открывает аватар, версия в URL — хэш file_id',
+    avatar.status === 200 && /^[a-f0-9]{32}$/.test(listed.avatar_version ?? '')
+    && avatar.headers.get('cache-control') === 'private, max-age=31536000, immutable' && Boolean(avatarEtag), avatar.status);
+  ok('аватар отдаётся из дискового кэша без Telegram', avatarFetches === fetchesBefore, avatarFetches - fetchesBefore);
+  ok('аватар по If-None-Match даёт 304', (await fetch(`${B}/api/conversations/${id}/avatar?v=${listed.avatar_version}`,
+    { headers:{ ...cookie, 'if-none-match': avatarEtag! } })).status === 304);
+  ok('аватар без актуальной версии не кэшируется навсегда',
+    (await fetch(`${B}/api/conversations/${id}/avatar`, { headers:h })).headers.get('cache-control') === 'private, no-cache');
+
+  // Cookie уходит браузером автоматически, поэтому принимать её где-то кроме
+  // GET медиа-маршрутов значит открыть CSRF.
+  ok('cookie-билет не принимается на изменяющем маршруте', (await fetch(`${B}/api/conversations/${id}/read`,
+    { method:'POST', headers:cookie })).status === 401);
+  ok('cookie-билет не принимается на POST вложений', (await fetch(`${B}/api/conversations/${id}/attachments`,
+    { method:'POST', headers:{ ...cookie, 'content-type':'application/vnd.ai-support.attachment' }, body:png })).status === 401);
+  // Отказы выше засчитаны в защиту от подбора; успешный вход её сбрасывает.
+  await (await fetch(`${B}/api/me`, { headers:h })).arrayBuffer();
+  ok('cookie-билет не заменяет токен на обычных API',
+    (await fetch(`${B}/api/conversations`, { headers:cookie })).status === 401
+    && (await fetch(`${B}/api/conversations/${id}`, { headers:cookie })).status === 401
+    && (await fetch(`${B}/api/settings`, { headers:cookie })).status === 401);
+  const cookieWsCode = await new Promise<number>((resolve) => {
+    const socket = new WS('ws://127.0.0.1:8099/ws', { headers:cookie });
+    socket.on('close', (code: number) => resolve(code));
+    // Отказ до апгрейда: auth-хук отвечает 401, сокет не открывается.
+    socket.on('unexpected-response', (_request: unknown, response: { statusCode?: number }) => resolve(response.statusCode ?? -1));
+    socket.on('error', () => resolve(-1));
+    setTimeout(() => { socket.terminate(); resolve(0); }, 3000);
+  });
+  ok('WebSocket не принимает cookie вместо билета', cookieWsCode === 401 || cookieWsCode === 1008, cookieWsCode);
+
+  const openedBefore = openedCalls.length;
+  await (await fetch(`${B}/api/conversations/${id}`, { headers:h })).json();
+  ok('GET диалога не отмечает прочтение во внешнем канале', openedCalls.length === openedBefore, openedCalls);
+  await fetch(`${B}/api/conversations/${id}/read`, { method:'POST', headers:h });
+  ok('POST /read отмечает прочтение во внешнем канале', openedCalls.length === openedBefore + 1, openedCalls);
+
+  const full = await (await fetch(`${B}/api/conversations/${id}`, { headers:h })).json() as any;
+  const lastBefore = full.messages.at(-1).id;
+  const fresh = store.recordInbound({ channel:'tg_dm', externalId:'555', tgUserId:555, businessConnectionId:'b1',
+    username:'client', displayName:'Клиент', text:'ещё вопрос', externalMsgId:'perf-2', sentAt: Date.now() })!;
+  const incremental = await (await fetch(`${B}/api/conversations/${id}?after=${lastBefore}`, { headers:h })).json() as any;
+  ok('?after= возвращает только новые сообщения', incremental.messages.length === 1
+    && incremental.messages[0].id === fresh.message.id && incremental.conversation?.id === id, incremental.messages);
+  ok('?after= с мусором отклоняется', (await fetch(`${B}/api/conversations/${id}?after=abc`, { headers:h })).status === 400);
+
+  const compressed = await nativeFetch(`${B}/`, { headers:{ 'accept-encoding':'br, gzip' } });
+  const panelEtag = compressed.headers.get('etag');
+  await compressed.arrayBuffer();
+  ok('панель отдаётся сжатой, с ETag и перепроверкой', compressed.status === 200
+    && ['br', 'gzip'].includes(compressed.headers.get('content-encoding') ?? '')
+    && compressed.headers.get('cache-control') === 'no-cache' && Boolean(panelEtag), Object.fromEntries(compressed.headers));
+  ok('панель по If-None-Match даёт 304',
+    (await nativeFetch(`${B}/`, { headers:{ 'if-none-match': panelEtag! } })).status === 304);
+  const panelHtml = await (await nativeFetch(`${B}/index.html`)).text();
+  const styleHref = panelHtml.match(/href="(\/ui-v3\.css\?v=[A-Za-z0-9_-]+)"/)?.[1];
+  const style = styleHref ? await nativeFetch(`${B}${styleHref}`, { headers:{ 'accept-encoding':'gzip' } }) : null;
+  ok('стили подключены с версией и кэшируются навсегда', Boolean(styleHref) && style?.status === 200
+    && style.headers.get('cache-control') === 'public, max-age=31536000, immutable'
+    && style.headers.get('content-encoding') === 'gzip', styleHref);
+  const json = await nativeFetch(`${B}/api/conversations`, { headers:{ ...h, 'accept-encoding':'gzip' } });
+  ok('JSON API сжимается', json.headers.get('content-encoding') === 'gzip' || Number(json.headers.get('content-length') ?? 2000) < 1024);
+  await json.arrayBuffer();
+}
 
 // Новые маршруты панели
 ok('настройки отдаются', typeof (await (await fetch(`${B}/api/settings`,{headers:h})).json() as any).runtime.aiMode === 'string');
@@ -454,6 +580,79 @@ ok('черновики базы знаний доступны только пр�
   Array.isArray(viewerKb.drafts) && viewerKb.drafts.length === 0
     && viewerDraft.status === 403 && leadDraft.status === 200,
   { viewerDraft:viewerDraft.status, leadDraft:leadDraft.status, drafts:viewerKb.drafts });
+// --- справочник интерфейса Bedolaga ---------------------------------------
+{
+  const J = { 'content-type':'application/json' };
+  const kbState = await (await fetch(`${B}/api/interface-kb`, { headers:h })).json() as any;
+  ok('справочник интерфейса: GET отдаёт виды, поставку, правки и итог по видам',
+    ['auto','full','lite'].includes(kbState.setting) && ['full','lite'].includes(kbState.effectiveMode)
+    && kbState.modes?.join() === 'full,lite' && Array.isArray(kbState.shipped?.screens)
+    && Array.isArray(kbState.overrides?.added) && kbState.resolved.full.length > 0 && kbState.resolved.lite.length > 0, Object.keys(kbState));
+  const shippedId = kbState.shipped.screens.find((item: any) => !item.only)?.id as string;
+  const viewerGet = await fetch(`${B}/api/interface-kb`, { headers:viewerH });
+  ok('viewer читает справочник интерфейса', viewerGet.status === 200);
+
+  const putOverrides = (headers: Record<string, string>, body: unknown) =>
+    fetch(`${B}/api/interface-kb/overrides`, { method:'PUT', headers:{ ...headers, ...J }, body:JSON.stringify(body) });
+  ok('оператор без knowledge:manage получает 403 на PUT правок',
+    (await putOverrides(viewerH, { screens:{}, added:[] })).status === 403);
+  ok('PUT правок требует токен', (await fetch(`${B}/api/interface-kb/overrides`, { method:'PUT', headers:J, body:'{}' })).status === 401);
+  const saved = await putOverrides(leadH, {
+    screens: { [shippedId]: { all: { title:'Своё название', evil:1 }, lite:{ caption:null } }, 'Bad Id': { hidden:true } },
+    added: [{ id:'own-test', title:'Свой экран', routeDescription:'Меню', instructions:['Шаг.'], only:'lite', secret:'x' }, { id:'broken' }],
+  });
+  const savedBody = await saved.json() as any;
+  ok('PUT правок возвращает очищенные данные',
+    saved.status === 200 && savedBody.overrides.screens[shippedId]?.all?.title === 'Своё название'
+    && !('evil' in savedBody.overrides.screens[shippedId].all) && !('Bad Id' in savedBody.overrides.screens)
+    && savedBody.overrides.added.length === 1 && !('secret' in savedBody.overrides.added[0])
+    && savedBody.overrides.added[0].only === 'lite', savedBody);
+  const after = await (await fetch(`${B}/api/interface-kb`, { headers:h })).json() as any;
+  ok('правка видна в итоговых экранах, свой экран только в своём виде',
+    after.resolved.full.find((item: any) => item.id === shippedId)?.title === 'Своё название'
+    && after.resolved.lite.some((item: any) => item.id === 'own-test') && !after.resolved.full.some((item: any) => item.id === 'own-test'));
+  ok('PUT правок отклоняет не объект', (await putOverrides(leadH, [1, 2])).status === 400);
+  await putOverrides(leadH, { screens:{}, added:[] });
+
+  const imageHeaders = { 'content-type':'application/vnd.ai-support.attachment' };
+  const pngImage = Buffer.concat([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]), Buffer.from('interface-shot')]);
+  const post = (headers: Record<string, string>, body: Buffer) =>
+    fetch(`${B}/api/interface-kb/images`, { method:'POST', headers:{ ...headers, ...imageHeaders }, body });
+  ok('оператор без knowledge:manage получает 403 на загрузку картинки', (await post(viewerH, pngImage)).status === 403);
+  const uploaded = await post(leadH, pngImage);
+  const uploadedBody = await uploaded.json() as any;
+  ok('PNG загружается под случайным именем в local/',
+    uploaded.status === 200 && /^local\/[a-f0-9]{32}\.png$/.test(uploadedBody.image), uploadedBody);
+  ok('не картинка отклоняется по сигнатуре', (await post(leadH, Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"></svg>'))).status === 400
+    && (await post(leadH, Buffer.from('MZ-executable'))).status === 400 && (await post(leadH, Buffer.alloc(0))).status === 400);
+  ok('картинка больше 8 МБ отклоняется', (await post(leadH, Buffer.concat([pngImage, Buffer.alloc(8 * 1024 * 1024)]))).status === 413);
+
+  const viewerTicketForImages = await (await fetch(`${B}/api/ticket`, { headers:viewerH })).json() as { ticket:string };
+  const vCookie = { cookie: `ais_media=${viewerTicketForImages.ticket}` };
+  const imageUrl = `${B}/api/interface-kb/images/${uploadedBody.image}`;
+  const served = await fetch(imageUrl, { headers:viewerH });
+  const servedBytes = Buffer.from(await served.arrayBuffer());
+  ok('загруженная картинка отдаётся с верным MIME, nosniff и вечным кэшем',
+    served.status === 200 && served.headers.get('content-type')?.startsWith('image/png') === true
+    && served.headers.get('x-content-type-options') === 'nosniff'
+    && served.headers.get('cache-control') === 'private, max-age=31536000, immutable' && servedBytes.equals(pngImage));
+  const servedEtag = served.headers.get('etag')!;
+  ok('картинка по If-None-Match даёт 304', (await fetch(imageUrl, { headers:{ ...viewerH, 'if-none-match': servedEtag } })).status === 304);
+  ok('картинка доступна по cookie-билету, но cookie не годится для PUT и POST',
+    (await fetch(imageUrl, { headers:vCookie })).status === 200
+    && (await fetch(`${B}/api/interface-kb/overrides`, { method:'PUT', headers:{ ...vCookie, ...J }, body:'{}' })).status === 401
+    && (await fetch(`${B}/api/interface-kb`, { headers:vCookie })).status === 401);
+  await (await fetch(`${B}/api/me`, { headers:h })).arrayBuffer();
+  ok('картинка без авторизации недоступна', (await fetch(imageUrl)).status === 401);
+  await (await fetch(`${B}/api/me`, { headers:h })).arrayBuffer();
+  const traversal = await Promise.all([
+    'local/..%2f..%2f..%2fetc%2fpasswd', 'local/%2e%2e/%2e%2e/w.db', '..%2f..%2fpackage.json', 'local/../../w.db',
+    'local/%2fetc%2fpasswd', 'local/missing.png', '%2fetc%2fpasswd', 'local/a%5c..%5cb.png',
+  ].map(async (name) => (await fetch(`${B}/api/interface-kb/images/${name}`, { headers:h })).status));
+  ok('traversal и чужие пути в имени картинки дают 404/400', traversal.every((code) => code === 404 || code === 400), traversal);
+  ok('local/ без файла и не-картинка в local/ не отдаются', (await fetch(`${B}/api/interface-kb/images/local/`, { headers:h })).status === 404);
+}
+
 await fetch(`${B}/api/conversations/${id}/profile`, { headers:h });
 const profileId = store.getConversation(id)!.customer_profile_id!;
 store.db.prepare('UPDATE customer_profile SET email = ? WHERE id = ?').run('private-search-probe@example.invalid', profileId);

@@ -21,6 +21,7 @@ COPY --from=deps  /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY public ./public
 COPY kb ./kb
+COPY interface-kb ./interface-kb
 COPY package.json ./
 RUN mkdir -p /app/data && chown -R node:node /app
 USER node

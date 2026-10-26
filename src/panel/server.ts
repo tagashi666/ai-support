@@ -1,9 +1,10 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import fastifyCompress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
-import Fastify from 'fastify';
+import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
+import { constants as zlibConstants, gunzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Bot } from 'grammy';
@@ -22,12 +23,17 @@ import {
   resolveVerifiedBedolagaUser,
   collectBedolagaPages,
 } from '../integrations/bedolaga-customer.js';
-import { applySettings, runtime } from '../core/settings.js';
+import { applySettings, runtime, settingOverrides } from '../core/settings.js';
 import { listDocs, publishDraft, readDoc, removeDoc, slugFromTitle, writeDoc, type Area } from './kbfiles.js';
 import { runMining } from '../ai/mining.js';
 import { AiProvider } from '../ai/provider.js';
 import { decide } from '../ai/gate.js';
 import { tryDraft } from '../ai/responder.js';
+import {
+  INTERFACE_MODES, MAX_INTERFACE_IMAGE_BYTES, activeInterfaceKnowledge, detectedInterfaceMode, effectiveInterfaceMode,
+  loadInterfaceKnowledge, loadInterfaceOverrides, loadShippedManifest, parseInterfaceKnowledge, readInterfaceImage,
+  saveInterfaceImage, saveInterfaceOverrides,
+} from '../ai/interface-kb.js';
 import { parseExportObject } from '../integrations/tgexport.js';
 import type { NodeState, RemnawaveClient } from '../integrations/remnawave.js';
 import { version } from '../config.js';
@@ -36,7 +42,9 @@ import { minishopStatusForLocal, minishopTicketId, type MinishopClient } from '.
 import { UpdateManager } from '../core/update.js';
 import { SourceManager } from '../core/sources.js';
 import { Operations, PERMISSION_CATALOG, type Actor, type Permission } from '../core/operations.js';
-import { inspectUpload, openMediaFile, readMediaFile, removeMediaFile, saveUploadedMedia } from '../core/media.js';
+import {
+  avatarKey, inspectUpload, openMediaFile, readCachedAvatar, readMediaFile, removeMediaFile, saveCachedAvatar, saveUploadedMedia,
+} from '../core/media.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Панель лежит в корне проекта, а этот файл — в src/panel и dist/panel.
@@ -51,6 +59,48 @@ if (inlineScripts.length !== 1 || inlineScripts[0]?.[1] === undefined) {
   throw new Error('Для строгой CSP в public/index.html должен быть ровно один встроенный script');
 }
 const PANEL_SCRIPT_HASH = `'sha256-${createHash('sha256').update(inlineScripts[0][1]).digest('base64')}'`;
+
+/**
+ * Стили панели отдаются с версией в URL и кэшируются навсегда, а сама
+ * страница — с ETag и обязательной перепроверкой: после обновления браузер
+ * получит новую разметку одним 304/200 и сразу новые стили по новой версии.
+ */
+const contentVersion = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('base64url').slice(0, 16);
+const panelStyles = new Map<string, { body: Buffer; version: string }>();
+const panelHtml = Buffer.from(readFileSync(join(publicDir, 'index.html'), 'utf8')
+  .replace(/(<link\b[^>]*\bhref=")\/([A-Za-z0-9._-]+\.css)(")/g, (_match, head: string, name: string, tail: string) => {
+    const body = readFileSync(join(publicDir, name));
+    const version = contentVersion(body);
+    panelStyles.set(name, { body, version });
+    return `${head}/${name}?v=${version}${tail}`;
+  }));
+const PANEL_HTML_ETAG = `W/"${contentVersion(panelHtml)}"`;
+
+/** Совпадает ли ETag из If-None-Match; слабые и сильные варианты считаем равными. */
+function etagMatches(header: string | string[] | undefined, etag: string): boolean {
+  const value = Array.isArray(header) ? header.join(',') : header;
+  if (!value) return false;
+  const bare = etag.replace(/^W\//, '');
+  return value.split(',').some((item) => {
+    const candidate = item.trim();
+    return candidate === '*' || candidate.replace(/^W\//, '') === bare;
+  });
+}
+
+/** Вложение по id не меняется: файл пишется один раз и по имени из file_ref. */
+const IMMUTABLE_PRIVATE = 'private, max-age=31536000, immutable';
+const MEDIA_COOKIE = 'ais_media';
+const TICKET_TTL_MS = 10 * 60_000;
+
+function cookieValue(header: string | undefined, name: string): string | undefined {
+  if (!header) return undefined;
+  for (const part of header.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator < 0 || part.slice(0, separator).trim() !== name) continue;
+    return part.slice(separator + 1).trim();
+  }
+  return undefined;
+}
 
 const MEDIA_MIME: Record<string, string> = {
   photo: 'image/jpeg',
@@ -120,6 +170,9 @@ function decorate(conversation: Conversation, store: Store, operations?: Operati
   const source = store.sourceAccount(conversation.source_id);
   return {
     ...conversation,
+    // Версия аватарки для URL: меняется только вместе с самим файлом, поэтому
+    // браузер держит картинку в кэше, сколько бы сообщений ни пришло.
+    avatar_version: avatarKey(conversation.avatar_source_id ?? conversation.source_id, conversation.avatar_file_id),
     source_ids: sourceIds,
     source: source ? { id: source.id, kind: source.kind, name: source.name } : null,
     window: {
@@ -143,6 +196,7 @@ export interface WebDeps {
   bedolaga?: BedolagaClient;
   minishop?: MinishopClient;
   onKbChanged?: () => void;
+  /** Оператор прочитал диалог (POST /read): отметить прочтение во внешнем канале. */
   onOpened?: (conversation: Conversation) => void;
 }
 
@@ -160,7 +214,10 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   const operations = new Operations(store);
   const uploadBatches = new Map<string, { seen: Set<number>; at: number }>();
   const bedolagaExtensionLocks = new Set<string>();
-  const bedolagaExtensionOperations = new Map<string, {
+  // Журнал операций продления живёт в БД, а не в памяти: продление
+  // необратимо, и повтор того же operationId после рестарта процесса не
+  // должен превратиться во второе начисление.
+  type ExtensionOperation = {
     actorKey: string;
     conversationId: number;
     subscriptionId: number;
@@ -168,7 +225,21 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     state: 'pending' | 'confirmed' | 'unknown';
     response?: Record<string, unknown>;
     updatedAt: number;
-  }>();
+  };
+  const EXTENSION_STATE = 'bedolaga:extend-op:';
+  const bedolagaExtensionOperations = {
+    get(operationId: string): ExtensionOperation | undefined {
+      const raw = store.getState(EXTENSION_STATE + operationId);
+      if (!raw) return undefined;
+      try { return JSON.parse(raw) as ExtensionOperation; } catch { return undefined; }
+    },
+    set(operationId: string, value: ExtensionOperation): void {
+      store.setState(EXTENSION_STATE + operationId, JSON.stringify(value));
+    },
+    prune(olderThanMs: number): void {
+      store.pruneState(EXTENSION_STATE, olderThanMs);
+    },
+  };
   const actors = new WeakMap<object, Actor>();
   const actorOf = (request: object): Actor => actors.get(request) ?? operations.rootActor();
 
@@ -224,6 +295,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     const actor = actors.get(request);
     if (!actor) return;
     const path = request.url.split('?')[0] ?? request.url;
+    // Присутствие, удержание и прочтение — фоновые heartbeat'ы панели, а не
+    // действия оператора: раньше они забивали журнал почти целиком.
+    if (/^\/api\/conversations\/\d+\/(?:presence|engage|read)$/.test(path)) return;
     const parts = path.split('/').filter(Boolean);
     operations.audit(actor, `${request.method} ${path}`, parts[1] ?? 'api', parts[2],
       path.endsWith('/attachments') ? undefined : request.body, request.ip);
@@ -244,7 +318,40 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   // Выгрузка приходит сырым телом, её парсим сами.
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer' }, (_req, body, done) => done(null, body));
   await app.register(fastifyWebsocket);
-  await app.register(fastifyStatic, { root: publicDir });
+  // Сжимаем только текст (HTML, CSS, JSON, JS): картинки и видео уже сжаты, а
+  // их типы mime-db помечает несжимаемыми. Brotli на умеренном уровне —
+  // максимальный ощутимо грузит процессор на каждом JSON-ответе.
+  await app.register(fastifyCompress, {
+    global: true,
+    encodings: ['br', 'gzip'],
+    threshold: 1024,
+    brotliOptions: { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } },
+  });
+  // Прочая статика без версии в имени: браузер хранит копию, но каждый раз
+  // перепроверяет её по ETag. Главная страница и стили отдаются ниже.
+  await app.register(fastifyStatic, {
+    root: publicDir,
+    index: false,
+    cacheControl: false,
+    setHeaders: (res) => { res.header('cache-control', 'no-cache'); },
+  });
+
+  const sendPanel = (request: FastifyRequest, reply: FastifyReply) => {
+    reply.header('etag', PANEL_HTML_ETAG).header('cache-control', 'no-cache');
+    if (etagMatches(request.headers['if-none-match'], PANEL_HTML_ETAG)) return reply.code(304).send();
+    return reply.type('text/html; charset=utf-8').send(panelHtml);
+  };
+  app.get('/', async (request, reply) => sendPanel(request, reply));
+  app.get('/index.html', async (request, reply) => sendPanel(request, reply));
+  for (const [name, style] of panelStyles) {
+    const etag = `W/"${style.version}"`;
+    app.get<{ Querystring: { v?: string } }>(`/${name}`, async (request, reply) => {
+      reply.header('etag', etag)
+        .header('cache-control', request.query.v === style.version ? 'public, max-age=31536000, immutable' : 'no-cache');
+      if (etagMatches(request.headers['if-none-match'], etag)) return reply.code(304).send();
+      return reply.type('text/css; charset=utf-8').send(style.body);
+    });
+  }
 
   app.get('/vendor/lottie.min.js', async (_request, reply) => reply
     .header('cache-control', 'public, max-age=31536000, immutable')
@@ -359,7 +466,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
    */
   const ticketSecret = randomBytes(32);
   const makeTicket = (actor: Actor): string => {
-    const until = Date.now() + 10 * 60_000;
+    const until = Date.now() + TICKET_TTL_MS;
     const actorKey = Buffer.from(actor.key).toString('base64url');
     const mac = createHmac('sha256', ticketSecret).update(`${until}.${actorKey}`).digest('base64url').slice(0, 32);
     return `${until}.${actorKey}.${mac}`;
@@ -393,7 +500,12 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return operations.authenticate(token);
   };
 
-  const permissionFor = (method: string, url: string): Permission => {
+  // Чтение, доступное любому оператору с conversation:read. Раньше это было
+  // правилом по умолчанию для всех GET, а любой неописанный POST получал
+  // conversation:status — новый маршрут молча открывался агенту.
+  const CONVERSATION_READ_ROUTES = /^\/api\/(?:conversations(?:\/\d+(?:\/(?:avatar|customer|profile))?)?|inbox\/meta|me|search|attachments\/\d+(?:\/lottie)?|health|ticket)(?:\?|$)/;
+
+  const permissionFor = (method: string, url: string): Permission | undefined => {
     if (url.startsWith('/api/roles')) return 'roles:manage';
     if (url.startsWith('/api/operators')) return method === 'GET' ? 'team:read' : 'operators:manage';
     if (url.startsWith('/api/operator-stats')) return 'operator_stats:read';
@@ -415,6 +527,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (url.startsWith('/api/templates') && method !== 'GET') return 'templates:manage';
     if (url.startsWith('/api/templates')) return 'templates:read';
     if (url.startsWith('/api/suggestions')) return 'conversation:reply';
+    if (url.startsWith('/api/interface-kb')) return method === 'GET' || method === 'HEAD' ? 'knowledge:read' : 'knowledge:manage';
     if (url.startsWith('/api/kb/mine')) return 'knowledge:mine';
     if (method === 'GET' && /^\/api\/kb\/draft(?:\/|\?|$)/.test(url)) return 'knowledge:review';
     if (url.startsWith('/api/kb') && method !== 'GET') return 'knowledge:manage';
@@ -438,9 +551,24 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (url.startsWith('/api/settings/test-alert')) return 'settings:alerts';
     if (url.startsWith('/api/nodes')) return 'settings:nodes';
     if (url === '/api/settings' || url.startsWith('/api/settings?')) return 'settings:read';
-    if (method === 'GET' || method === 'HEAD') return 'conversation:read';
-    return 'conversation:status';
+    if ((method === 'GET' || method === 'HEAD') && CONVERSATION_READ_ROUTES.test(url)) return 'conversation:read';
+    return undefined;
   };
+
+  // Маршрут без правила выше доступен только тому, кто может менять роли.
+  // Ошибка в эту сторону видна сразу (403 у оператора), а не через утечку.
+  const DENY_BY_DEFAULT: Permission = 'roles:manage';
+
+  app.addHook('onRoute', (route) => {
+    if (!route.url.startsWith('/api')) return;
+    const sample = route.url.replace(/:[A-Za-z]+/g, '1');
+    for (const method of [route.method].flat()) {
+      if (method === 'HEAD' || method === 'OPTIONS') continue;
+      if (!permissionFor(method, sample)) {
+        log.warn(`Маршрут ${method} ${route.url} не описан в permissionFor — доступен только с правом ${DENY_BY_DEFAULT}`);
+      }
+    }
+  });
 
   app.addHook('onRequest', async (request, reply) => {
     if (!request.url.startsWith('/api') && !request.url.startsWith('/ws')) return;
@@ -459,11 +587,22 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     // билета НЕ засчитываем в брутфорс-локаут: секрет билетов пересоздаётся
     // при каждом рестарте, и автопереподключение WebSocket со старым билетом —
     // норма, а не подбор. Раньше это запирало вход для всех за общим IP прокси.
-    const readOnlyRoute = request.url.startsWith('/api/attachments/')
+    //
+    // Cookie-билет (выдаётся вместе с билетом в /api/ticket) принимается ТОЛЬКО
+    // на GET/HEAD медиа-маршрутах без побочных эффектов: вложения, lottie и
+    // аватарка. Поэтому CSRF через него невозможен: изменяющие маршруты, API
+    // и WebSocket cookie не читают. Так URL картинок не содержит меняющийся
+    // токен и браузер может держать их в кэше.
+    const safeMethod = request.method === 'GET' || request.method === 'HEAD';
+    const mediaRoute = safeMethod && (
+      /^\/api\/attachments\/\d+(?:\/lottie)?(?:\?|$)/.test(request.url)
       || /^\/api\/conversations\/\d+\/avatar(?:\?|$)/.test(request.url)
-      || request.url.startsWith('/ws');
+      || /^\/api\/interface-kb\/images\//.test(request.url)
+    );
+    const readOnlyRoute = mediaRoute || (safeMethod && /^\/ws(?:\?|$)/.test(request.url));
     if (readOnlyRoute) {
-      const grant = ticketGrant(query);
+      const grant = ticketGrant(query)
+        ?? (mediaRoute ? ticketGrant(cookieValue(request.headers.cookie, MEDIA_COOKIE)) : null);
       if (grant) { actors.set(request, grant.actor); return; }
       const actor = identify(header);
       if (actor) { actors.set(request, actor); return; }
@@ -477,7 +616,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
     noteSuccess(ip);
     actors.set(request, actor);
-    if (!operations.can(actor, permissionFor(request.method, request.url))) {
+    if (!operations.can(actor, permissionFor(request.method, request.url) ?? DENY_BY_DEFAULT)) {
       return reply.code(403).send({ error: 'Недостаточно прав для этого действия' });
     }
   });
@@ -518,12 +657,29 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return { ok: true, folders: store.folders() };
   });
 
-  app.get<{ Params: { id: string } }>('/api/conversations/:id', async (request, reply) => {
+  // GET только читает. Отметка прочтения в Telegram живёт в POST /read: раньше
+  // её дёргала каждая фоновая синхронизация открытого диалога.
+  app.get<{ Params: { id: string }; Querystring: { after?: string } }>('/api/conversations/:id', async (request, reply) => {
     const conversation = store.getConversation(Number(request.params.id));
     if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
 
+    if (request.query.after !== undefined) {
+      // Фоновая синхронизация: только сообщения новее известного клиенту.
+      const after = Number(request.query.after);
+      if (!/^\d{1,15}$/.test(request.query.after) || !Number.isSafeInteger(after)) {
+        return reply.code(400).send({ error: 'Некорректный параметр after' });
+      }
+      const fresh = store.listMessagesAfter(conversation.id, after);
+      return {
+        conversation: decorate(conversation, store, operations),
+        messages: fresh,
+        attachments: store.attachmentsFor(fresh.map((message) => message.id)),
+        suggestion: store.pendingSuggestion(conversation.id) ?? null,
+        after,
+      };
+    }
+
     const messages = store.listMessages(conversation.id);
-    onOpened?.(conversation);
 
     return {
       conversation: decorate(conversation, store, operations),
@@ -564,6 +720,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (!claimed.ok) {
       return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}`, collaboration: operations.collaboration(id) });
     }
+    // В общий журнал engage не пишется (это heartbeat), поэтому захват
+    // диалога, особенно принудительный, фиксируем отдельно.
+    if (claimed.acquired) operations.audit(actor, 'conversation.claim', 'conversations', id, { force }, request.ip);
     operations.presence(id, actor, request.body?.state);
     store.markOperatorActive(id);
     return { ok: true, collaboration: operations.collaboration(id) };
@@ -577,9 +736,29 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return { ok: true, collaboration: operations.collaboration(id) };
   });
 
-  app.get<{ Params: { id: string } }>('/api/conversations/:id/avatar', async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { v?: string } }>('/api/conversations/:id/avatar', async (request, reply) => {
     const conversation = store.getConversation(Number(request.params.id));
-    if (!conversation?.avatar_file_id || !bot) return reply.code(404).send();
+    const key = conversation
+      ? avatarKey(conversation.avatar_source_id ?? conversation.source_id, conversation.avatar_file_id)
+      : null;
+    if (!conversation?.avatar_file_id || !key) return reply.code(404).send();
+    // Ключ — хэш file_id: та же версия означает тот же файл. Только URL с
+    // актуальной версией кэшируется навсегда; без неё — с перепроверкой.
+    const etag = `"av-${key}"`;
+    const cacheControl = request.query.v === key ? IMMUTABLE_PRIVATE : 'private, no-cache';
+    if (etagMatches(request.headers['if-none-match'], etag)) {
+      return reply.code(304).header('etag', etag).header('cache-control', cacheControl).send();
+    }
+    const send = (body: Buffer, mime: string) => reply
+      .header('etag', etag)
+      .header('cache-control', cacheControl)
+      .type(mime)
+      .send(body);
+
+    const cached = await readCachedAvatar(key);
+    const cachedMime = cached ? imageMime(cached, null) : null;
+    if (cached && cachedMime) return send(cached, cachedMime);
+    if (!bot) return reply.code(404).send();
     try {
       const selectedBot = bot instanceof TelegramBotRegistry ? bot.botFor(conversation) : bot;
       const token = bot instanceof TelegramBotRegistry
@@ -595,10 +774,10 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       const body = await readLimitedBody(response, Math.min(config.mediaMaxFileBytes, 5 * 1024 * 1024));
       const mime = imageMime(body, response.headers.get('content-type'));
       if (!mime) return reply.code(502).send();
-      return reply
-        .header('cache-control', 'private, max-age=300')
-        .type(mime)
-        .send(body);
+      // В кэш кладём только то, что прошло проверку типа. Ошибка записи не
+      // мешает показать аватар: в худшем случае скачаем его ещё раз.
+      await saveCachedAvatar(key, body).catch((err) => log.warn('Не удалось сохранить аватар в кэш', err));
+      return send(body, mime);
     } catch (err) {
       log.warn('Не удалось загрузить аватар Telegram', err);
       return reply.code(502).send();
@@ -737,13 +916,16 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     },
   );
 
-  app.post<{ Params: { id: string }; Body: { status?: string; aiMode?: string; escalated?: boolean; handoff?: boolean } }>(
+  app.post<{ Params: { id: string }; Body: { status?: string; aiMode?: string; escalated?: boolean; handoff?: boolean; hidden?: boolean } }>(
     '/api/conversations/:id/state',
     async (request, reply) => {
       const id = Number(request.params.id);
       const before = store.getConversation(id);
       if (!before) return reply.code(404).send({ error: 'Диалог не найден' });
-      const { status, aiMode, escalated, handoff } = request.body ?? {};
+      const { status, aiMode, escalated, handoff, hidden } = request.body ?? {};
+      if (hidden !== undefined && typeof hidden !== 'boolean') {
+        return reply.code(400).send({ error: 'Некорректный флаг скрытия' });
+      }
       if (status && !['open', 'pending', 'resolved'].includes(status)) {
         return reply.code(400).send({ error: 'Неизвестный статус диалога' });
       }
@@ -776,6 +958,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         }
       }
       if (typeof handoff === 'boolean') store.setHandoff(id, handoff ? Date.now() : null);
+      if (hidden === true) {
+        const conversation = store.hideConversation(id);
+        store.logEvent('conversation_hidden', id, { actor: actorOf(request).key });
+        return { ok: true, conversation };
+      }
       if (status) store.setStatus(id, status);
       if (status === 'resolved' && before.status !== 'resolved' && before.status !== 'closed') {
         operations.recordActivity(actorOf(request), 'resolved', id);
@@ -894,9 +1081,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       if (!owned) return reply.code(404).send({ error: 'Подписка этого клиента не найдена' });
 
       const now = Date.now();
-      for (const [key, value] of bedolagaExtensionOperations) {
-        if (now - value.updatedAt > 86_400_000) bedolagaExtensionOperations.delete(key);
-      }
+      bedolagaExtensionOperations.prune(86_400_000);
       const prior = bedolagaExtensionOperations.get(operationId);
       if (prior) {
         const sameOperation = prior.actorKey === actor.key
@@ -1120,6 +1305,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     },
     cursors: { bedolaga: store.getState('bedolaga:last_poll') ?? null, minishop: store.getState('minishop:last_poll') ?? null },
     kb: store.kbCount(),
+    settingOverrides: settingOverrides().filter((item) => !['replyStyle', 'handoffMessage'].includes(item.key)),
   }));
 
   // --- предложения AI --------------------------------------------------
@@ -1175,9 +1361,25 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return { ok: true, resetAt };
   });
 
+  /**
+   * Вложение уже есть в сообщении, но MediaFetcher ещё не положил файл на
+   * диск. 202 + Retry-After отличает «подождите» от «нет такого», и панель
+   * показывает скелетон вместо пустой рамки.
+   */
+  const pendingAttachment = (reply: FastifyReply, attachment: { next_attempt_at?: number | null }) => {
+    const wait = Math.max(1, Math.min(60, Math.ceil(((attachment.next_attempt_at ?? 0) - Date.now()) / 1000)));
+    return reply.code(202).header('retry-after', String(wait)).header('cache-control', 'no-store')
+      .send({ pending: true, retryAfter: wait });
+  };
+
   app.get<{ Params: { id: string } }>('/api/attachments/:id', async (request, reply) => {
     const attachment = store.getAttachment(Number(request.params.id));
-    if (!attachment?.local_path) return reply.code(404).send({ error: 'Вложение ещё не скачано' });
+    if (!attachment) return reply.code(404).send({ error: 'Вложение не найдено' });
+    if (!attachment.local_path) return pendingAttachment(reply, attachment);
+    const etag = `"att-${attachment.id}-${attachment.bytes ?? 0}"`;
+    if (etagMatches(request.headers['if-none-match'], etag)) {
+      return reply.code(304).header('etag', etag).header('cache-control', IMMUTABLE_PRIVATE).send();
+    }
     try {
       const handle = await openMediaFile(attachment.file_ref);
       const mime = attachment.mime_type ?? MEDIA_MIME[attachment.media_type ?? ''] ?? 'application/octet-stream';
@@ -1193,7 +1395,8 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       );
       const safeName = encodeURIComponent(attachment.original_name ?? 'attachment.bin').replace(/'/g, '%27');
       return reply
-        .header('cache-control', 'private, no-store')
+        .header('cache-control', IMMUTABLE_PRIVATE)
+        .header('etag', etag)
         .header('x-content-type-options', 'nosniff')
         .header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${safeName}`)
         .type(inline ? mime : 'application/octet-stream')
@@ -1208,12 +1411,17 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   app.get<{ Params: { id: string } }>('/api/attachments/:id/lottie', async (request, reply) => {
     const attachment = store.getAttachment(Number(request.params.id));
-    if (!attachment?.local_path || attachment.media_type !== 'tgs_sticker') {
-      return reply.code(404).send({ error: 'TGS ещё не скачан' });
+    if (!attachment || attachment.media_type !== 'tgs_sticker') {
+      return reply.code(404).send({ error: 'TGS не найден' });
+    }
+    if (!attachment.local_path) return pendingAttachment(reply, attachment);
+    const etag = `"tgs-${attachment.id}-${attachment.bytes ?? 0}"`;
+    if (etagMatches(request.headers['if-none-match'], etag)) {
+      return reply.code(304).header('etag', etag).header('cache-control', IMMUTABLE_PRIVATE).send();
     }
     try {
       const animation = parseSafeTgs(await readMediaFile(attachment.file_ref));
-      return reply.header('cache-control', 'private, no-store').send(animation);
+      return reply.header('cache-control', IMMUTABLE_PRIVATE).header('etag', etag).send(animation);
     } catch (err) {
       log.warn(`TGS-вложение ${attachment.id} отклонено: ${(err as Error).message}`);
       return reply.code(422).send({ error: 'TGS-анимация повреждена или небезопасна' });
@@ -1360,6 +1568,12 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (!config.ai.apiKeys.length) return reply.code(501).send({ error: 'AI_API_KEY не задан' });
 
     const hits = store.searchKb(text, config.ai.kbLimit);
+    const interfaceHits = activeInterfaceKnowledge(
+      text, runtime.bedolagaInterfaceKb, undefined, effectiveInterfaceMode(runtime.bedolagaInterfaceMode));
+    const sources = [
+      ...hits.map((hit) => hit.title),
+      ...interfaceHits.map((screen) => `Интерфейс Бедолаги: ${screen.title}`),
+    ];
     const started = Date.now();
     try {
       const draft = await tryDraft(text, hits);
@@ -1371,13 +1585,17 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         id: -1, channel: 'tg_dm', escalated: 0, handoff_at: null,
         ai_mode: 'auto', last_inbound_at: Date.now(),
       } as Conversation;
-      const verdict = decide(store, probe, text, draft, hits.length);
+      const grounded = draft.used.filter((n) => n >= 1 && n <= sources.length).length;
+      const verdict = decide(store, probe, text, draft, grounded);
 
       return {
         draft,
         ms: Date.now() - started,
         model: runtime.model,
-        sources: hits.map((hit) => hit.title),
+        sources,
+        usedSources: draft.used
+          .filter((n) => n >= 1 && n <= sources.length)
+          .map((n) => sources[n - 1]),
         verdict,
       };
     } catch (err) {
@@ -1421,7 +1639,14 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return { ok: true };
   });
 
-  app.get('/api/ticket', async (request) => ({ ticket: makeTicket(actorOf(request)) }));
+  // Билет уходит и в cookie: её браузер сам приложит к <img>/<video> на
+  // медиа-маршрутах, и URL картинок перестают меняться при каждой ротации.
+  app.get('/api/ticket', async (request, reply) => {
+    const ticket = makeTicket(actorOf(request));
+    reply.header('set-cookie', `${MEDIA_COOKIE}=${ticket}; Path=/api/; Max-Age=${Math.floor(TICKET_TTL_MS / 1000)}; `
+      + `HttpOnly; SameSite=Strict${request.protocol === 'https' ? '; Secure' : ''}`);
+    return { ticket };
+  });
 
   app.get('/api/settings', async () => ({
     version,
@@ -1568,7 +1793,95 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   app.get('/api/kb', async (request) => ({
     kb: await listDocs('kb'),
     drafts: operations.can(actorOf(request), 'knowledge:review') ? await listDocs('draft') : [],
+    interfaceScreens: loadInterfaceKnowledge(undefined, effectiveInterfaceMode(runtime.bedolagaInterfaceMode))?.screens ?? [],
   }));
+
+  // --- справочник интерфейса Bedolaga ------------------------------------
+
+  const interfaceKbState = () => {
+    const shipped = loadShippedManifest();
+    const overrides = loadInterfaceOverrides();
+    const screensFor = (mode: 'full' | 'lite') => (shipped ? parseInterfaceKnowledge(shipped, mode, overrides)?.screens : null) ?? [];
+    const detected = detectedInterfaceMode();
+    return {
+      enabled: runtime.bedolagaInterfaceKb,
+      setting: runtime.bedolagaInterfaceMode,
+      effectiveMode: effectiveInterfaceMode(runtime.bedolagaInterfaceMode),
+      detected: detected ?? null,
+      modes: INTERFACE_MODES,
+      shipped,
+      overrides,
+      resolved: { full: screensFor('full'), lite: screensFor('lite') },
+    };
+  };
+
+  app.get('/api/interface-kb', async () => interfaceKbState());
+
+  app.put<{ Body: unknown }>('/api/interface-kb/overrides', async (request, reply) => {
+    const body = request.body;
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return reply.code(400).send({ error: 'Ожидался объект с правками' });
+    const overrides = await saveInterfaceOverrides(body);
+    store.logEvent('interface_kb_updated', null, {
+      actor: actorOf(request).key, edited: Object.keys(overrides.screens).length, added: overrides.added.length,
+    });
+    return { ok: true, overrides };
+  });
+
+  // Картинка приходит сырым телом. Тип определяется по сигнатуре, а не по
+  // заголовкам и имени файла; имя на диске выбирает сервер.
+  app.post<{ Body: AsyncIterable<Uint8Array> }>('/api/interface-kb/images', async (request, reply) => {
+    const declared = Number(request.headers['content-length']);
+    if (Number.isFinite(declared) && declared > MAX_INTERFACE_IMAGE_BYTES) {
+      return reply.code(413).send({ error: 'Картинка больше 8 МБ' });
+    }
+    const chunks: Buffer[] = [];
+    let total = 0;
+    for await (const raw of request.body) {
+      const chunk = Buffer.from(raw);
+      total += chunk.byteLength;
+      if (total > MAX_INTERFACE_IMAGE_BYTES) return reply.code(413).send({ error: 'Картинка больше 8 МБ' });
+      chunks.push(chunk);
+    }
+    const bytes = Buffer.concat(chunks);
+    if (!bytes.length) return reply.code(400).send({ error: 'Пустой файл' });
+    const mime = inspectUpload(bytes.subarray(0, 512), '', '').mimeType;
+    const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' } as const)[mime as 'image/png'];
+    if (!ext) return reply.code(400).send({ error: 'Нужна картинка PNG, JPEG или WebP' });
+    try {
+      return { image: await saveInterfaceImage(bytes, ext) };
+    } catch (err) {
+      return reply.code(507).send({ error: (err as Error).message });
+    }
+  });
+
+  app.get<{ Params: { '*': string } }>('/api/interface-kb/images/*', async (request, reply) => {
+    // Cookie-билет проходит onRequest без проверки прав, поэтому право читать
+    // справочник проверяем здесь.
+    if (!operations.can(actorOf(request), 'knowledge:read')) {
+      return reply.code(403).send({ error: 'Недостаточно прав для этого действия' });
+    }
+    const image = request.params['*'];
+    const segments = image.split('/');
+    if (!/^[A-Za-z0-9._\/-]{1,240}$/.test(image) || segments.some((part) => !part || part === '.' || part === '..')) {
+      return reply.code(404).send({ error: 'Картинка не найдена' });
+    }
+    const bytes = await readInterfaceImage(image);
+    const mime = bytes ? inspectUpload(bytes.subarray(0, 512), '', '').mimeType : '';
+    if (!bytes || !/^image\/(?:png|jpeg|webp)$/.test(mime)) return reply.code(404).send({ error: 'Картинка не найдена' });
+    const local = image.startsWith('local/');
+    const etag = `"ikb-${createHash('sha1').update(bytes).digest('hex').slice(0, 20)}"`;
+    const cache = local ? IMMUTABLE_PRIVATE : 'private, no-cache';
+    if (etagMatches(request.headers['if-none-match'], etag)) {
+      return reply.code(304).header('etag', etag).header('cache-control', cache).send();
+    }
+    return reply
+      .header('cache-control', cache)
+      .header('etag', etag)
+      .header('x-content-type-options', 'nosniff')
+      .header('content-disposition', 'inline')
+      .type(mime)
+      .send(bytes);
+  });
 
   app.get<{ Params: { area: string; name: string } }>('/api/kb/:area/:name', async (request, reply) => {
     const area = request.params.area === 'draft' ? 'draft' : 'kb';
@@ -1802,6 +2115,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       conversation: decorate(conversation, store, operations),
       message,
     }),
+  );
+  store.on('conversation_deleted', (conversation) =>
+    broadcast({ type: 'conversation_deleted', conversation }),
   );
   store.on('conversation', (conversation) =>
     broadcast({ type: 'conversation', conversation: decorate(conversation, store, operations) }),

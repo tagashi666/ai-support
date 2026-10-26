@@ -39,6 +39,7 @@ export interface Conversation {
   claimed_at: number | null;
   customer_profile_id: number | null;
   unread: number;
+  hidden_at: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -186,6 +187,7 @@ export type StoreEvents = {
   message: [{ conversation: Conversation; message: Message; backfill: boolean }];
   message_updated: [{ conversation: Conversation; message: Message }];
   message_deleted: [{ conversation: Conversation; message: Message }];
+  conversation_deleted: [Conversation];
   suggestion: [{ conversation: Conversation; suggestion: Suggestion }];
   conversation: [Conversation];
 };
@@ -219,6 +221,8 @@ export class Store extends EventEmitter<StoreEvents> {
     return this.db
       .prepare(
         `SELECT * FROM conversation
+          WHERE hidden_at IS NULL
+            AND EXISTS (SELECT 1 FROM message WHERE message.conversation_id = conversation.id)
           ORDER BY suspicious DESC, escalated DESC, COALESCE(last_message_at, created_at) DESC
           LIMIT ?`,
       )
@@ -241,6 +245,23 @@ export class Store extends EventEmitter<StoreEvents> {
       .prepare('SELECT * FROM message WHERE conversation_id = ? ORDER BY id DESC LIMIT ?')
       .all(conversationId, limit)
       .reverse() as Message[];
+  }
+
+  /** Только сообщения новее известного клиенту: фоновой синхронизации не нужна вся история. */
+  listMessagesAfter(conversationId: number, afterId: number, limit = 200): Message[] {
+    return this.db
+      .prepare('SELECT * FROM message WHERE conversation_id = ? AND id > ? ORDER BY id LIMIT ?')
+      .all(conversationId, afterId, limit) as Message[];
+  }
+
+  /** Скрывает карточку, не удаляя историю. Новое входящее вернёт её само. */
+  hideConversation(conversationId: number): Conversation | undefined {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return undefined;
+    this.db.prepare('UPDATE conversation SET hidden_at = ?, updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
+      .run(Date.now(), Date.now(), conversationId);
+    this.emit('conversation_deleted', conversation);
+    return this.getConversation(conversationId);
   }
 
   /**
@@ -401,10 +422,11 @@ export class Store extends EventEmitter<StoreEvents> {
                 resolved_at     = CASE WHEN ? = 1 THEN resolved_at ELSE NULL END,
                 status          = CASE WHEN ? = 1 THEN status
                                        ELSE 'open' END,
+                hidden_at       = CASE WHEN ? = 1 THEN hidden_at ELSE NULL END,
                 updated_at      = ?
           WHERE id = ?`,
       )
-      .run(input.sentAt, input.sentAt, input.sentAt, backfill, backfill, backfill, Date.now(), conversation.id);
+      .run(input.sentAt, input.sentAt, input.sentAt, backfill, backfill, backfill, backfill, Date.now(), conversation.id);
 
     // Клиент написал снова — незакрытая предложка устарела.
     if (!backfill) {
@@ -743,32 +765,47 @@ export class Store extends EventEmitter<StoreEvents> {
    * Нижняя граница по возрасту обязательна: без неё первая же синхронизация
    * архива тикетов выдала бы пачку уведомлений о переписке месячной давности.
    */
-  overdueConversations(minutes: number, maxAgeHours = 24): Conversation[] {
+  /**
+   * Срок первого ответа берётся из sla_policy по приоритету диалога — той же
+   * таблицы, что показывает экран SLA. Раньше уведомления жили по отдельному
+   * глобальному сроку и расходились с очередью. `overrideMinutes` — для тестов.
+   */
+  overdueConversations(maxAgeHours = 24, overrideMinutes?: number): Conversation[] {
     const now = Date.now();
-    const cutoff = now - minutes * 60_000;
     const floor = now - maxAgeHours * 3_600_000;
     // Два повода ждать: клиенту вообще не отвечали, либо AI передал вопрос
     // человеку, а человек ещё не ответил. Второй случай без этого запроса
     // был невидим: «ожидайте» от AI закрывало первый ответ.
     return this.db
       .prepare(
-        `SELECT * FROM conversation
-          WHERE status NOT IN ('closed','resolved')
+        `SELECT c.* FROM conversation c
+           LEFT JOIN sla_policy p ON p.priority = c.priority
+          WHERE c.status NOT IN ('closed','resolved')
             AND (
-              (first_response_at IS NULL AND last_inbound_at IS NOT NULL
-                 AND COALESCE(first_inbound_at, last_inbound_at) < ?
-                 AND COALESCE(first_inbound_at, last_inbound_at) > ?)
+              (c.first_response_at IS NULL AND c.last_inbound_at IS NOT NULL
+                 AND COALESCE(c.first_inbound_at, c.last_inbound_at) < :now - COALESCE(:override, p.first_response_minutes, 60) * 60000
+                 AND COALESCE(c.first_inbound_at, c.last_inbound_at) > :floor)
               OR
-              (handoff_at IS NOT NULL AND handoff_at < ? AND handoff_at > ?
+              (c.handoff_at IS NOT NULL
+                 AND c.handoff_at < :now - COALESCE(:override, p.first_response_minutes, 60) * 60000
+                 AND c.handoff_at > :floor
                  AND NOT EXISTS (
                    SELECT 1 FROM message
-                    WHERE message.conversation_id = conversation.id
+                    WHERE message.conversation_id = c.id
                       AND message.author = 'agent' AND message.direction = 'out'
-                      AND message.created_at > conversation.handoff_at))
+                      AND message.created_at > c.handoff_at))
             )
-          ORDER BY COALESCE(handoff_at, last_inbound_at) ASC`,
+          ORDER BY COALESCE(c.handoff_at, c.last_inbound_at) ASC`,
       )
-      .all(cutoff, floor, cutoff, floor) as Conversation[];
+      .all({ now, floor, override: overrideMinutes ?? null }) as Conversation[];
+  }
+
+  /** Однократно переносит прежний глобальный срок в политику «normal». */
+  seedSlaFirstResponse(minutes: number): void {
+    const key = 'sla:policy-seeded';
+    if (this.getState(key)) return;
+    this.db.prepare(`UPDATE sla_policy SET first_response_minutes = ? WHERE priority = 'normal'`).run(minutes);
+    this.setState(key, String(Date.now()));
   }
 
   // --- предложения AI --------------------------------------------------
@@ -1090,6 +1127,8 @@ export class Store extends EventEmitter<StoreEvents> {
       `SELECT * FROM message WHERE conversation_id = ? AND external_msg_id IN (${placeholders})`,
     ).all(conversationId, ...ids) as Message[];
     if (!messages.length) return 0;
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return 0;
     const unread = Number((this.db.prepare('SELECT unread FROM conversation WHERE id = ?').get(conversationId) as { unread: number } | undefined)?.unread ?? 0);
     const unreadIds = unread > 0
       ? new Set((this.db.prepare(`
@@ -1099,6 +1138,7 @@ export class Store extends EventEmitter<StoreEvents> {
         `).all(conversationId, unread) as Array<{ id: number }>).map((row) => row.id))
       : new Set<number>();
     const deletedUnread = messages.filter((message) => unreadIds.has(message.id)).length;
+    let conversationDeleted = false;
     this.db.transaction(() => {
       this.db.prepare(`DELETE FROM message WHERE id IN (${messages.map(() => '?').join(',')})`)
         .run(...messages.map((message) => message.id));
@@ -1119,9 +1159,15 @@ export class Store extends EventEmitter<StoreEvents> {
       ).run(conversationId, conversationId, conversationId,
         conversationId, conversationId, conversationId,
         deletedUnread, Date.now(), conversationId);
+      const remaining = this.db.prepare('SELECT 1 FROM message WHERE conversation_id = ? LIMIT 1')
+        .get(conversationId);
+      if (!remaining) {
+        this.db.prepare('DELETE FROM conversation WHERE id = ?').run(conversationId);
+        conversationDeleted = true;
+      }
     })();
-    const conversation = this.getConversation(conversationId)!;
     for (const message of messages) this.emit('message_deleted', { conversation, message });
+    if (conversationDeleted) this.emit('conversation_deleted', conversation);
     return messages.length;
   }
 
@@ -1170,12 +1216,12 @@ export class Store extends EventEmitter<StoreEvents> {
   }
 
   getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null; file_ref: string;
-    original_name: string | null; mime_type: string | null; bytes: number | null } | undefined {
+    original_name: string | null; mime_type: string | null; bytes: number | null; next_attempt_at: number } | undefined {
     return this.db.prepare(
-      'SELECT id, local_path, media_type, file_ref, original_name, mime_type, bytes FROM attachment WHERE id = ?',
+      'SELECT id, local_path, media_type, file_ref, original_name, mime_type, bytes, next_attempt_at FROM attachment WHERE id = ?',
     ).get(id) as
       | { id: number; local_path: string | null; media_type: string | null; file_ref: string;
-          original_name: string | null; mime_type: string | null; bytes: number | null }
+          original_name: string | null; mime_type: string | null; bytes: number | null; next_attempt_at: number }
       | undefined;
   }
 
@@ -1392,6 +1438,13 @@ export class Store extends EventEmitter<StoreEvents> {
   getState(key: string): string | undefined {
     return (this.db.prepare('SELECT value FROM poll_state WHERE key = ?').get(key) as { value: string } | undefined)
       ?.value;
+  }
+
+  /** Удаляет ключи с префиксом, не обновлявшиеся дольше `olderThanMs`. */
+  pruneState(prefix: string, olderThanMs: number): void {
+    this.db
+      .prepare(`DELETE FROM poll_state WHERE key LIKE ? ESCAPE '\\' AND updated_at < ?`)
+      .run(prefix.replace(/[\\%_]/g, (c) => `\\${c}`) + '%', Date.now() - olderThanMs);
   }
 
   setState(key: string, value: string): void {

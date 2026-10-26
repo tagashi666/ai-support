@@ -249,35 +249,45 @@ export class RemnawaveClient {
     }
   }
 
+  /**
+   * Кого касается действие с устройствами. По контракту панели
+   * (libs/contract/commands/hwid) в v3 это числовой userId, в v2 — userUuid;
+   * ref у нас тот, что вернула сама панель, поэтому форма однозначна.
+   */
+  private userBody(userRef: string): Record<string, unknown> {
+    return /^\d+$/.test(userRef) ? { userId: Number(userRef) } : { userUuid: userRef };
+  }
+
+  // Удаление в Remnawave — это POST на .../delete, а не HTTP DELETE:
+  // на DELETE панель отвечает 404, и кнопки молча не работали.
   async deleteDevice(userRef: string, hwid: string): Promise<boolean> {
     this.assertWritable('удаление устройства');
-    const found = await this.firstWorking(
-      [`/api/hwid/devices`, `/api/hwid/devices/${encodeURIComponent(userRef)}/${encodeURIComponent(hwid)}`],
-      { method: 'DELETE', body: JSON.stringify({ userId: userRef, userUuid: userRef, hwid }) },
-    );
-    return !!found && found.status < 400;
+    const result = await this.call('/api/hwid/devices/delete', {
+      method: 'POST',
+      body: JSON.stringify({ ...this.userBody(userRef), hwid }),
+    });
+    return result.status < 400;
   }
 
   async resetDevices(userRef: string): Promise<boolean> {
     this.assertWritable('сброс устройств');
-    const found = await this.firstWorking(
-      [
-        `/api/hwid/devices/${encodeURIComponent(userRef)}`,
-        `/api/hwid/devices/delete-all/${encodeURIComponent(userRef)}`,
-      ],
-      { method: 'DELETE' },
-    );
-    return !!found && found.status < 400;
+    const result = await this.call('/api/hwid/devices/delete-all', {
+      method: 'POST',
+      body: JSON.stringify(this.userBody(userRef)),
+    });
+    return result.status < 400;
   }
 
   async revoke(userRef: string): Promise<boolean> {
     this.assertWritable('перевыпуск подписки');
+    // Пустое JSON-тело с content-type application/json панель может
+    // отвергнуть как некорректное, поэтому шлём явный {}.
     const found = await this.firstWorking(
       [
         `/api/users/${encodeURIComponent(userRef)}/actions/revoke`,
         `/api/users/revoke/${encodeURIComponent(userRef)}`,
       ],
-      { method: 'POST' },
+      { method: 'POST', body: '{}' },
     );
     return !!found && found.status < 400;
   }

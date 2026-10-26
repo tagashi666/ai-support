@@ -4,7 +4,7 @@ import type { Notifier } from './notify.js';
 import type { Store } from './store.js';
 
 /**
- * Следит за первым ответом. Уведомление уходит один раз на диалог —
+ * Следит за первым ответом по срокам sla_policy (по приоритету диалога). Уведомление уходит один раз на диалог —
  * повторные пинги про один и тот же тикет быстро учат их игнорировать.
  */
 export class SlaWatcher {
@@ -16,6 +16,9 @@ export class SlaWatcher {
   ) {}
 
   start(): void {
+    // Срок из настроек и .env раньше жил отдельно от sla_policy. Переносим
+    // его один раз, чтобы уведомления после обновления приходили как прежде.
+    this.store.seedSlaFirstResponse(runtime.slaFirstResponseMinutes);
     this.timer = setInterval(() => void this.check(), config.sla.checkSeconds * 1000);
   }
 
@@ -24,7 +27,7 @@ export class SlaWatcher {
   }
 
   async check(): Promise<number> {
-    const overdue = this.store.overdueConversations(runtime.slaFirstResponseMinutes, config.sla.maxAgeHours);
+    const overdue = this.store.overdueConversations(config.sla.maxAgeHours);
     let alerted = 0;
     let attempted = 0;
 

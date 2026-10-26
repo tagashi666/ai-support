@@ -36,6 +36,12 @@ export interface MinishopTicket {
   user?: MinishopUser;
 }
 
+/** Без отметок времени изменение не распознать — тогда тикет читается всегда. */
+function ticketFingerprint(ticket: MinishopTicket): string | undefined {
+  if (!ticket.updated_at && !ticket.last_message_at) return undefined;
+  return [ticket.status, ticket.priority, ticket.updated_at, ticket.last_message_at, ticket.last_message_role].join('|');
+}
+
 export interface MinishopMessage {
   message_id: number;
   ticket_id: number;
@@ -278,6 +284,10 @@ export class MinishopSender implements ChannelSender {
 export class MinishopPoller {
   private timer: NodeJS.Timeout | undefined;
   private running = false;
+  // Отпечаток тикета из списка на момент последней удачной обработки.
+  // Если он не изменился, деталь не запрашиваем: раньше каждый активный
+  // тикет стоил отдельного GET каждые 30 секунд.
+  private readonly seen = new Map<number, string>();
 
   constructor(
     private readonly client: MinishopClient,
@@ -303,8 +313,11 @@ export class MinishopPoller {
     try {
       const tickets = await this.client.activeTickets();
       for (const summary of tickets) {
+        const fingerprint = ticketFingerprint(summary);
+        if (fingerprint && this.seen.get(summary.ticket_id) === fingerprint) continue;
         try {
           ingested += await this.ingestTicket(summary.ticket_id, false, baselineReady);
+          if (fingerprint) this.seen.set(summary.ticket_id, fingerprint);
         } catch (err) {
           log.error(`MiniShop: тикет ${summary.ticket_id} не удалось обработать`, err);
         }

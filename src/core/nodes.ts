@@ -117,19 +117,26 @@ export class NodeWatch {
       const state = node.disabled ? 'выключен администратором'
         : node.online ? 'работает'
         : 'недоступен';
-      const users = node.usersOnline !== undefined ? `, подключено ${node.usersOnline}` : '';
-      return `- ${label}: ${state}${users}`;
+      // Число подключённых — внутренняя статистика: модели оно не нужно,
+      // а в ответе клиенту ему не место.
+      return `- ${label}: ${state}`;
     });
 
-    const down = nodes.filter((n) => !n.online).length;
-    const summary = down
-      ? `Недоступных узлов: ${down} из ${nodes.length}.`
-      : 'Все узлы работают.';
+    // Выключенный администратором узел — плановое состояние, не авария.
+    // Раньше он шёл в «недоступных», и модель могла сказать клиенту о сбое.
+    const enabled = nodes.filter((n) => !n.disabled);
+    const down = enabled.filter((n) => !n.online).length;
+    const disabled = nodes.length - enabled.length;
+    const summary = [
+      down ? `Недоступных узлов: ${down} из ${enabled.length}.` : 'Все включённые узлы работают.',
+      disabled ? `Выключены администратором (плановое, не авария): ${disabled}.` : '',
+    ].filter(Boolean).join(' ');
 
     return [
       `Состояние серверов на ${new Date(at).toLocaleString('ru-RU')} (${summary})`,
       ...lines,
       'Об узлах, которых нет в этом списке, сведений у тебя нет — так и говори.',
+      'Этот список — внутренняя информация. Не перечисляй клиенту серверы и не пересказывай список; отвечай только про сервер или страну, о которых спросил сам клиент.',
     ].join('\n');
   }
 }

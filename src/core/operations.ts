@@ -40,7 +40,8 @@ export const PERMISSION_CATALOG = [
   { id: 'settings:ai_tools', group: 'Система', label: 'Проверять модели и ключи AI' },
   ...Object.entries({
     aiMode: 'Режим AI по умолчанию', requireKb: 'Ответы только по базе знаний',
-    autoLearn: 'Обучение на закрытых диалогах', minConfidence: 'Порог уверенности AI',
+    autoLearn: 'Обучение на закрытых диалогах',
+    bedolagaInterfaceKb: 'База знаний интерфейса Бедолаги', bedolagaInterfaceMode: 'Вид кабинета для справочника интерфейса', minConfidence: 'Порог уверенности AI',
     autoPerHour: 'Лимит автоответов в час', humanHoldMinutes: 'Пауза после ответа оператора',
     maxAgeMinutes: 'Максимальный возраст сообщения', slaFirstResponseMinutes: 'Срок первого ответа',
     handoffRepeatMinutes: 'Частота напоминания об операторе', notifyLevel: 'Подробность уведомлений',
@@ -240,7 +241,8 @@ export class Operations {
       .run(active ? 1 : 0, Date.now(), id).changes > 0;
   }
 
-  claim(conversationId: number, actor: Actor, force = false): { ok: boolean; owner?: string; until?: number } {
+  /** `acquired` — диалог перешёл к этому оператору, а не продлена его же аренда. */
+  claim(conversationId: number, actor: Actor, force = false): { ok: boolean; owner?: string; until?: number; acquired?: boolean } {
     const now = Date.now();
     const leaseMs = 15 * 60_000;
     const row = this.db.prepare(`SELECT assignee, claimed_at FROM conversation WHERE id = ?`).get(conversationId) as
@@ -256,7 +258,7 @@ export class Operations {
        WHERE id = ?
     `).run(actor.key, actor.id, now, now, now, conversationId);
     this.presence(conversationId, actor, 'viewing');
-    return { ok: true, owner: actor.name, until: now + leaseMs };
+    return { ok: true, owner: actor.name, until: now + leaseMs, acquired: !(live && row.assignee === actor.key) };
   }
 
   release(conversationId: number, actor: Actor, force = false): boolean {

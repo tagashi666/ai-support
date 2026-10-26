@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 
 /**
  * Читает .env, если он есть рядом. Уже заданные переменные окружения не
@@ -151,6 +152,9 @@ export const config = {
 
   dbPath: env('DB_PATH', './data/ai-support.db'),
   mediaDir: env('MEDIA_DIR', './data/media'),
+  // Кэш аватарок Telegram рядом с вложениями: без него каждый показ списка
+  // ходил в getFile и скачивал файл заново.
+  avatarDir: env('AVATAR_DIR', join(dirname(env('MEDIA_DIR', './data/media')), 'avatars')),
   // Ограничения защищают память и диск от бесконечного потока вложений.
   mediaMaxFileBytes: megabytes('MEDIA_MAX_FILE_MB', 45),
   mediaMaxTotalBytes: megabytes('MEDIA_MAX_TOTAL_MB', 1024),
@@ -256,7 +260,7 @@ export const config = {
     autoPerHour: num('AI_AUTO_PER_HOUR', 12),
     humanHoldMinutes: num('AI_HUMAN_HOLD_MINUTES', 30),
     kbLimit: num('AI_KB_LIMIT', 5),
-    kbChars: num('AI_KB_CHARS', 1200),
+    kbChars: num('AI_KB_CHARS', 4200),
     // Потолок содержимого одного запроса при майнинге. Считается против TPM
     // провайдера: у Groq на qwen это 8K токенов в минуту, и один жирный
     // запрос упирается в лимит целиком.

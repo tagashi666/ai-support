@@ -737,6 +737,7 @@ tr:last-child td { border-bottom:0; }
               <label class="compact-field ai-field"><span>AI</span><select class="ctl" id="aiSel"><option value="inherit">Как в настройках</option><option value="off">Выключен</option><option value="shadow">Тень</option><option value="suggest">Предлагает</option><option value="auto">Отвечает сам</option></select></label>
               <button class="btn toolbar-btn" id="escBtn">Важное</button>
               <button class="btn toolbar-btn handoff-btn" id="handoffBtn">Взять диалог</button>
+              <button class="btn toolbar-btn" id="hideConversationBtn" title="Скрыть из входящих, сохранив историю">Скрыть</button>
               <button class="icon-btn inspector-toggle" id="contextToggle" title="Открыть детали обращения" aria-label="Открыть детали обращения" aria-expanded="false">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16M8 9h3M8 13h3"/></svg>
               </button>
@@ -783,6 +784,7 @@ tr:last-child td { border-bottom:0; }
           <span class="pane-label">Коллекции</span>
           <div class="section-tabs" id="kbTabs">
             <button data-tab="kb" aria-pressed="true"><span>Опубликовано</span><small>Используется AI</small></button>
+            <button data-tab="interface" aria-pressed="false"><span>Интерфейс Бедолаги</span><small id="ifaceTabNote">Проверенные инструкции</small></button>
             <button data-tab="draft" aria-pressed="false"><span>Черновики</span><small>Требуют редакции</small></button>
             <button data-tab="learning" aria-pressed="false"><span>На проверке</span><small>Кандидаты из диалогов</small></button>
           </div>
@@ -956,35 +958,90 @@ async function mutate(path, options, okText) {
   return null;
 }
 
-// Билет для вложений и WebSocket: сам токен панели в адресную строку не
-// попадает — оттуда он утекает в историю браузера и в логи nginx.
+// Билет для WebSocket: сам токен панели в адресную строку не попадает —
+// оттуда он утекает в историю браузера и в логи nginx. Вместе с билетом
+// сервер ставит HttpOnly-cookie: её браузер прикладывает к картинкам,
+// видео и аватаркам, поэтому их URL не меняются и живут в кэше браузера.
 let ticket = '';
+let ticketPromise = null;
 async function refreshTicket() {
-  const data = await json('/api/ticket');
-  if (data?.ticket) {
-    ticket = data.ticket;
-    refreshMediaTicketUrls();
-  }
-  return ticket;
+  if (ticketPromise) return ticketPromise;
+  ticketPromise = (async () => {
+    const data = await json('/api/ticket');
+    if (data?.ticket) {
+      ticket = data.ticket;
+      refreshMediaTicketUrls();
+    }
+    return ticket;
+  })();
+  try { return await ticketPromise; }
+  finally { ticketPromise = null; }
 }
 
-const attachmentUrl = (id, suffix = '') => `/api/attachments/${id}${suffix}?token=${encodeURIComponent(ticket)}`;
+const attachmentUrl = (id, suffix = '') => `/api/attachments/${id}${suffix}`;
 
-/** Обновляет ещё не загруженные lazy-media и ссылки после ротации билета. */
+/** Повторяет загрузку медиа, которое не смогло загрузиться до обновления билета. */
 function refreshMediaTicketUrls() {
   for (const node of document.querySelectorAll('[data-attachment-id]')) {
-    const id = node.dataset.attachmentId;
-    const suffix = node.dataset.attachmentSuffix ?? '';
-    const url = attachmentUrl(id, suffix);
-    if (node instanceof HTMLAnchorElement) node.href = url;
-    else if (node instanceof HTMLImageElement && (!node.complete || !node.naturalWidth)) node.src = url;
-    else if (node instanceof HTMLVideoElement && node.error) node.src = url;
+    if (node instanceof HTMLImageElement && node.complete && !node.naturalWidth && node.dataset.mediaFailed) {
+      delete node.dataset.mediaFailed;
+      reloadMedia(node);
+    } else if (node instanceof HTMLVideoElement && node.error) reloadMedia(node);
   }
+}
+
+/** Тот же URL заново: 202/401 сервер отдаёт с no-store, кэш их не держит. */
+function reloadMedia(node) {
+  const url = node.getAttribute('src');
+  if (!url) return;
+  node.removeAttribute('src');
+  node.src = url;
+  if (node instanceof HTMLVideoElement) node.load();
+}
+
+/**
+ * Почему медиа не загрузилось. <img> статус не видит, поэтому спрашиваем
+ * HEAD: 202 — файл ещё качается (ждём Retry-After), 401 — истёк билет,
+ * остальные 4xx — ждать нечего. Возвращает паузу до повтора или null.
+ */
+async function mediaRetryDelay(url, attempt) {
+  if (attempt > 15) return null;
+  let status = 0, retryAfter = 0;
+  try {
+    const response = await fetch(url, { method:'HEAD', cache:'no-store' });
+    status = response.status;
+    retryAfter = Number(response.headers.get('retry-after')) || 0;
+  } catch { /* сеть — повторим с паузой */ }
+  if (status === 202) return Math.min(60, Math.max(1, retryAfter || 1)) * 1000;
+  if (status === 401) { await refreshTicket(); return attempt > 3 ? null : 300; }
+  if (status >= 400 && status < 500) return null;
+  if (status >= 200 && status < 300) return attempt > 2 ? null : 1500;
+  return Math.min(1500 * attempt, 15_000);
+}
+
+/** Картинка вложения: скелетон, пока файл качается, и повторы по статусу. */
+function loadAttachmentImage(img, box, url) {
+  let attempts = 0;
+  box.classList.add('media-pending');
+  img.onload = () => { img.classList.add('ready'); box.classList.remove('media-pending'); };
+  img.onerror = async () => {
+    if (!box.isConnected) return;
+    const wait = await mediaRetryDelay(url, ++attempts);
+    if (!box.isConnected) return;
+    if (wait === null) {
+      box.replaceWith(Object.assign(document.createElement('div'),
+        { className:'mono', textContent:'[файл не удалось загрузить]' }));
+      return;
+    }
+    img.dataset.mediaFailed = '1';
+    setTimeout(() => { if (box.isConnected) { delete img.dataset.mediaFailed; reloadMedia(img); } }, wait);
+  };
+  img.src = url;
 }
 
 let conversations = [], current = null, suggestion = null, filter = 'all', listQuery = '', templates = [], settings = null;
 let inboxSources = [], inboxFolders = [];
-let kbTab = 'kb', docs = { kb: [], drafts: [], candidates: [] }, quoting = null, currentActor = null;
+let kbTab = 'kb', docs = { kb: [], drafts: [], interfaceScreens: [], candidates: [] }, quoting = null, currentActor = null;
 let pendingFiles = [], uploadRunning = false;
 const canPermission = (permission) => Boolean(currentActor?.root || currentActor?.permissions?.includes(permission));
 const canWrite = () => canPermission('conversation:reply');
@@ -1452,9 +1509,12 @@ const conversationStatus = (value) => CONVERSATION_STATUS[value] ?? 'Неизв�
 const gb = (b) => b == null ? '—' : `${(b / 1073741824).toFixed(1)} ГБ`;
 const initials = (value) => value.replace(/^@/, '').trim().split(/\s+/).slice(0, 2)
   .map((part) => Array.from(part)[0] ?? '').join('').toUpperCase() || '•';
+// Версия — хэш file_id аватарки с сервера: URL меняется только вместе с
+// картинкой, а не на каждое сообщение или новый билет.
+const avatarUrl = (c) => `/api/conversations/${Number(c.id)}/avatar?v=${encodeURIComponent(c.avatar_version ?? c.avatar_file_id ?? '')}`;
 const avatarMarkup = (c, className, unread = false, id = '') => `<span class="avatar-frame ${className}"${id ? ` id="${id}"` : ''} aria-hidden="true">
   <span class="avatar-initials">${esc(initials(nameOf(c)))}</span>
-  ${c.avatar_file_id ? `<img class="avatar-photo" src="/api/conversations/${Number(c.id)}/avatar?token=${encodeURIComponent(ticket)}&v=${encodeURIComponent(c.updated_at ?? c.avatar_file_id)}" alt="" width="38" height="38" loading="lazy" decoding="async" draggable="false">` : ''}
+  ${c.avatar_file_id ? `<img class="avatar-photo" src="${avatarUrl(c)}" data-avatar-key="${esc(avatarUrl(c))}" alt="" width="38" height="38" loading="lazy" decoding="async" draggable="false">` : ''}
   ${unread ? '<span class="dot"></span>' : ''}</span>`;
 
 /** Краткий сетевой сбой не должен навсегда удалять аватар из интерфейса. */
@@ -1464,18 +1524,19 @@ function armAvatars(root = document) {
     if (image.dataset.retryArmed) continue;
     image.dataset.retryArmed = '1';
     image.addEventListener('load', () => { image.hidden = false; image.dataset.retry = '0'; });
-    image.addEventListener('error', () => {
+    image.addEventListener('error', async () => {
       image.hidden = true;
       const attempt = Number(image.dataset.retry ?? 0) + 1;
       image.dataset.retry = String(attempt);
       if (attempt > 6) return;
+      const url = image.getAttribute('src');
+      const wait = url ? await mediaRetryDelay(url, attempt) : null;
+      if (wait === null) return;
       setTimeout(() => {
         if (!image.isConnected) return;
-        const src = new URL(image.src, location.href);
-        src.searchParams.set('retry', String(Date.now()));
         image.hidden = false;
-        image.src = src.toString();
-      }, Math.min(5000 * attempt, 30_000));
+        reloadMedia(image);
+      }, Math.max(wait, 1000 * attempt));
     });
   }
 }
@@ -1540,6 +1601,12 @@ function renderList(force = false) {
   $('cntInbox').textContent = waiting || conversations.length;
   renderBoard();
   if (!items.length) { box.replaceChildren(Object.assign(document.createElement('p'), { className:'empty', textContent:listQuery ? 'Ничего не найдено.' : 'Здесь пока пусто.' })); return; }
+  // Уже загруженные аватарки переносим в новые строки как есть: новый <img>
+  // на каждое событие давал мигание даже при попадании в кэш.
+  const loadedAvatars = new Map();
+  for (const image of box.querySelectorAll('img.avatar-photo[data-avatar-key]')) {
+    if (image.complete && image.naturalWidth) loadedAvatars.set(image.dataset.avatarKey, image);
+  }
   for (const c of items) {
     const row = document.createElement('div');
     row.className = 'row'; row.tabIndex = 0; row.dataset.id = String(c.id);
@@ -1560,6 +1627,9 @@ function renderList(force = false) {
           ${c.ai_mode === 'auto' ? '<span class="chip ai">AI авто</span>' : ''}
           ${c.ai_mode === 'shadow' ? '<span class="chip ai">AI тень</span>' : ''}</div>
       </div>`;
+    const freshAvatar = row.querySelector('img.avatar-photo[data-avatar-key]');
+    const keptAvatar = freshAvatar && loadedAvatars.get(freshAvatar.dataset.avatarKey);
+    if (keptAvatar) { loadedAvatars.delete(freshAvatar.dataset.avatarKey); freshAvatar.replaceWith(keptAvatar); }
     row.onclick = () => open(c.id);
     row.onkeydown = (e) => {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(c.id); }
@@ -1692,10 +1762,12 @@ async function renderTgsSticker(box, attachmentId) {
     let animationData = null;
     for (let attempt = 0; attempt < 12 && box.isConnected; attempt += 1) {
       const response = await fetch(attachmentUrl(attachmentId, '/lottie'));
-      if (response.ok) { animationData = await response.json(); break; }
+      if (response.status === 200) { animationData = await response.json(); break; }
       if (response.status === 401) await refreshTicket();
-      if (![401, 404].includes(response.status)) throw new Error(`TGS: HTTP ${response.status}`);
-      await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, 750 * (attempt + 1))));
+      if (![202, 401].includes(response.status)) throw new Error(`TGS: HTTP ${response.status}`);
+      const retryAfter = Number(response.headers.get('retry-after')) || 0;
+      await new Promise((resolve) => setTimeout(resolve, retryAfter
+        ? Math.min(60_000, retryAfter * 1000) : Math.min(5_000, 750 * (attempt + 1))));
     }
     if (!animationData || !box.isConnected) throw new Error('TGS пока недоступен');
     const player = await loadLottiePlayer();
@@ -1741,18 +1813,8 @@ function bubble(m, attachments = {}) {
 
       const img = document.createElement('img');
       img.dataset.attachmentId = String(a.id);
-      img.src = mediaUrl;
       img.alt = 'вложение'; img.loading = 'lazy'; img.decoding = 'async';
-      img.onload = () => img.classList.add('ready');
-      let attempts = 0;
-      img.onerror = () => {
-        if (++attempts <= 8 && box.isConnected) {
-          setTimeout(() => { img.src = `${attachmentUrl(a.id)}&retry=${Date.now()}`; }, 1500);
-          return;
-        }
-        box.replaceWith(Object.assign(document.createElement('div'),
-          { className:'mono', textContent:'[файл не удалось загрузить]' }));
-      };
+      loadAttachmentImage(img, box, mediaUrl);
       box.onclick = () => openImage(img.src);
       box.append(img);
       if (canPermission('conversation:attachments')) {
@@ -1777,6 +1839,15 @@ function bubble(m, attachments = {}) {
         video.autoplay = true; video.loop = true; video.muted = true; video.playsInline = true;
         if (a.media_type === 'video_sticker') video.controls = false;
       }
+      let videoAttempts = 0;
+      video.classList.add('media-pending');
+      video.addEventListener('loadedmetadata', () => video.classList.remove('media-pending'));
+      video.addEventListener('error', async () => {
+        if (!video.isConnected) return;
+        const wait = await mediaRetryDelay(mediaUrl, ++videoAttempts);
+        if (wait === null) { video.classList.remove('media-pending'); return; }
+        setTimeout(() => { if (video.isConnected) reloadMedia(video); }, wait);
+      });
       video.preload = 'metadata'; video.src = mediaUrl; el.append(video);
     } else {
       const link = document.createElement('a');
@@ -2363,9 +2434,21 @@ window.addEventListener('focus', heartbeatCurrent);
 document.addEventListener('visibilitychange', heartbeatCurrent);
 
 function paintHeader(c) {
+  if (!c) {
+    $('title').textContent = 'Диалог не выбран';
+    $('subtitle').textContent = 'Выберите обращение в списке';
+    for (const id of ['statusSel', 'contextStatusSel', 'aiSel', 'escBtn', 'handoffBtn']) $(id).disabled = true;
+    $('foldClient').textContent = '';
+    $('err').textContent = '';
+    return;
+  }
   $('title').textContent = nameOf(c);
-  $('titleAvatar').outerHTML = avatarMarkup(c, 'title-avatar', false, 'titleAvatar');
-  armAvatars($('titleAvatar'));
+  const titleKey = `${c.id}:${c.avatar_file_id ? avatarUrl(c) : ''}:${initials(nameOf(c))}`;
+  if ($('titleAvatar').dataset.key !== titleKey) {
+    $('titleAvatar').outerHTML = avatarMarkup(c, 'title-avatar', false, 'titleAvatar');
+    $('titleAvatar').dataset.key = titleKey;
+    armAvatars($('titleAvatar'));
+  }
   $('subtitle').textContent = `${c.username ? '@' + c.username + ' · ' : ''}${channelLabel(c)} · ${c.external_id}`;
   $('statusSel').value = c.status;
   $('contextStatusSel').value = c.status;
@@ -2374,7 +2457,7 @@ function paintHeader(c) {
   $('escBtn').title = c.escalated ? 'Снять отметку важного обращения' : 'Пометить обращение важным';
   $('handoffBtn').textContent = c.handoff_at ? 'Вернуть AI' : 'Взять диалог';
   $('handoffBtn').title = c.handoff_at ? 'Вернуть диалог в автоматический режим' : 'Передать диалог человеку';
-  for (const id of ['statusSel', 'contextStatusSel', 'aiSel', 'escBtn', 'handoffBtn']) {
+  for (const id of ['statusSel', 'contextStatusSel', 'aiSel', 'escBtn', 'handoffBtn', 'hideConversationBtn']) {
     $(id).disabled = !canPermission('conversation:status');
     $(id).title = canPermission('conversation:status') ? '' : 'Действие запрещено настройками роли';
   }
@@ -2491,18 +2574,24 @@ function markOpenConversationRead(id = current?.id) {
  * HTTP-reconciliation открытой переписки. WebSocket остаётся быстрым путём,
  * но краткий сетевой разрыв больше не требует закрывать и открывать диалог.
  */
-async function syncCurrentMessages(id = current?.id) {
+async function syncCurrentMessages(id = current?.id, { full = false } = {}) {
   if (!id) return;
   if (currentSyncPromise) {
-    if (currentSyncId === id) return currentSyncPromise;
+    if (currentSyncId === id && !full) return currentSyncPromise;
     await currentSyncPromise;
-    return current?.id === id ? syncCurrentMessages(id) : undefined;
+    return current?.id === id ? syncCurrentMessages(id, { full }) : undefined;
   }
   currentSyncId = id;
   currentSyncPromise = (async () => {
-    const data = await json(`/api/conversations/${id}`);
-    if (!data || current?.id !== id) return;
+    // Обычно нужна только дозагрузка: правки и удаления приходят по WS.
+    // Полная сверка — после разрыва связи или если переписка ещё не нарисована.
     const thread = $('thread');
+    const drawn = thread.dataset.conversationId === String(id) ? thread.querySelector('.thread-inner') : null;
+    const lastId = drawn ? Math.max(0, ...[...drawn.querySelectorAll('.msg[data-message-id]')]
+      .map((node) => Number(node.dataset.messageId) || 0)) : 0;
+    const incremental = !full && lastId > 0;
+    const data = await json(incremental ? `/api/conversations/${id}?after=${lastId}` : `/api/conversations/${id}`);
+    if (!data || current?.id !== id) return;
     let inner = thread.dataset.conversationId === String(id) ? thread.querySelector('.thread-inner') : null;
     if (!inner) {
       inner = document.createElement('div');
@@ -2511,9 +2600,11 @@ async function syncCurrentMessages(id = current?.id) {
       thread.dataset.conversationId = String(id);
     }
     const nearBottom = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 140;
-    const serverIds = new Set(data.messages.map((message) => message.id));
-    for (const node of inner.querySelectorAll('.msg[data-message-id]')) {
-      if (!serverIds.has(Number(node.dataset.messageId))) node.remove();
+    if (!incremental) {
+      const serverIds = new Set(data.messages.map((message) => message.id));
+      for (const node of inner.querySelectorAll('.msg[data-message-id]')) {
+        if (!serverIds.has(Number(node.dataset.messageId))) node.remove();
+      }
     }
     if (inner.querySelector('.empty') && data.messages.length) inner.innerHTML = '';
     let appended = 0;
@@ -2529,7 +2620,7 @@ async function syncCurrentMessages(id = current?.id) {
         appended += 1;
       }
     }
-    if (!data.messages.length) inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
+    if (!incremental && !data.messages.length) inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
     current = data.conversation;
     suggestion = data.suggestion;
     paintHeader(current); renderWindow(); renderSuggestion(); renderAiNote();
@@ -2542,9 +2633,13 @@ async function syncCurrentMessages(id = current?.id) {
   finally { currentSyncPromise = null; currentSyncId = null; }
 }
 
-async function refresh() {
+let refreshFullThread = false;
+async function refresh({ fullThread = false } = {}) {
+  if (fullThread) refreshFullThread = true;
   if (refreshPromise) { refreshAgain = true; return refreshPromise; }
   refreshPromise = (async () => {
+    const full = refreshFullThread;
+    refreshFullThread = false;
     const data = await json('/api/conversations');
     if (!data) return;
     const openId = current?.id;
@@ -2555,9 +2650,9 @@ async function refresh() {
     renderList();
     // Контрольный опрос раньше обновлял только левый список. Если push-кадр
     // потерялся, открытая переписка оставалась старой до повторного входа.
-    if (openId && (Number(current?.last_message_at ?? 0) > previousLastMessageAt
+    if (openId && (full || Number(current?.last_message_at ?? 0) > previousLastMessageAt
       || Number(current?.updated_at ?? 0) > previousUpdatedAt)) {
-      void syncCurrentMessages(openId);
+      void syncCurrentMessages(openId, { full });
     }
   })();
   try { await refreshPromise; }
@@ -2576,6 +2671,17 @@ function mergeLiveConversation(conversation) {
   else conversations.push(conversation);
   conversations.sort((a, b) => Number(b.last_message_at ?? b.created_at ?? 0) - Number(a.last_message_at ?? a.created_at ?? 0));
   if (current?.id === conversation.id) current = { ...current, ...conversation };
+  renderList();
+}
+
+function removeLiveConversation(conversationId) {
+  conversations = conversations.filter((item) => item.id !== conversationId);
+  if (current?.id === conversationId) {
+    current = null; suggestion = null;
+    $('thread').removeAttribute('data-conversation-id');
+    $('thread').innerHTML = '<p class="empty">Диалог удалён в Telegram.</p>';
+    paintHeader(null); renderWindow(); renderSuggestion(); renderAiNote();
+  }
   renderList();
 }
 
@@ -2840,6 +2946,17 @@ $('contextStatusSel').onchange = (e) => setState({ status: e.target.value });
 $('aiSel').onchange = (e) => setState({ aiMode: e.target.value });
 $('escBtn').onclick = () => setState({ escalated: !current?.escalated });
 $('handoffBtn').onclick = () => setState({ handoff: !current?.handoff_at });
+$('hideConversationBtn').onclick = () => {
+  if (!current) return;
+  const id = current.id;
+  confirmAction('Скрыть диалог из входящих?',
+    'История сохранится. Если клиент напишет снова, диалог автоматически вернётся.', async () => {
+      const data = await mutate(`/api/conversations/${id}/state`, {
+        method:'POST', body:JSON.stringify({ hidden:true }),
+      }, 'Диалог скрыт');
+      if (data) removeLiveConversation(id);
+    });
+};
 $('filters').onclick = (e) => {
   const b = e.target.closest('button'); if (!b) return;
   const changed = filter !== b.dataset.filter;
@@ -2871,27 +2988,35 @@ $('kbTabs').onclick = (e) => {
   for (const o of $('kbTabs').children) o.setAttribute('aria-pressed', String(o === b));
   renderDocs();
   animateContentChange($('docs'));
+  if (kbTab === 'interface') loadInterfaceKb().then((data) => { if (data && kbTab === 'interface') renderDocs(); });
 };
 async function loadDocs() {
   const [data, learning] = await Promise.all([
     json('/api/kb'),
     canReview() ? json('/api/learning/candidates?status=pending') : Promise.resolve(null),
   ]);
-  if (data) { docs = { ...data, candidates: learning?.candidates ?? [] }; renderDocs(); }
+  if (data) {
+    docs = { ...data, candidates: learning?.candidates ?? [] };
+    if (canPermission('knowledge:read')) await loadInterfaceKb();
+    renderDocs();
+  }
   else if ($('view-kb').dataset.loaded !== 'true') $('docs').innerHTML = '<p class="empty">База знаний сейчас недоступна.</p>';
 }
 function renderDocs() {
   const reviewer = canReview();
   const editor = canPermission('knowledge:manage');
   if (!reviewer && kbTab === 'learning') kbTab = 'kb';
-  const list = kbTab === 'kb' ? docs.kb : kbTab === 'draft' ? docs.drafts : docs.candidates;
+  const list = kbTab === 'kb' ? docs.kb : kbTab === 'interface' ? docs.interfaceScreens : kbTab === 'draft' ? docs.drafts : docs.candidates;
   $('cntKb').textContent = docs.kb.length;
   $('kbHint').textContent = kbTab === 'learning'
     ? 'AI ничего не публикует без решения lead/admin'
     : kbTab === 'draft'
     ? 'Черновики в ответы не идут, пока не опубликуешь'
+    : kbTab === 'interface'
+    ? `Проверенные инструкции русского интерфейса · ${docs.interfaceScreens.length} экранов в виде, который видит AI · включаются в настройках AI`
     : 'Правки подхватываются в течение 15 минут';
   const box = $('docs');
+  if (kbTab === 'interface') return renderInterface(box);
   if (!list.length) {
     box.innerHTML = `<p class="empty">${kbTab === 'kb' ? 'Статей пока нет.' : kbTab === 'learning' ? 'Новых кандидатов на обучение нет.' : 'Черновиков нет. Соберите их из переписки.'}</p>`;
     return;
@@ -2953,6 +3078,284 @@ $('newDoc').onclick = () => {
     if (created) { closeSheet(); loadDocs(); }
   };
 };
+
+/* ═══ справочник интерфейса Бедолаги ═══ */
+let ifaceKb = null, ifaceMode = null, ifaceLoading = false;
+const IFACE_LABELS = { full:'Полный вид', lite:'Простой вид' };
+const IFACE_FIELDS = ['title','routeDescription','keywords','instructions','caption','image'];
+const IFACE_MAX_IMAGE = 8 * 1024 * 1024;
+const ifaceImageUrl = (image) => '/api/interface-kb/images/' + String(image).split('/').map(encodeURIComponent).join('/');
+const ifaceNorm = (field, value) => (field === 'keywords' || field === 'instructions')
+  ? (Array.isArray(value) ? value : [])
+  : String(value ?? '').trim();
+const ifaceSame = (field, a, b) => JSON.stringify(ifaceNorm(field, a)) === JSON.stringify(ifaceNorm(field, b));
+const ifaceText = (field, value) => (field === 'keywords' ? ifaceNorm(field, value).join(', ')
+  : field === 'instructions' ? ifaceNorm(field, value).join('\n') : ifaceNorm(field, value));
+
+async function loadInterfaceKb() {
+  const data = await json('/api/interface-kb');
+  if (data) {
+    ifaceKb = data;
+    if (!ifaceMode || !data.modes.includes(ifaceMode)) ifaceMode = data.effectiveMode;
+    const count = (data.resolved?.[data.effectiveMode] ?? []).length;
+    $('ifaceTabNote').textContent = count ? `${count} проверенных инструкций` : 'Проверенные инструкции';
+  }
+  return data;
+}
+
+/** Значение экрана «по умолчанию» в выбранном виде: поставка плюс её же отличия вида. */
+function ifaceShippedScreen(id, mode) {
+  const base = (ifaceKb.shipped?.screens ?? []).find((item) => item?.id === id);
+  if (!base || ((base.only === 'full' || base.only === 'lite') && base.only !== mode)) return null;
+  return { ...base, ...(base.modes?.[mode] ?? {}) };
+}
+
+function ifaceRows(mode) {
+  const overrides = ifaceKb.overrides;
+  const resolved = new Map(ifaceKb.resolved[mode].map((screen) => [screen.id, screen]));
+  const rows = new Map();
+  for (const base of ifaceKb.shipped?.screens ?? []) {
+    const std = ifaceShippedScreen(base.id, mode);
+    if (!std) continue;
+    const own = overrides.screens[base.id];
+    rows.set(base.id, { id: base.id, custom: false, hidden: Boolean(own?.hidden), std,
+      screen: resolved.get(base.id) ?? std, edited: Boolean(own && (own.all || own[mode])) });
+  }
+  for (const item of overrides.added) {
+    if (item.only && item.only !== mode) continue;
+    const screen = resolved.get(item.id);
+    if (screen) rows.set(item.id, { id: item.id, custom: true, hidden: false, std: null, screen, edited: false });
+  }
+  return [...rows.values()];
+}
+
+function ifaceBadge() {
+  const label = IFACE_LABELS[ifaceKb.effectiveMode];
+  if (ifaceKb.setting !== 'auto') return `У магазина сейчас: ${label} (задан вручную в настройках)`;
+  if (ifaceKb.detected) return `У магазина сейчас: ${IFACE_LABELS[ifaceKb.detected.mode]} (определён автоматически)`;
+  return `Вид кабинета не определён — AI использует ${label}`;
+}
+
+function renderInterface(box) {
+  if (!ifaceKb) {
+    box.innerHTML = '<p class="empty">Загрузка справочника…</p>';
+    if (!ifaceLoading) {
+      ifaceLoading = true;
+      loadInterfaceKb().then((data) => {
+        ifaceLoading = false;
+        if (kbTab !== 'interface') return;
+        if (data) renderDocs(); else box.innerHTML = '<p class="empty">Справочник интерфейса сейчас недоступен.</p>';
+      });
+    }
+    return;
+  }
+  const editor = canPermission('knowledge:manage');
+  const rows = ifaceRows(ifaceMode);
+  box.innerHTML = `<div class="iface-bar">
+      <div class="seg" role="group" aria-label="Вид кабинета">${ifaceKb.modes.map((mode) =>
+        `<button type="button" data-iface-mode="${mode}" aria-pressed="${mode === ifaceMode}">${IFACE_LABELS[mode]}</button>`).join('')}</div>
+      <span class="iface-live" id="ifaceLive">${esc(ifaceBadge())}</span>
+      ${editor ? '<button class="btn" type="button" data-iface-add>Добавить свой экран</button>' : ''}
+    </div>
+    ${ifaceKb.enabled ? '' : '<p class="iface-note">AI пока не использует справочник: включите его в настройках («Включить базу знаний интерфейса Бедолаги»).</p>'}
+    ${ifaceKb.shipped ? '' : '<p class="iface-note">Поставляемый справочник не найден — доступны только свои экраны.</p>'}
+    ${rows.length ? rows.map((row) => `<article class="doc-row iface-row${row.hidden ? ' is-hidden' : ''}" data-iface-id="${esc(row.id)}"
+        ${row.hidden ? '' : `role="button" tabindex="0" aria-label="Открыть экран: ${esc(row.screen.title)}"`}>
+      <div class="doc-state"><span class="status-dot ${row.hidden ? '' : 'ok'}"></span></div>
+      <div class="doc-copy"><b>${esc(row.screen.title)}</b><span>${esc(row.screen.routeDescription)}</span></div>
+      <div class="doc-actions">
+        ${row.custom ? '<span class="iface-tag">свой экран</span>' : ''}
+        ${row.edited ? '<span class="iface-tag changed">изменён</span>' : ''}
+        ${row.hidden ? '<span class="iface-tag muted">скрыт</span>' : ''}
+        ${row.hidden && editor ? '<button class="btn" type="button" data-iface-unhide>Вернуть</button>' : '<span class="doc-disclosure" aria-hidden="true">›</span>'}
+      </div></article>`).join('') : '<p class="empty">В этом виде экранов пока нет.</p>'}`;
+  for (const button of box.querySelectorAll('[data-iface-mode]')) button.onclick = () => {
+    ifaceMode = button.dataset.ifaceMode; renderDocs(); animateContentChange($('docs'));
+  };
+  const add = box.querySelector('[data-iface-add]');
+  if (add) add.onclick = () => openInterfaceEditor(null);
+  for (const row of box.querySelectorAll('.iface-row:not(.is-hidden)')) {
+    row.onclick = () => openInterfaceEditor(row.dataset.ifaceId);
+    row.onkeydown = (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openInterfaceEditor(row.dataset.ifaceId); } };
+  }
+  for (const button of box.querySelectorAll('[data-iface-unhide]')) button.onclick = (event) => {
+    event.stopPropagation();
+    const id = button.closest('.iface-row').dataset.ifaceId;
+    saveInterfaceOverrides((next) => {
+      delete next.screens[id].hidden;
+      if (!Object.keys(next.screens[id]).length) delete next.screens[id];
+    }, 'Экран возвращён');
+  };
+}
+
+/** Применяет правку к копии оверрайдов, сохраняет на сервере и перерисовывает вкладку. */
+async function saveInterfaceOverrides(change, okText) {
+  const next = JSON.parse(JSON.stringify(ifaceKb.overrides));
+  change(next);
+  const saved = await mutate('/api/interface-kb/overrides', { method:'PUT', body: JSON.stringify(next) }, okText);
+  if (!saved) return false;
+  closeSheet();
+  await loadDocs();
+  return true;
+}
+
+function openInterfaceEditor(id) {
+  const mode = ifaceMode;
+  const editor = canPermission('knowledge:manage');
+  const row = id ? ifaceRows(mode).find((item) => item.id === id) : null;
+  if (id && !row) return;
+  const custom = !row || row.custom;
+  const cur = row ? row.screen : {};
+  const std = row?.std ?? null;
+  const own = row && !custom ? ifaceKb.overrides.screens[id] : null;
+  const dis = editor ? '' : ' disabled';
+  const textFields = [
+    ['title', 'Название экрана', 'input', 160],
+    ['routeDescription', 'Где находится', 'input', 500],
+    ['keywords', 'Ключевые слова (через запятую)', 'input', 2000],
+    ['instructions', 'Инструкция (один шаг на строку)', 'textarea', 0],
+    ['caption', 'Подпись к картинке', 'input', 500],
+  ];
+  const fieldHtml = textFields.map(([field, label, kind, max]) => `<div class="frow">
+      <label for="iface-${field}">${label}${std ? `<span class="iface-changed" data-changed="${field}" hidden> · изменено</span>` : ''}</label>
+      ${kind === 'input'
+        ? `<input type="text" id="iface-${field}" data-f="${field}" value="${esc(ifaceText(field, cur[field]))}"${max ? ` maxlength="${max}"` : ''}${dis}>`
+        : `<textarea id="iface-${field}" data-f="${field}" rows="9"${dis}>${esc(ifaceText(field, cur[field]))}</textarea>`}
+      ${std ? `<div class="iface-default" data-default="${field}" hidden><span>Стандартно:</span>
+        <q>${esc(ifaceText(field, std[field]) || '— пусто —')}</q>${editor ? `<button class="btn quiet" type="button" data-restore="${field}">Вернуть стандартное</button>` : ''}</div>` : ''}
+    </div>`).join('');
+  const scope = custom
+    ? `<div class="frow"><label for="iface-scope">Показывать</label><select id="iface-scope" data-scope${dis}>
+         <option value="">В обоих видах</option><option value="full">Только в полном виде</option><option value="lite">Только в простом виде</option></select></div>`
+    : `<div class="frow"><label for="iface-scope">К чему применить правку</label><select id="iface-scope" data-scope${dis}>
+         <option value="all">Оба вида</option><option value="${mode}">Только ${IFACE_LABELS[mode].toLowerCase()}</option></select>
+         <span class="hint">Если экран в видах устроен по-разному, безопаснее править только текущий вид.</span></div>`;
+  sheet(row ? row.screen.title : 'Новый экран',
+    `<div class="iface-form">${scope}${fieldHtml}
+      <div class="frow"><label>Картинка${std ? '<span class="iface-changed" data-changed="image" hidden> · изменено</span>' : ''}</label>
+        <div class="iface-image"><img data-preview alt="Превью картинки" hidden><span class="hint" data-noimage>Без картинки</span></div>
+        ${editor ? `<div class="iface-image-actions"><button class="btn" type="button" data-pick>Загрузить картинку</button>
+          <button class="btn" type="button" data-remove-image>Убрать</button>
+          <input type="file" data-file accept="image/png,image/jpeg,image/webp" hidden></div>
+          <span class="hint">PNG, JPEG или WebP до 8 МБ. Файл хранится в данных этой установки.</span>` : ''}
+        ${std ? '<div class="iface-default" data-default="image" hidden><span>Стандартно:</span> <q data-default-image></q>' + (editor ? '<button class="btn quiet" type="button" data-restore="image">Вернуть стандартное</button>' : '') + '</div>' : ''}
+      </div></div>`,
+    editor
+      ? `${own ? '<button class="btn" type="button" data-reset>Сбросить к стандартному</button>' : ''}
+         ${row ? `<button class="btn danger" type="button" data-hide>${custom ? 'Удалить экран' : 'Скрыть экран'}</button>` : ''}
+         <button class="btn" type="button" id="cancel">Отмена</button><button class="btn primary" type="button" data-save>Сохранить</button>`
+      : '<button class="btn primary" type="button" id="cancel">Закрыть</button>', 'wide');
+  const root = $('sheet');
+  const q = (selector) => root.querySelector(selector);
+  $('cancel').onclick = closeSheet;
+
+  let image = cur.image ?? null;
+  const preview = q('[data-preview]');
+  const setImage = (value) => {
+    image = value || null;
+    preview.hidden = !image;
+    q('[data-noimage]').hidden = Boolean(image);
+    const remove = q('[data-remove-image]'); if (remove) remove.disabled = !image;
+    if (image) { delete preview.dataset.retry; preview.src = ifaceImageUrl(image); } else preview.removeAttribute('src');
+    refreshDefaults();
+  };
+  preview.onerror = async () => {
+    // Cookie-билет мог истечь: обновляем его и пробуем один раз.
+    if (preview.dataset.retry) return;
+    preview.dataset.retry = '1';
+    await refreshTicket();
+    reloadMedia(preview);
+  };
+  const form = () => ({
+    title: q('[data-f="title"]').value.trim(),
+    routeDescription: q('[data-f="routeDescription"]').value.trim(),
+    keywords: q('[data-f="keywords"]').value.split(/[,;\n]/).map((word) => word.trim()).filter(Boolean),
+    instructions: q('[data-f="instructions"]').value.split('\n').map((step) => step.trim()).filter(Boolean),
+    caption: q('[data-f="caption"]').value.trim(),
+    image,
+  });
+  function refreshDefaults() {
+    if (!std) return;
+    const value = form();
+    for (const field of IFACE_FIELDS) {
+      const differs = !ifaceSame(field, value[field], std[field]);
+      const hint = q(`[data-default="${field}"]`), mark = q(`[data-changed="${field}"]`);
+      if (hint) hint.hidden = !differs;
+      if (mark) mark.hidden = !differs;
+    }
+  }
+  for (const input of root.querySelectorAll('[data-f]')) input.oninput = refreshDefaults;
+  for (const button of root.querySelectorAll('[data-restore]')) button.onclick = () => {
+    const field = button.dataset.restore;
+    if (field === 'image') setImage(std.image ?? null);
+    else { q(`[data-f="${field}"]`).value = ifaceText(field, std[field]); refreshDefaults(); }
+  };
+  if (std) {
+    const defaultImage = q('[data-default-image]');
+    if (defaultImage) defaultImage.textContent = std.image ? 'картинка из поставки' : '— без картинки —';
+  }
+  setImage(image);
+  if (!editor) return;
+
+  const file = q('[data-file]');
+  q('[data-pick]').onclick = () => file.click();
+  q('[data-remove-image]').onclick = () => setImage(null);
+  file.onchange = async () => {
+    const picked = file.files?.[0]; file.value = '';
+    if (!picked) return;
+    if (picked.size > IFACE_MAX_IMAGE) return toast('Картинка больше 8 МБ');
+    q('[data-pick]').disabled = true;
+    try {
+      const res = await api('/api/interface-kb/images', { method:'POST', headers:{ 'content-type':'application/vnd.ai-support.attachment' }, body: picked });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok && body.image) setImage(body.image); else toast(body.error ?? `Не удалось загрузить картинку (${res.status})`);
+    } catch (err) { toast(`Нет связи с сервером: ${err.message}`); }
+    q('[data-pick]').disabled = false;
+  };
+  const scopeSelect = q('[data-scope]');
+  if (custom && row) scopeSelect.value = ifaceKb.overrides.added.find((item) => item.id === id)?.only ?? '';
+  else if (own && own[mode] && !own.all) scopeSelect.value = mode;
+
+  const reset = q('[data-reset]');
+  if (reset) reset.onclick = () => confirmAction('Сбросить экран к стандартному?', `«${row.screen.title}»: все правки этой установки для обоих видов будут удалены.`,
+    () => saveInterfaceOverrides((next) => { const entry = next.screens[id]; if (entry) { delete entry.all; delete entry.full; delete entry.lite; if (!entry.hidden) delete next.screens[id]; } }, 'Сброшено'));
+  const hide = q('[data-hide]');
+  if (hide) hide.onclick = () => custom
+    ? confirmAction('Удалить свой экран?', `«${row.screen.title}» будет удалён безвозвратно.`,
+      () => saveInterfaceOverrides((next) => { next.added = next.added.filter((item) => item.id !== id); }, 'Экран удалён'))
+    : saveInterfaceOverrides((next) => { (next.screens[id] ??= {}).hidden = true; }, 'Экран скрыт — AI его не использует');
+
+  q('[data-save]').onclick = () => {
+    const value = form();
+    if (!value.title || !value.routeDescription) return toast('Заполните название и «Где находится»');
+    if (!value.instructions.length) return toast('Нужен хотя бы один шаг инструкции');
+    if (value.instructions.length > 30 || value.instructions.some((step) => step.length > 600)) return toast('Не больше 30 шагов, каждый до 600 символов');
+    if (value.keywords.length > 30 || value.keywords.some((word) => word.length > 80)) return toast('Не больше 30 ключевых слов, каждое до 80 символов');
+    if (custom) {
+      const item = { id: id ?? `own-${Date.now().toString(36)}`, title: value.title, routeDescription: value.routeDescription,
+        keywords: value.keywords, instructions: value.instructions };
+      if (value.caption) item.caption = value.caption;
+      if (value.image) item.image = value.image;
+      if (scopeSelect.value) item.only = scopeSelect.value;
+      return saveInterfaceOverrides((next) => {
+        const at = next.added.findIndex((entry) => entry.id === item.id);
+        if (at >= 0) next.added[at] = item; else next.added.push(item);
+      }, 'Экран сохранён');
+    }
+    const target = scopeSelect.value;
+    return saveInterfaceOverrides((next) => {
+      const entry = (next.screens[id] ??= {});
+      const patch = (entry[target] ??= {});
+      for (const field of IFACE_FIELDS) {
+        if (ifaceSame(field, value[field], cur[field])) continue;
+        // null снимает значение: так убираются подпись и картинка из поставки.
+        patch[field] = (field === 'caption' || field === 'image') ? (value[field] || null) : value[field];
+      }
+      if (!Object.keys(patch).length) delete entry[target];
+      if (!Object.keys(entry).length) delete next.screens[id];
+    }, 'Сохранено');
+  };
+}
 
 function mineStarted() {
   $('mineLog').innerHTML = '<div class="cap" style="margin-top:var(--sp-6)">Сбор идёт</div><div class="log" id="logBox">Запускаю…</div>';
@@ -3057,7 +3460,7 @@ $('labRun').onclick = async () => {
     </div>
     <div class="cap" style="margin-top:var(--sp-5)">Что нашлось в базе знаний</div>
     <div class="group">${body.sources?.length
-      ? body.sources.map((x) => `<div class="item"><span class="lbl">${esc(x)}</span></div>`).join('')
+      ? body.sources.map((x) => `<div class="item"><span class="lbl">${esc(x)}</span>${body.usedSources?.includes(x) ? '<span class="badge ok">использовано</span>' : ''}</div>`).join('')
       : '<div class="item"><span class="hint">Ничего — значит ответ построен вслепую.</span></div>'}</div>`;
 };
 
@@ -3637,6 +4040,7 @@ async function loadDiagnostics() {
     <section class="diagnostic-section"><header><div><b>База данных</b><span>Целостность и схема</span></div><span class="status-text ${data.database.integrity === 'ok' ? 'ok' : 'danger'}"><i></i>${esc(data.database.integrity)}</span></header><div class="diagnostic-facts"><span>Схема <b>${Number(data.database.schema)}</b></span>${Object.entries(data.database.counts).map(([key,n]) => `<span>${esc(key)} <b>${Number(n)}</b></span>`).join('')}</div></section>
     <section class="diagnostic-section"><header><div><b>Каналы</b><span>Голый режим допустим</span></div></header><div class="group">${channelRows}</div></section>
     <section class="diagnostic-section"><header><div><b>Интеграции</b><span>Необязательные подключения</span></div></header><div class="group">${integrationRows}</div></section>
+    <section class="diagnostic-section"><header><div><b>Настройки панели поверх .env</b><span>Действует значение панели</span></div></header><div class="group">${(data.settingOverrides ?? []).length ? data.settingOverrides.map((item) => `<div class="item"><span class="mono">${esc(item.key)}</span><span>${esc(JSON.stringify(item.value))} <span class="hint">вместо ${esc(JSON.stringify(item.env))} из .env</span></span></div>`).join('') : '<div class="item"><span>Всё как в .env</span></div>'}</div></section>
   </div>
   <div class="ops-head"><div><b>Фоновые задания</b><span class="hint">Последние ${jobs.length}; ошибки видны явно</span></div></div>
   ${jobs.length ? `<div style="overflow:auto"><table class="ops-table"><thead><tr><th>Тип</th><th>Статус</th><th>Прогресс</th><th>Завершено</th></tr></thead><tbody>${jobs.map((job) => `<tr><td>${esc(job.kind)}</td><td><span class="status-text ${job.status === 'failed' ? 'danger' : job.status === 'done' ? 'ok' : ''}"><i></i>${esc(job.status)}</span></td><td>${esc(job.error || job.progress || '—')}</td><td>${job.ended_at ? fmtTime(Number(job.ended_at)) : '—'}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Фоновых заданий пока не было.</p>'}`;
@@ -3672,6 +4076,14 @@ const FIELDS = [
   { key:'autoLearn', label:'Учиться на закрытых диалогах', kind:'select',
     options:[['false','Выключено'],['true','Создавать черновики статей']],
     hint:'После закрытия диалога AI выделяет повторно полезные решения и кладёт их в черновики базы знаний. Самостоятельной публикации нет: оператор проверяет и публикует статью вручную.' },
+
+  { key:'bedolagaInterfaceKb', label:'Включить базу знаний интерфейса Бедолаги', kind:'select',
+    options:[['false','Выключено'],['true','Включено']],
+    hint:'Разрешает AI использовать только проверенные инструкции и локальные скриншоты интерфейса. До загрузки проверенного комплекта оставьте выключенным.' },
+
+  { key:'bedolagaInterfaceMode', label:'Вид кабинета Бедолаги', kind:'select',
+    options:[['auto','Авто — как у магазина'],['full','Полный вид'],['lite','Простой вид']],
+    hint:'У кабинета два вида: полный и «Простой вид». Инструкции для них отличаются — кнопки и пункты меню называются по-разному. В авто-режиме панель раз в 10 минут спрашивает кабинет, какой вид включён у магазина; пока ответа нет, используется полный вид. Выберите вид вручную, если автоопределение не подходит.' },
 
   { key:'minConfidence', label:'Порог уверенности', kind:'level',
     options: CONFIDENCE_LEVELS.map(([v, t]) => [String(v), t]),
@@ -3725,9 +4137,9 @@ function nearestLevel(value) {
 
 const SETTINGS_GROUPS = [
   { id:'safety', title:'Режим и безопасность', note:'Когда AI может отвечать и на что он должен опираться',
-    fields:['aiMode','requireKb','autoLearn','minConfidence','maxAgeMinutes'] },
+    fields:['aiMode','requireKb','autoLearn','bedolagaInterfaceKb','bedolagaInterfaceMode','minConfidence','maxAgeMinutes'] },
   { id:'limits', title:'Лимиты и внимание оператора', note:'Паузы, SLA и защита от зацикливания',
-    fields:['autoPerHour','humanHoldMinutes','slaFirstResponseMinutes','handoffRepeatMinutes','notifyLevel'] },
+    fields:['autoPerHour','humanHoldMinutes','handoffRepeatMinutes','notifyLevel'] },
   { id:'models', title:'Модели и сервис', note:'Основная, запасная модель и имя бренда',
     fields:['model','fallbackModel','brand'] },
 ];
@@ -4217,64 +4629,129 @@ async function loadSettings() {
 }
 
 /* ═══ живое обновление ═══ */
+// Сервер закрывает сокет, когда истекает его билет. Поэтому при каждом
+// обновлении билета заранее открываем новый сокет и только после его
+// открытия закрываем старый: окна без событий нет. Пока сокет не OPEN,
+// работает HTTP-опрос; после восстановления связи — одна полная сверка.
+let liveSocket = null, pendingSocket = null, liveRetryTimer = null, liveFailures = 0, liveNeedsResync = false;
+const liveOpen = () => liveSocket?.readyState === WebSocket.OPEN;
+
 function connect() {
+  clearTimeout(liveRetryTimer); liveRetryTimer = null;
+  if (pendingSocket) return;
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(ticket)}`);
-  ws.onopen = () => { $('pulse').classList.add('live'); $('pulse').title = 'Связь с сервером установлена'; };
-  ws.onclose = () => { $('pulse').classList.remove('live'); $('pulse').title = 'Переподключаемся…'; setTimeout(connect, 3000); };
-  ws.onmessage = (event) => {
-    const frame = JSON.parse(event.data);
-    if (frame.type === 'job') {
-      const box = $('logBox');
-      if (box) {
-        if (frame.status === 'running') box.textContent += `\n${frame.progress}`;
-        if (frame.status === 'done') { box.textContent += `\nГотово: ${frame.report.articles.length} статей`; loadDocs(); toast('Сбор закончен'); }
-        if (frame.status === 'failed') { box.textContent += `\nОшибка: ${frame.error}`; toast('Сбор не удался'); }
-        box.scrollTop = box.scrollHeight;
-      }
+  pendingSocket = ws;
+  let opened = false;
+  ws.onopen = () => {
+    opened = true;
+    if (pendingSocket === ws) pendingSocket = null;
+    const previous = liveSocket;
+    liveSocket = ws; liveFailures = 0;
+    if (previous && previous !== ws) { previous.onclose = null; previous.close(1000, 'Ticket rotated'); }
+    $('pulse').classList.add('live'); $('pulse').title = 'Связь с сервером установлена';
+    if (liveNeedsResync) { liveNeedsResync = false; void refresh({ fullThread:true }); }
+  };
+  ws.onclose = (event) => {
+    if (pendingSocket === ws) pendingSocket = null;
+    // Не открывшаяся замена при живом старом сокете: пробуем ещё раз позже.
+    if (liveSocket && liveSocket !== ws) {
+      if (!opened) liveRetryTimer = setTimeout(connect, 5000);
       return;
     }
-    if (frame.conversation) mergeLiveConversation(frame.conversation);
-    if (frame.type === 'message' && current?.id === frame.conversation.id) {
-      const nearBottom = $('thread').scrollHeight - $('thread').scrollTop - $('thread').clientHeight < 140;
-      current = frame.conversation;
-      const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
-        ? $('thread').querySelector('.thread-inner') : null;
-      if (inner) {
-        if (inner.querySelector('.empty')) inner.innerHTML = '';
-        if (!inner.querySelector(`.msg[data-message-id="${frame.message.id}"]`)) {
-          const el = bubble(frame.message, frame.attachments ?? {});
-          el.classList.add('fresh');
-          inner.append(el);
-        }
-      } else {
-        void syncCurrentMessages(frame.conversation.id);
-      }
-      if (nearBottom || frame.message.direction === 'out') requestAnimationFrame(() => { $('thread').scrollTop = $('thread').scrollHeight; });
-      else toast('Новое сообщение ниже по переписке');
-      if (frame.message.direction === 'in') {
-        suggestion = null; renderSuggestion(); markOpenConversationRead(frame.conversation.id);
-      }
-      renderWindow(); renderAiNote();
-    }
-    if (frame.type === 'message_updated' && current?.id === frame.conversation.id) {
-      const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
-        ? $('thread').querySelector('.thread-inner') : null;
-      const existing = inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`);
-      if (existing) existing.replaceWith(bubble(frame.message, frame.attachments ?? {}));
-      else void syncCurrentMessages(frame.conversation.id);
-    }
-    if (frame.type === 'message_deleted' && current?.id === frame.conversation.id) {
-      const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
-        ? $('thread').querySelector('.thread-inner') : null;
-      inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`)?.remove();
-      if (inner && !inner.querySelector('.msg[data-message-id]')) {
-        inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
-      }
-    }
-    if (frame.type === 'suggestion' && current?.id === frame.conversation.id) { suggestion = frame.suggestion; renderSuggestion(); }
-    refreshSoon();
+    liveSocket = null;
+    if (opened) liveNeedsResync = true;
+    $('pulse').classList.remove('live'); $('pulse').title = 'Переподключаемся…';
+    scheduleReconnect(event.code);
   };
+  ws.onmessage = (event) => handleLiveFrame(event);
+}
+
+function scheduleReconnect(code) {
+  clearTimeout(liveRetryTimer);
+  const delay = liveFailures ? Math.min(15_000, 1000 * 2 ** (liveFailures - 1)) : 200;
+  liveFailures += 1;
+  liveRetryTimer = setTimeout(async () => {
+    // 1008 — билет истёк или сервер перезапущен с новым секретом.
+    if (code === 1008 || liveFailures > 1) await refreshTicket().catch(() => undefined);
+    connect();
+  }, delay);
+}
+
+/** Плановое обновление билета: сначала новый сокет, затем закрытие старого. */
+async function rotateTicket() {
+  await refreshTicket();
+  if (liveOpen()) connect();
+}
+
+function handleLiveFrame(event) {
+  const frame = JSON.parse(event.data);
+  if (frame.type === 'job') {
+    const box = $('logBox');
+    if (box) {
+      if (frame.status === 'running') box.textContent += `\n${frame.progress}`;
+      if (frame.status === 'done') { box.textContent += `\nГотово: ${frame.report.articles.length} статей`; loadDocs(); toast('Сбор закончен'); }
+      if (frame.status === 'failed') { box.textContent += `\nОшибка: ${frame.error}`; toast('Сбор не удался'); }
+      box.scrollTop = box.scrollHeight;
+    }
+    return;
+  }
+  if (frame.type === 'conversation_deleted') {
+    removeLiveConversation(frame.conversation.id);
+    return;
+  }
+  // Последнее сообщение уже удалено: не сливаем пустую карточку обратно
+  // в список даже на один кадр, пока следом идёт conversation_deleted.
+  if (frame.type === 'message_deleted' && frame.conversation.last_message_at == null) {
+    removeLiveConversation(frame.conversation.id);
+    return;
+  }
+  if (frame.conversation) mergeLiveConversation(frame.conversation);
+  if (frame.type === 'message' && current?.id === frame.conversation.id) {
+    const nearBottom = $('thread').scrollHeight - $('thread').scrollTop - $('thread').clientHeight < 140;
+    current = frame.conversation;
+    const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
+      ? $('thread').querySelector('.thread-inner') : null;
+    if (inner) {
+      if (inner.querySelector('.empty')) inner.innerHTML = '';
+      if (!inner.querySelector(`.msg[data-message-id="${frame.message.id}"]`)) {
+        const el = bubble(frame.message, frame.attachments ?? {});
+        el.classList.add('fresh');
+        inner.append(el);
+      }
+    } else {
+      void syncCurrentMessages(frame.conversation.id);
+    }
+    if (nearBottom || frame.message.direction === 'out') requestAnimationFrame(() => { $('thread').scrollTop = $('thread').scrollHeight; });
+    else toast('Новое сообщение ниже по переписке');
+    if (frame.message.direction === 'in') {
+      suggestion = null; renderSuggestion(); markOpenConversationRead(frame.conversation.id);
+    }
+    renderWindow(); renderAiNote();
+  }
+  if (frame.type === 'message_updated' && current?.id === frame.conversation.id) {
+    const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
+      ? $('thread').querySelector('.thread-inner') : null;
+    const existing = inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`);
+    if (existing) {
+      // Подпись та же — пузырь не трогаем, иначе картинки перерисуются.
+      if (existing.dataset.messageSignature !== messageSignature(frame.message, frame.attachments?.[frame.message.id] ?? [])) {
+        existing.replaceWith(bubble(frame.message, frame.attachments ?? {}));
+      }
+    } else void syncCurrentMessages(frame.conversation.id, { full:true });
+  }
+  if (frame.type === 'message_deleted' && current?.id === frame.conversation.id) {
+    const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
+      ? $('thread').querySelector('.thread-inner') : null;
+    inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`)?.remove();
+    if (inner && !inner.querySelector('.msg[data-message-id]')) {
+      inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
+    }
+  }
+  if (frame.type === 'suggestion' && current?.id === frame.conversation.id) { suggestion = frame.suggestion; renderSuggestion(); }
+  // Кадр с карточкой уже применён локально: перезапрашивать весь список
+  // незачем. Сверка нужна только для кадров без данных.
+  if (!frame.conversation) refreshSoon();
 }
 
 /** Ссылка из уведомления вида /#c12 открывает нужный диалог сразу. */
@@ -4293,9 +4770,12 @@ async function boot() {
   applyRoleUi();
   if (canPermission('conversation:read')) {
     await refreshTicket();
-    // Билет живёт десять минут — обновляем заранее, чтобы картинки и события
-    // не отваливались посреди работы.
-    setInterval(refreshTicket, 8 * 60_000);
+    // События открываем сразу: всё, что придёт, пока грузятся список и
+    // настройки, применится поверх и не потеряется.
+    connect();
+    // Билет живёт десять минут — обновляем заранее вместе с сокетом, чтобы
+    // картинки и события не отваливались посреди работы.
+    setInterval(() => { void rotateTicket(); }, 8 * 60_000);
   }
   templates = canPermission('templates:read') ? (await json('/api/templates'))?.templates ?? [] : [];
   $('templates').innerHTML = '<option value="">Шаблон…</option>';
@@ -4304,11 +4784,13 @@ async function boot() {
   if (settings) $('ver').textContent = 'v' + settings.version;
   if (canPermission('conversation:read')) { await loadInboxMeta(); await refresh(); }
   await loadNavigationCounts();
-  if (canPermission('conversation:read')) { await openFromHash(); connect(); }
-  // WebSocket даёт обновление почти мгновенно. Контрольный опрос раз в пять
-  // секунд закрывает редкий разрыв мобильной сети и гарантирует, что новый
-  // чат появится без перезагрузки даже при потерянном push-событии.
-  if (canPermission('conversation:read')) setInterval(() => { if (document.visibilityState === 'visible') void refresh(); }, 5000);
+  if (canPermission('conversation:read')) await openFromHash();
+  // WebSocket даёт обновление почти мгновенно. Пока он не открыт (разрыв
+  // мобильной сети, перезапуск сервера), список опрашивается раз в пять
+  // секунд; при живом сокете опрос не нужен.
+  if (canPermission('conversation:read')) {
+    setInterval(() => { if (document.visibilityState === 'visible' && !liveOpen()) void refresh(); }, 5000);
+  }
   setInterval(renderWindow, 30000);
 }
 

@@ -109,6 +109,39 @@ console.log('\n[ только чтение ]');
   (config.remnawave as { readOnly: boolean }).readOnly = wasReadOnly;
 }
 
+console.log('\n[ Remnawave: форма разрушающих запросов ]');
+{
+  // Сверено с libs/contract панели: удаление устройств — POST на .../delete,
+  // тело с числовым userId (v3) или userUuid (v2), а не HTTP DELETE.
+  const { RemnawaveClient } = await import('../src/integrations/remnawave.js');
+  const calls: { method: string; path: string; body: unknown }[] = [];
+  const nativeFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    calls.push({
+      method: init?.method ?? 'GET',
+      path: new URL(String(input)).pathname,
+      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+    });
+    return new Response('{"response":{}}', { status: 200 });
+  }) as typeof fetch;
+  const client = new RemnawaveClient('http://panel.test', 'tok', false);
+  try {
+    check('удаление устройства v3', await client.deleteDevice('42', 'hw1')
+      && calls.at(-1)?.method === 'POST' && calls.at(-1)?.path === '/api/hwid/devices/delete'
+      && JSON.stringify(calls.at(-1)?.body) === '{"userId":42,"hwid":"hw1"}');
+    check('сброс устройств v3', await client.resetDevices('42')
+      && calls.at(-1)?.method === 'POST' && calls.at(-1)?.path === '/api/hwid/devices/delete-all'
+      && JSON.stringify(calls.at(-1)?.body) === '{"userId":42}');
+    check('сброс устройств v2 по uuid', await client.resetDevices('0b9c1a2e-uuid')
+      && JSON.stringify(calls.at(-1)?.body) === '{"userUuid":"0b9c1a2e-uuid"}');
+    check('перевыпуск шлёт явное тело', await client.revoke('42')
+      && calls.at(-1)?.path === '/api/users/42/actions/revoke' && JSON.stringify(calls.at(-1)?.body) === '{}');
+    check('ни одного HTTP DELETE', calls.every((c) => c.method !== 'DELETE'));
+  } finally {
+    globalThis.fetch = nativeFetch;
+  }
+}
+
 console.log('\n[ AI: Bedolaga только чтение ]');
 {
   const { bedolagaCustomerReader } = await import('../src/integrations/customers.js');
@@ -265,6 +298,23 @@ console.log('\n[ доступ к панели ]');
   store.markAttachmentDownloaded(unsafeTgsId!, unsafeTgsPath, unsafeTgsBytes.length, 'application/gzip');
   check('TGS с внешним asset отклоняется',
     (await fetch(`${B}/api/attachments/${unsafeTgsId}/lottie?token=${encodeURIComponent(ticket)}`)).status === 422);
+
+  // Cookie-билет: только GET/HEAD медиа без побочных эффектов, иначе
+  // браузер приложит её к подделанному с чужого сайта запросу (CSRF).
+  const mediaCookie = { cookie: `ais_media=${ticket}` };
+  check('cookie-билет читает TGS', (await fetch(`${B}/api/attachments/${safeTgsId}/lottie`, { headers: mediaCookie })).status === 200);
+  check('cookie-билет не выпускает новый билет', (await fetch(`${B}/api/ticket`, { headers: mediaCookie })).status === 401);
+  check('cookie-билет не меняет настройки', (await fetch(`${B}/api/settings`, {
+    method: 'POST', headers: { ...mediaCookie, 'content-type': 'application/json' }, body: '{}',
+  })).status === 401);
+  check('cookie-билет не работает на не-GET медиа-маршруте',
+    (await fetch(`${B}/api/attachments/${safeTgsId}`, { method: 'DELETE', headers: mediaCookie })).status === 401);
+  await fetch(`${B}/api/me`, { headers: H });
+  const serverSource = readFileSync(new URL('../src/panel/server.ts', import.meta.url), 'utf8');
+  const cookieUses = serverSource.match(/cookieValue\(request\.headers\.cookie/g) ?? [];
+  check('cookie читается в коде ровно в одном месте и только для GET/HEAD медиа',
+    cookieUses.length === 1 && /const safeMethod = request\.method === 'GET' \|\| request\.method === 'HEAD';/.test(serverSource)
+    && /\(mediaRoute \? ticketGrant\(cookieValue\(request\.headers\.cookie, MEDIA_COOKIE\)\) : null\)/.test(serverSource), cookieUses.length);
 
   const WS = (await import('ws')).default;
   const crossOrigin = new WS(`ws://127.0.0.1:8189/ws?token=${encodeURIComponent(ticket)}`, {

@@ -15,6 +15,8 @@ services:
       # Панель редактирует статьи, поэтому каталог на запись.
       # Черновики лежат отдельно, в data/kb-draft.
       - ./kb:/app/kb
+      # Проверенные инструкции интерфейса перечитываются на каждый AI-запрос.
+      - ./interface-kb:/app/interface-kb:ro
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777

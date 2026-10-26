@@ -550,6 +550,23 @@ const MIGRATIONS: string[] = [
   CREATE INDEX idx_operator_activity_actor ON operator_activity (actor_key, created_at DESC);
   CREATE INDEX idx_operator_activity_period ON operator_activity (created_at DESC, kind);
   `,
+
+  // 020 — управляемое скрытие Telegram-диалогов, удаление которых Bot API
+  // не сообщает. История сохраняется; новое входящее снимает tombstone.
+  `
+  ALTER TABLE conversation ADD COLUMN hidden_at INTEGER;
+  CREATE INDEX idx_conversation_visible_activity ON conversation (last_message_at DESC)
+    WHERE hidden_at IS NULL;
+  `,
+
+  // 021 — аудит писал каждый heartbeat присутствия и удержания диалога:
+  // они вытесняли из журнала реальные действия. Теперь не пишутся, старые убираем.
+  `
+  DELETE FROM audit_log
+   WHERE action LIKE 'POST /api/conversations/%/presence'
+      OR (action LIKE 'POST /api/conversations/%/engage' AND COALESCE(payload, '') NOT LIKE '%"force":true%')
+      OR action LIKE 'POST /api/conversations/%/read';
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {
