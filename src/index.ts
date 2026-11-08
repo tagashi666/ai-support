@@ -1,6 +1,7 @@
 import { config, log, version } from './config.js';
 import { syncKbFromBedolaga, syncKbFromFiles } from './ai/kb.js';
 import { Responder } from './ai/responder.js';
+import { backfillExamples } from './ai/examples.js';
 import { BedolagaClient, BedolagaPoller, BedolagaSender } from './channels/bedolaga.js';
 import { MinishopClient, MinishopPoller, MinishopSender, minishopTicketId } from './channels/minishop.js';
 import { createBot, markReadInTelegram, refreshTelegramProfiles, TelegramBotRegistry, TelegramBotSender, TelegramDmSender } from './channels/tgdm.js';
@@ -88,6 +89,15 @@ async function main(): Promise<void> {
   // включить из панели без перезапуска. Сам обработчик первым делом проверяет
   // resolveMode и при off не обращается к провайдеру.
   const responder = new Responder(store, outbox, customers, notifier, nodes);
+
+  // Пары «вопрос → ответ оператора» из уже накопленной истории: образцы
+  // манеры для промпта. Дальше пополняются инкрементально перед ответами.
+  try {
+    const added = backfillExamples(store);
+    if (added) log.info(`Примеры ответов оператора: добавлено ${added}`);
+  } catch (err) {
+    log.warn('Не удалось собрать примеры ответов оператора', err);
+  }
 
   const syncKb = async (): Promise<void> => {
     try {

@@ -197,6 +197,44 @@ export function fromPanel(store: Store, all: boolean, limit: number, conversatio
   }));
 }
 
+// --- автообучение пачками --------------------------------------------------
+
+const AUTO_LEARN_KEY = 'auto-learn:pending';
+
+function pendingAutoLearn(store: Store): number[] {
+  try {
+    const parsed = JSON.parse(store.getState(AUTO_LEARN_KEY) ?? '[]') as unknown;
+    return Array.isArray(parsed) ? parsed.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Закрытый диалог встаёт в очередь автообучения. Раньше майнинг шёл по
+ * одному диалогу: промпт требует подтверждения несколькими случаями и
+ * ставит одиночной паре уверенность не выше 0.5, так что статей почти не
+ * получалось. Теперь пачка отдаётся целиком, когда набралось `batchSize`.
+ */
+export function queueAutoLearn(store: Store, conversationId: number, batchSize = config.ai.autoLearnBatch): number[] | null {
+  const pending = pendingAutoLearn(store).filter((id) => id !== conversationId);
+  pending.push(conversationId);
+  // Очередь не растёт бесконечно, если майнинг долго не может стартовать.
+  const queue = pending.slice(-50);
+  if (queue.length >= Math.max(1, batchSize)) {
+    store.setState(AUTO_LEARN_KEY, '[]');
+    return queue;
+  }
+  store.setState(AUTO_LEARN_KEY, JSON.stringify(queue));
+  return null;
+}
+
+/** Пачка не стартовала (задача уже идёт) — возвращаем её в очередь. */
+export function requeueAutoLearn(store: Store, conversationIds: number[]): void {
+  const merged = [...new Set([...conversationIds, ...pendingAutoLearn(store)])].slice(-50);
+  store.setState(AUTO_LEARN_KEY, JSON.stringify(merged));
+}
+
 // --- главный проход ---------------------------------------------------------
 
 export async function runMining(

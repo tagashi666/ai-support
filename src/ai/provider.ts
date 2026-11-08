@@ -108,6 +108,22 @@ export function reasoningEffortFor(model: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Рассуждения расходуют тот же max_tokens, что и ответ. На 700 токенах
+ * reasoning-модель успевает подумать, но JSON обрывается — ответ теряется
+ * как ai_unparsed. Поэтому при включённых рассуждениях потолок не ниже 1000.
+ * Не заданный reasoning_effort считаем включённым: у Qwen 3 по умолчанию
+ * рассуждения есть.
+ */
+export const REASONING_MIN_TOKENS = 1000;
+export function effectiveMaxTokens(model: string, maxTokens: number): number {
+  const effort = reasoningEffortFor(model);
+  if (effort === 'none') return maxTokens;
+  const reasoningCapable = model.startsWith('qwen/') || model.startsWith('openai/gpt-oss-')
+    || /deepseek|qwq|r1|reason|think/i.test(model);
+  return reasoningCapable ? Math.max(maxTokens, REASONING_MIN_TOKENS) : maxTokens;
+}
+
 export interface AiDraft {
   reply: string;
   confidence: number;
@@ -117,6 +133,8 @@ export interface AiDraft {
   noRequest: boolean;
   /** Номера выдержек, на которые модель реально опиралась. */
   used: number[];
+  /** Ответ — один короткий уточняющий вопрос, а не совет. */
+  clarify?: boolean;
 }
 
 export class AiProvider {
@@ -262,7 +280,7 @@ export class AiProvider {
             model,
             messages,
             temperature: config.ai.temperature,
-            max_tokens: maxTokens,
+            max_tokens: effectiveMaxTokens(model, maxTokens),
             response_format: { type: 'json_object' },
             ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           }),
@@ -276,8 +294,12 @@ export class AiProvider {
       }
 
       if (response.ok) {
-        const body = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+        const body = (await response.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
         const content = body.choices?.[0]?.message?.content;
+        // Обрезка по лимиту видна только здесь: дальше это просто «не разобрано».
+        if (body.choices?.[0]?.finish_reason === 'length') {
+          log.warn(`AI ${model}: ответ обрезан лимитом max_tokens=${effectiveMaxTokens(model, maxTokens)}`);
+        }
         if (!content) throw new ProviderUnavailableError('AI вернул пустой ответ');
         return content;
       }
@@ -379,5 +401,6 @@ export function parseDraft(raw: string): AiDraft | null {
     used: Array.isArray(parsed['used'])
       ? (parsed['used'] as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n > 0)
       : [],
+    clarify: parsed['clarify'] === true,
   };
 }

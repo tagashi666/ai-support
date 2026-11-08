@@ -269,6 +269,12 @@ console.log('\n[ потолок ответа при майнинге ]');
 
   await prov.complete([{ role: 'user', content: 'x' }], 3, 3500);
   check('майнинг просит больше места под пачку статей', seenMaxTokens === 3500, seenMaxTokens);
+
+  // AI_REASONING_EFFORT не задан: у Qwen рассуждения включены, и 700 токенов
+  // уходят на размышление — JSON ответа обрывается.
+  const qwen = new P(`http://127.0.0.1:${cPort}/v1`, 'k', 'qwen/qwen3.8-27b');
+  await qwen.complete([{ role: 'user', content: 'x' }]);
+  check('при рассуждениях потолок ответа не ниже 1000', seenMaxTokens === 1000, seenMaxTokens);
   capServer.close();
 }
 

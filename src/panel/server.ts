@@ -25,7 +25,8 @@ import {
 } from '../integrations/bedolaga-customer.js';
 import { applySettings, runtime, settingOverrides } from '../core/settings.js';
 import { listDocs, publishDraft, readDoc, removeDoc, slugFromTitle, writeDoc, type Area } from './kbfiles.js';
-import { runMining } from '../ai/mining.js';
+import { queueAutoLearn, requeueAutoLearn, runMining } from '../ai/mining.js';
+import { linkSuggestionAnswer, syncExamples } from '../ai/examples.js';
 import { AiProvider } from '../ai/provider.js';
 import { decide } from '../ai/gate.js';
 import { tryDraft } from '../ai/responder.js';
@@ -810,7 +811,10 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         );
         if (request.body?.suggestionId) {
           store.decideSuggestion(request.body.suggestionId, request.body.edited ? 'edited' : 'sent');
+          // Итог предложки — материал для разбора «AI → оператор».
+          linkSuggestionAnswer(store, request.body.suggestionId, sent.message?.id, text);
         }
+        try { syncExamples(store); } catch (err) { log.debug('Примеры ответов оператора не обновлены', err); }
         operations.recordActivity(actor, 'reply', conversationId, responseMs);
         return { ok: true, message: sent.message };
       } catch (err) {
@@ -978,11 +982,16 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
           });
         }
       }
-      if (status === 'resolved' && before.status !== 'resolved' && runtime.autoLearn && config.ai.apiKeys.length) {
+      // Один диалог — не материал для статьи: промпт майнинга требует
+      // подтверждения несколькими случаями. Копим закрытые и разбираем пачкой.
+      const batchIds = status === 'resolved' && before.status !== 'resolved' && runtime.autoLearn && config.ai.apiKeys.length
+        ? queueAutoLearn(store, id) : null;
+      if (batchIds) {
         const jobId = store.startJob('auto-learn');
+        if (jobId <= 0) requeueAutoLearn(store, batchIds);
         if (jobId > 0) void (async () => {
           try {
-            const report = await runMining(store, { source: 'panel', conversationIds: [id], all: true, limit: 1 }, (message) => {
+            const report = await runMining(store, { source: 'panel', conversationIds: batchIds, all: true, limit: batchIds.length }, (message) => {
               store.updateJob(jobId, message);
               broadcast({ type: 'job', kind: 'auto-learn', status: 'running', progress: message }, 'knowledge:review');
             });
@@ -1576,7 +1585,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     ];
     const started = Date.now();
     try {
-      const draft = await tryDraft(text, hits);
+      const draft = await tryDraft(text, hits, undefined, store);
       if (!draft) return reply.code(502).send({ error: 'Модель вернула ответ, который не разобрался' });
 
       // Показываем и вердикт ворот: почему такой ответ ушёл бы или не ушёл.
