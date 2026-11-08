@@ -660,9 +660,23 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
 
   // GET только читает. Отметка прочтения в Telegram живёт в POST /read: раньше
   // её дёргала каждая фоновая синхронизация открытого диалога.
-  app.get<{ Params: { id: string }; Querystring: { after?: string } }>('/api/conversations/:id', async (request, reply) => {
+  app.get<{ Params: { id: string }; Querystring: { after?: string; before?: string } }>('/api/conversations/:id', async (request, reply) => {
     const conversation = store.getConversation(Number(request.params.id));
     if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
+
+    if (request.query.before !== undefined) {
+      // Подгрузка ранней истории: тред показывает последние 200 сообщений.
+      const before = Number(request.query.before);
+      if (!/^\d{1,15}$/.test(request.query.before) || !Number.isSafeInteger(before)) {
+        return reply.code(400).send({ error: 'Некорректный параметр before' });
+      }
+      const page = store.listMessagesBefore(conversation.id, before, 100);
+      return {
+        messages: page,
+        attachments: store.attachmentsFor(page.map((message) => message.id)),
+        hasMore: page.length === 100,
+      };
+    }
 
     if (request.query.after !== undefined) {
       // Фоновая синхронизация: только сообщения новее известного клиенту.
@@ -685,6 +699,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     return {
       conversation: decorate(conversation, store, operations),
       messages,
+      hasMore: messages.length === 200,
       attachments: store.attachmentsFor(messages.map((message) => message.id)),
       suggestion: store.pendingSuggestion(conversation.id) ?? null,
       // Только кэш: за свежей карточкой панель сходит отдельным запросом,

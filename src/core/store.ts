@@ -259,6 +259,14 @@ export class Store extends EventEmitter<StoreEvents> {
       .reverse() as Message[];
   }
 
+  /** Страница истории старше известного клиенту сообщения — подгрузка «ранних». */
+  listMessagesBefore(conversationId: number, beforeId: number, limit = 100): Message[] {
+    return this.db
+      .prepare('SELECT * FROM message WHERE conversation_id = ? AND id < ? ORDER BY id DESC LIMIT ?')
+      .all(conversationId, beforeId, limit)
+      .reverse() as Message[];
+  }
+
   /** Только сообщения новее известного клиенту: фоновой синхронизации не нужна вся история. */
   listMessagesAfter(conversationId: number, afterId: number, limit = 200): Message[] {
     return this.db

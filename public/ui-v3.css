@@ -32,7 +32,7 @@
   --nav-muted:#9298a2;
   --text:#1d2025;
   --text-secondary:#5d646e;
-  --text-tertiary:#8b929c;
+  --text-tertiary:#6b727c;
   --separator:#d8dce1;
   --separator-strong:#c3c8cf;
   --accent:#1675d1;
@@ -71,7 +71,7 @@ body { overflow:hidden; }
     --nav-muted:#858b95;
     --text:#f0f1f3;
     --text-secondary:#afb4bc;
-    --text-tertiary:#777e88;
+    --text-tertiary:#8e959f;
     --separator:#31343a;
     --separator-strong:#464a52;
     --accent:#5aa7f2;
@@ -99,7 +99,7 @@ html[data-theme="light"] {
   --nav-muted:#9298a2;
   --text:#1d2025;
   --text-secondary:#5d646e;
-  --text-tertiary:#8b929c;
+  --text-tertiary:#6b727c;
   --separator:#d8dce1;
   --separator-strong:#c3c8cf;
   --accent:#1675d1;
@@ -125,7 +125,7 @@ html[data-theme="dark"] {
   --nav-muted:#858b95;
   --text:#f0f1f3;
   --text-secondary:#afb4bc;
-  --text-tertiary:#777e88;
+  --text-tertiary:#8e959f;
   --separator:#31343a;
   --separator-strong:#464a52;
   --accent:#5aa7f2;
@@ -445,11 +445,22 @@ button:active:not(:disabled) { transform:translateY(1px); }
 .empty-thread b { color:var(--text); font-size:15px; font-weight:600; }
 .empty-thread span { font-size:13px; }
 .empty-mark { display:none; }
-.msg { max-width:min(72%,620px); margin-bottom:16px; }
-.msg.in { align-self:flex-start; }
+.msg { max-width:min(72%,620px); margin-bottom:16px; display:flex; flex-direction:column; }
+/* Пузырь обнимает содержимое: без align-items короткое «Да» растягивалось
+   до ширины строки времени. */
+.msg.in { align-self:flex-start; align-items:flex-start; }
+.msg.out { align-items:flex-end; }
+.msg.note { align-items:stretch; }
+.msg.fresh { animation:msg-fresh 220ms var(--ease) both; }
+@keyframes msg-fresh { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion:reduce) { .msg.fresh { animation:none; } }
+/* «Ответить» видно без наведения: на тач-экране наведения нет. */
+.msg .act { margin-left:8px; padding:2px 6px; color:var(--text-secondary); border:0; border-radius:6px; background:transparent; font:inherit; font-size:11px; opacity:.65; cursor:pointer; }
+.msg .act:hover,.msg .act:focus-visible { opacity:1; background:var(--canvas-muted); }
 .msg.out { align-self:flex-end; }
 .msg.note { max-width:min(84%,720px); align-self:center; }
-.bubble { padding:9px 12px; color:var(--text); border:0; border-radius:11px; background:var(--canvas-muted); font-size:14px; line-height:1.5; box-shadow:none; }
+.bubble { padding:9px 12px; color:var(--text); border:0; border-radius:11px; background:var(--canvas-muted); font-size:14px; line-height:1.5; box-shadow:none; white-space:pre-wrap; overflow-wrap:anywhere; min-width:0; }
+.bubble.skel { position:relative; overflow:hidden; min-height:38px; background:linear-gradient(100deg, transparent 25%, rgba(127,127,127,.16) 50%, transparent 75%) var(--canvas-muted); background-size:220% 100%; animation:media-shimmer 1.3s linear infinite; }
 .msg.out .bubble { background:var(--accent-soft); }
 .msg.note .bubble { padding:7px 11px; color:var(--text-secondary); border-left:3px solid var(--warning); border-radius:0 7px 7px 0; background:transparent; }
 .msg .meta { margin-top:4px; color:var(--text-tertiary); font-size:10.5px; }
@@ -532,12 +543,15 @@ button:active:not(:disabled) { transform:translateY(1px); }
   transform:translateX(calc(100% + 24px));
   opacity:0;
   pointer-events:none;
-  transition:transform 210ms var(--ease),opacity 150ms ease;
+  /* Закрытый инспектор не должен ловить Tab и читаться скринридером. */
+  visibility:hidden;
+  transition:transform 210ms var(--ease),opacity 150ms ease,visibility 0s linear 210ms;
 }
 @supports ((backdrop-filter:blur(1px)) or (-webkit-backdrop-filter:blur(1px))) {
   .context { background:color-mix(in srgb,var(--canvas-raised) 88%,transparent); -webkit-backdrop-filter:blur(22px) saturate(120%); backdrop-filter:blur(22px) saturate(120%); }
 }
-.app[data-inspector="open"] .context { transform:translateX(0); opacity:1; pointer-events:auto; }
+.app[data-inspector="open"] .context { transform:translateX(0); opacity:1; pointer-events:auto; visibility:visible; transition:transform 210ms var(--ease),opacity 150ms ease,visibility 0s; }
+.context > * { flex:0 0 auto; }
 .context .grip { display:none; }
 .context-head { min-height:70px; padding:14px 16px; display:flex; align-items:flex-start; gap:12px; border-bottom:1px solid var(--separator); }
 .context-head > div { min-width:0; display:grid; gap:2px; }
@@ -837,6 +851,7 @@ input[readonly],textarea[readonly] { color:var(--text-secondary); background:var
 .row-more { width:32px; height:32px; }
 .doc-row .row-more { opacity:0; }
 .doc-row:hover .row-more,.doc-row:focus-within .row-more { opacity:1; }
+@media (hover:none) { .doc-row .row-more { opacity:1; } }
 .review-row { min-height:70px; }
 
 /* Interface knowledge (Bedolaga cabinet views) ---------------------------- */
@@ -1233,10 +1248,13 @@ input[readonly],textarea[readonly] { color:var(--text-secondary); background:var
   .team-kpis { grid-template-columns:1fr; }
   .team-kpis article { border-right:0; border-bottom:1px solid var(--separator); }
   :root { --nav-width:0px; }
-  .app,.app[data-context="on"],.app[data-context="off"] { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) 58px; }
+  .app,.app[data-context="on"],.app[data-context="off"] { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) calc(58px + env(safe-area-inset-bottom)); }
   .main { grid-column:1; grid-row:1; }
   .sidebar { width:100%; padding:4px 6px calc(4px + env(safe-area-inset-bottom)); grid-column:1; grid-row:2; flex-direction:row; align-items:center; gap:2px; overflow-x:auto; border-top:1px solid var(--separator); }
-  .brand,.search-nav,.side-cap,.sidebar-foot,.nav[data-view="team"],.nav[data-view="diagnostics"],.nav[data-view="settings"] { display:none; }
+  .brand,.search-nav,.side-cap,.sidebar-foot,.nav[data-view="team"],.nav[data-view="diagnostics"],.nav[data-view="settings"],.nav[data-view="lab"],.nav[data-view="nodes"] { display:none; }
+  .sidebar .more-nav { display:flex; }
+  .sidebar { overflow-x:visible; justify-content:space-around; }
+  .nav { flex:1 1 0; min-width:56px; max-width:84px; }
   .primary-nav { flex-direction:row; align-items:center; gap:2px; }
   .nav { width:64px; height:48px; flex:0 0 64px; display:flex; flex-direction:column; justify-content:center; gap:3px; color:var(--nav-muted); font-size:10px; }
   .nav-label { display:block; width:100%; overflow:hidden; text-align:center; text-overflow:ellipsis; }
@@ -1315,3 +1333,20 @@ input[readonly],textarea[readonly] { color:var(--text-secondary); background:var
   .update-panel > .ops-head { align-items:flex-start; flex-direction:column; }
   .update-panel .ops-actions { width:100%; justify-content:flex-start; flex-wrap:wrap; }
 }
+
+/* «Ещё» в нижней панели телефона: разделы, которым не хватило места. */
+.more-nav { display:none; }
+.more-sheet { position:fixed; z-index:60; right:8px; bottom:calc(66px + env(safe-area-inset-bottom)); width:min(280px,calc(100vw - 16px)); padding:6px; display:grid; gap:2px; border:1px solid var(--separator-strong); border-radius:var(--radius-panel); background:var(--canvas-raised); box-shadow:var(--shadow-overlay); }
+.more-sheet[hidden] { display:none; }
+.more-sheet button { min-height:44px; padding:0 12px; display:flex; align-items:center; gap:10px; color:var(--text); border:0; border-radius:8px; background:transparent; font-size:15px; text-align:left; }
+.more-sheet button:hover,.more-sheet button:focus-visible { background:var(--nav-hover); }
+
+/* Тач-экраны: iOS увеличивает страницу при фокусе поля со шрифтом < 16px,
+   а мелкие кнопки трудно попасть пальцем. */
+@media (pointer:coarse) {
+  input[type=text],input[type=password],input[type=number],input[type=search],select,textarea,.ctl,.field textarea { font-size:16px; }
+  .send,.mobile-back,.row-more,.inspector-toggle { min-width:40px; min-height:40px; }
+  .tools .btn,.tools select { height:40px; }
+}
+
+.older-messages { align-self:center; margin:4px auto 12px; }
