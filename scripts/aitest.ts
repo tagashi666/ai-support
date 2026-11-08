@@ -1078,7 +1078,7 @@ aiServer.close(); badServer.close();
 // ---------- запасная модель и рассуждения ----------
 console.log('\n[ запасная модель ]');
 const seen: { model: string; reasoning_effort?: string; messages?: unknown[] }[] = [];
-let exhausted = true;
+let exhausted = true; let rejectPrimary = false;
 const fbServer = createServer((req, res) => {
   let raw = '';
   req.on('data', (c) => { raw += c; });
@@ -1088,6 +1088,10 @@ const fbServer = createServer((req, res) => {
     if (body.model === 'qwen/qwen3.8-27b' && exhausted) {
       res.writeHead(410);
       return res.end('model decommissioned');
+    }
+    if (body.model === 'qwen/qwen3.8-27b' && rejectPrimary) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      return res.end('{"error":{"message":"Failed to generate JSON","code":"json_validate_failed"}}');
     }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { content: '{"reply":"ответ","confidence":0.8}' } }] }));
@@ -1132,6 +1136,14 @@ check('Qwen получает reasoning_effort=none',
 check('lastModel возвращается на основную', withFallback.lastModel === 'qwen/qwen3.8-27b');
 check('нормализация reasoning_effort отдельно проверяется',
   reasoningEffortFor('openai/gpt-oss-120b') === 'low');
+seen.length = 0; rejectPrimary = true;
+const after400 = await withFallback.complete([{ role: 'user', content: 'ping' }], 1);
+check('400 основной модели (не JSON, неподдерживаемый параметр) уходит на запасную',
+  after400.includes('ответ') && seen.some((item) => item.model === 'openai/gpt-oss-120b')
+    && withFallback.lastModel === 'openai/gpt-oss-120b', seen);
+check('основная модель на 400 не повторяется впустую',
+  seen.filter((item) => item.model === 'qwen/qwen3.8-27b').length === 1, seen);
+rejectPrimary = false;
 fbServer.close();
 
 // ---------- расшифровка голосового ----------

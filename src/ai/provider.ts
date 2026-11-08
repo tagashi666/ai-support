@@ -73,6 +73,9 @@ export class ModelUnavailableError extends FallbackEligibleError {
   }
 }
 
+/** 4xx на запрос к конкретной модели: повторять ей бессмысленно, запасной — можно. */
+export class ModelRequestError extends FallbackEligibleError {}
+
 export class ProviderUnavailableError extends FallbackEligibleError {
   constructor(detail: string) {
     super(`Провайдер временно недоступен: ${detail}`);
@@ -243,8 +246,9 @@ export class AiProvider {
       this.lastModel = primary;
       return answer;
     } catch (err) {
-      // Запасная страхует лимит, снятие модели и временный сбой провайдера.
-      // Ошибки ключа и некорректный запрос не маскируем второй попыткой.
+      // Запасная страхует лимит, снятие модели, отказ модели принять запрос
+      // (4xx) и временный сбой провайдера. Отвергнутый ключ (401/403) — нет:
+      // это ошибка настройки, её не маскируем.
       if (!backup || backup === primary || !(err instanceof FallbackEligibleError)) throw err;
       if (needsVision && !supportsVision(backup)) {
         log.warn(`Не отправляю изображение в текстовую запасную модель ${backup}`);
@@ -321,8 +325,10 @@ export class AiProvider {
       } else if (modelUnavailable(response.status, text)) {
         throw new ModelUnavailableError(lastError);
       } else if (response.status < 500) {
-        // Прочие 4xx повторять бессмысленно: неверная модель, лимит токенов.
-        throw new Error(`AI ответил ${lastError}`);
+        // Прочие 4xx той же модели повторять бессмысленно. Но причина часто в
+        // самой модели (не поддерживает параметр, не справилась с JSON, мал
+        // контекст) — поэтому запасная модель получает свою попытку.
+        throw new ModelRequestError(`AI ответил ${lastError}`);
       }
 
       if (attempt === budget) break;

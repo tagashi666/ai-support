@@ -630,6 +630,12 @@ export class Responder {
         return;
       }
 
+      // «Печатает…» перед автоответом: мгновенный длинный ответ выглядит как
+      // робот. Пауза до 4 с зависит от длины; проверки ниже идут уже после неё,
+      // поэтому написавший за это время клиент или оператор отменяют отправку.
+      if (config.ai.typingIndicator && await this.outbox.typing(conversation.id)) {
+        await new Promise((resolve) => setTimeout(resolve, typingDelayMs(effectiveDraft.reply)));
+      }
 
       if (!this.inboundStillCurrent(conversation.id, message.id)) {
         this.store.decideSuggestion(suggestion.id, 'superseded');
@@ -752,4 +758,9 @@ export class Responder {
     }
   }
 
+}
+
+/** Пауза «печатает…» перед автоответом: ~25 мс на символ, от 1,2 до 4 с. */
+export function typingDelayMs(text: string): number {
+  return Math.min(4000, Math.max(1200, 600 + text.length * 25));
 }

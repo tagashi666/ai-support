@@ -463,6 +463,14 @@ export function telegramMediaSource(bots: Bot | TelegramBotRegistry): MediaSourc
 export class TelegramDmSender implements ChannelSender {
   constructor(private readonly bots: Bot | TelegramBotRegistry) {}
 
+  async typing(conversation: Conversation): Promise<void> {
+    if (!conversation.business_connection_id) return;
+    const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;
+    await bot.api.sendChatAction(Number(conversation.remote_external_id ?? conversation.external_id), 'typing', {
+      business_connection_id: conversation.business_connection_id,
+    });
+  }
+
   async send(conversation: Conversation, payload: SendPayload): Promise<SendResult> {
     if (!conversation.business_connection_id) {
       throw new Error(`У диалога ${conversation.id} не сохранён business_connection_id`);
@@ -488,6 +496,11 @@ export class TelegramDmSender implements ChannelSender {
 
 export class TelegramBotSender implements ChannelSender {
   constructor(private readonly bots: Bot | TelegramBotRegistry) {}
+
+  async typing(conversation: Conversation): Promise<void> {
+    const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;
+    await bot.api.sendChatAction(Number(conversation.remote_external_id ?? conversation.external_id), 'typing');
+  }
 
   async send(conversation: Conversation, payload: SendPayload): Promise<SendResult> {
     const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;

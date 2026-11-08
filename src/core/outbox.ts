@@ -27,6 +27,8 @@ export interface AttachmentPayload {
 export interface ChannelSender {
   send(conversation: Conversation, payload: SendPayload): Promise<SendResult>;
   sendAttachment?(conversation: Conversation, payload: AttachmentPayload): Promise<SendResult>;
+  /** «Печатает…» у клиента. Необязательно: тикеты такого статуса не имеют. */
+  typing?(conversation: Conversation): Promise<void>;
 }
 
 export class WindowClosedError extends Error {
@@ -104,6 +106,23 @@ export class Outbox {
   async syncStatus(conversation: Conversation, status: ConversationStatus): Promise<void> {
     const sync = this.statusSyncs.get(conversation.channel);
     if (sync) await sync(conversation, status);
+  }
+
+  /**
+   * Показывает клиенту «печатает…», если канал это умеет. Никогда не бросает:
+   * индикатор — украшение, из-за него нельзя потерять ответ.
+   */
+  async typing(conversationId: number): Promise<boolean> {
+    const conversation = this.store.getConversation(conversationId);
+    const sender = conversation ? this.senders.get(conversation.channel) : undefined;
+    if (!conversation || !sender?.typing) return false;
+    try {
+      await sender.typing(conversation);
+      return true;
+    } catch (err) {
+      log.debug(`Диалог ${conversationId}: не удалось показать «печатает»`, err instanceof Error ? err.message : err);
+      return false;
+    }
   }
 
   supportsAttachments(channel: Channel): boolean {

@@ -163,6 +163,21 @@ try {
     !existsSync(avatarStale) && existsSync(avatarLive) && existsSync(avatarRecent) && swept.avatars === 1, swept);
   ok('сборщик переживает отсутствующий каталог',
     (await sweepOrphanMedia(store, Date.now(), { media: join(dir, 'nope'), avatars: join(dir, 'nope2') })).media === 0);
+  // «Печатает…»: только где канал умеет, и никогда не роняет отправку.
+  {
+    const { typingDelayMs } = await import('../src/ai/responder.js');
+    const typingOutbox = new Outbox(store);
+    const typingConversation = saved!.conversation.id;
+    ok('без отправителя «печатает» не показывается', await typingOutbox.typing(typingConversation) === false);
+    let typed = 0;
+    typingOutbox.register('tg_dm', { send: async () => ({ externalId: 'x' }), typing: async () => { typed += 1; } } as any);
+    ok('канал с typing показывает «печатает»', await typingOutbox.typing(typingConversation) === true && typed === 1);
+    const brokenOutbox = new Outbox(store);
+    brokenOutbox.register('tg_dm', { send: async () => ({ externalId: 'x' }), typing: async () => { throw new Error('403'); } } as any);
+    ok('ошибка индикатора не бросается наружу', await brokenOutbox.typing(typingConversation) === false);
+    ok('пауза перед автоответом от 1,2 до 4 с',
+      typingDelayMs('да') === 1200 && typingDelayMs('x'.repeat(1000)) === 4000 && typingDelayMs('x'.repeat(80)) === 2600);
+  }
 } finally {
   await app.close();
   db.close();
