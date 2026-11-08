@@ -245,17 +245,23 @@ export function renderSuggestion() {
   if (!state.suggestion) { box.innerHTML = ''; return; }
   const pct = state.suggestion.confidence == null ? 0 : Math.round(state.suggestion.confidence * 100);
   let sources = []; try { sources = state.suggestion.sources ? JSON.parse(state.suggestion.sources) : []; } catch {}
+  // Пустой текст — модель просит человека и клиенту ничего не предлагает:
+  // отправлять нечего, остаётся подсказка оператору.
+  const hasText = !!state.suggestion.text?.trim();
   box.innerHTML = `<div class="suggest">
     <div class="head"><b>AI-помощник</b><span>уверенность ${pct}%${state.suggestion.needs_human ? ' · нужен человек' : ''}</span></div>
-    <div class="text">${esc(state.suggestion.text)}</div>
+    ${hasText ? `<div class="text">${esc(state.suggestion.text)}</div>` : '<div class="src">Текста для клиента нет.</div>'}
+    ${state.suggestion.operator_note ? `<div class="src">Оператору: ${esc(state.suggestion.operator_note)}</div>` : ''}
     ${state.suggestion.reason ? `<div class="src">Модель: ${esc(state.suggestion.reason)}</div>` : ''}
     ${sources.length ? `<div class="src">Источники: ${esc(sources.join(' · '))}</div>` : ''}
-    ${canWrite() ? `<div class="acts"><button class="btn primary" id="sgSend">Отправить</button>
-      <button class="btn" id="sgEdit">Править</button><button class="btn danger" id="sgNo">Отклонить</button></div>` : '<div class="hint">Предложка доступна только для просмотра.</div>'}
+    ${canWrite() ? `<div class="acts">${hasText ? `<button class="btn primary" id="sgSend">Отправить</button>
+      <button class="btn" id="sgEdit">Править</button>` : ''}<button class="btn danger" id="sgNo">Отклонить</button></div>` : '<div class="hint">Предложка доступна только для просмотра.</div>'}
     <div class="gauge"><i style="width:${pct}%"></i></div></div>`;
   if (!canWrite()) return;
-  $('sgSend').onclick = () => sendText(state.suggestion.text, { suggestionId: state.suggestion.id, edited: false });
-  $('sgEdit').onclick = () => { $('input').value = state.suggestion.text; $('input').focus(); };
+  if (hasText) {
+    $('sgSend').onclick = () => sendText(state.suggestion.text, { suggestionId: state.suggestion.id, edited: false });
+    $('sgEdit').onclick = () => { $('input').value = state.suggestion.text; $('input').focus(); };
+  }
   $('sgNo').onclick = async () => {
     await mutate(`/api/suggestions/${state.suggestion.id}/decide`,
       { method:'POST', body: JSON.stringify({ status:'rejected' }) }, 'Предложка отклонена');

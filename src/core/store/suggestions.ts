@@ -10,14 +10,16 @@ export class SuggestionRepo {
     confidence?: number;
     needsHuman?: boolean;
     reason?: string;
+    /** Подсказка оператору: клиенту не уходит. */
+    operatorNote?: string;
     model?: string;
     sources?: string[];
   }): Suggestion {
     const result = this.db
       .prepare(
         `INSERT INTO ai_suggestion
-           (conversation_id, message_id, text, confidence, needs_human, reason, model, sources, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (conversation_id, message_id, text, confidence, needs_human, reason, model, sources, created_at, operator_note)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         input.conversationId,
@@ -29,6 +31,7 @@ export class SuggestionRepo {
         input.model ?? null,
         input.sources ? JSON.stringify(input.sources) : null,
         Date.now(),
+        input.operatorNote || null,
       );
     const suggestion = this.getSuggestion(Number(result.lastInsertRowid))!;
     const conversation = this.getConversation(input.conversationId)!;

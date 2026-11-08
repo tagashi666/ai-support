@@ -962,6 +962,114 @@ console.log('\n[ передача человеку ]');
   stubServer.close();
 }
 
+// ---------- подсказка оператору и личные вопросы ----------
+console.log('\n[ operator_note и личные вопросы ]');
+{
+  const { Outbox } = await import('../src/core/outbox.js');
+  const { Responder, renderCustomer, trafficLine, expiryLine, devicesLine, systemPrompt } = await import('../src/ai/responder.js');
+  const { personalTopics } = await import('../src/ai/gate.js');
+  const { runtime: rt } = await import('../src/core/settings.js');
+  const GiB = 1073741824;
+
+  // Эвристика личных вопросов.
+  const topicsOf = (text: string) => personalTopics(text).join(',');
+  check('«сколько трафика осталось» — трафик', topicsOf('сколько у меня трафика осталось подскажите') === 'traffic', topicsOf('сколько у меня трафика осталось подскажите'));
+  check('«когда закончится подписка» — срок', topicsOf('когда закончится подписка?') === 'expiry', topicsOf('когда закончится подписка?'));
+  check('«сколько устройств можно» — устройства', topicsOf('сколько устройств можно подключить') === 'devices');
+  check('«пришла ли оплата» — оплата', topicsOf('пришла ли оплата') === 'payment');
+  check('«какой у меня тариф» — тариф', topicsOf('какой у меня тариф') === 'tariff');
+  check('«дайте мою ссылку подписки» — ссылка', personalTopics('дайте мою ссылку подписки').includes('link'));
+  for (const text of ['не работает впн на айфоне', 'у меня оператор связи блокирует', 'ключ не добавляется в приложение', 'медленно грузит видео', 'спасибо всё работает']) {
+    check(`не личный вопрос: «${text}»`, personalTopics(text).length === 0, personalTopics(text));
+  }
+
+  // Остаток трафика считается в коде.
+  check('остаток = лимит − израсходовано', trafficLine(10 * GiB, 50 * GiB) === 'Трафик: осталось 40.0 ГБ из 50.0 ГБ (израсходовано 10.0 ГБ)', trafficLine(10 * GiB, 50 * GiB));
+  check('лимита нет — «без лимита»', trafficLine(7 * GiB, 0)!.startsWith('Трафик: без лимита') && trafficLine(7 * GiB, undefined)!.includes('без лимита'));
+  check('ушёл в минус — лимит исчерпан и перерасход', trafficLine(52 * GiB, 50 * GiB) === 'Трафик: лимит 50.0 ГБ исчерпан, израсходовано 52.0 ГБ (сверх лимита 2.0 ГБ)', trafficLine(52 * GiB, 50 * GiB));
+  check('ровно по лимиту — исчерпан без перерасхода', trafficLine(50 * GiB, 50 * GiB) === 'Трафик: лимит 50.0 ГБ исчерпан, израсходовано 50.0 ГБ');
+  check('нет данных о трафике — строки нет', trafficLine(undefined, undefined) === undefined);
+  const now = Date.parse('2026-11-09T12:00:00Z');
+  check('дата окончания по-человечески и сколько дней', expiryLine('2026-12-15T12:00:00Z', now) === 'Действует до: 15 декабря 2026 г. (осталось 36 дн.)', expiryLine('2026-12-15T12:00:00Z', now));
+  check('истёкшая подписка', expiryLine('2026-11-06T12:00:00Z', now)!.includes('истекла') && expiryLine('2026-11-06T12:00:00Z', now)!.includes('3 дн. назад'), expiryLine('2026-11-06T12:00:00Z', now));
+  check('устройства: свободные места', devicesLine(2, 3) === 'Устройства: подключено 2 из 3, можно добавить ещё 1');
+  check('устройства: лимит исчерпан', devicesLine(3, 3)!.includes('лимит исчерпан'));
+
+  // Три состояния блока «Клиент».
+  const offline = renderCustomer(null, { connected: false, topics: ['traffic'] });
+  check('интеграции не подключены — так и сказано', offline.includes('недоступны этой поддержке') && !offline.includes('не найден') && offline.includes('позвать специалиста'), offline);
+  const missing = renderCustomer({ found: false, identity: {}, sources: [] }, { connected: true, topics: ['traffic'] });
+  check('подключены, но не найден — просим ссылку подписки', missing.includes('не найден') && missing.includes('ссылку подписки') && !missing.includes('недоступны'), missing);
+  const card = renderCustomer({
+    found: true, identity: {}, sources: ['test'],
+    subscription: { status: 'ACTIVE', expiresAt: '2026-12-15T12:00:00Z', trafficUsed: 10 * GiB, trafficLimit: 50 * GiB, devices: 2, deviceLimit: 3 },
+  }, { connected: true, topics: ['traffic'], now });
+  check('найден — готовые цифры и правило отвечать ими', card.includes('осталось 40.0 ГБ') && card.includes('осталось 36 дн.')
+    && card.includes('Подписка: активна') && card.includes('used=[0]'), card);
+  check('без личного вопроса правила-подсказки нет', !renderCustomer({ found: true, identity: {}, sources: [], subscription: { trafficUsed: GiB } }).includes('used=[0]'));
+
+  // Промпт: однозначный контракт и бюджет.
+  const prompt = systemPrompt('Сервис', 'Коротко.');
+  check('промпт: reply — только для клиента, operator_note — для оператора',
+    prompt.includes('reply — ТОЛЬКО текст') && prompt.includes('operator_note') && !prompt.includes('в reply напиши'), prompt.slice(0, 200));
+  check('промпт не длиннее прежнего (4147 символов)', prompt.length <= 4147, prompt.length);
+  check('в промпте один пример JSON', (prompt.match(/\{"reply"/g) ?? []).length === 1);
+
+  // Сквозной прогон через Responder.
+  const sent: string[] = [];
+  const box = new Outbox(store);
+  box.register('tg_dm', { send: async (_c, p) => { sent.push(p.text); return { externalMsgId: `n${sent.length}` }; } });
+  const prompts: string[] = [];
+  const replying = (content: string) => ({
+    lastModel: 'note-model',
+    complete: async (messages: { content: unknown }[]) => {
+      prompts.push(JSON.stringify(messages));
+      return content;
+    },
+  }) as never;
+  rt.aiMode = 'auto'; rt.requireKb = true;
+
+  const noteConv = store.upsertConversation({ channel:'tg_dm', externalId:'note-1', tgUserId:8801, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-1', text:'почему не работает сервер', externalMsgId:'nt1', sentAt: Date.now() });
+  const offlineCustomers = { get: async () => null, connected: () => false } as never;
+  await new Responder(store, box, offlineCustomers, undefined, undefined,
+    replying('{"reply":"","needs_human":true,"operator_note":"проверить состояние серверов вручную","reason":"нет данных","confidence":0.2}'))
+    .handleInbound(store.getConversation(noteConv.id)!);
+  const noteSuggestion = store.db.prepare('SELECT text, operator_note FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(noteConv.id) as { text: string; operator_note: string | null };
+  check('operator_note не уходит клиенту', sent.length === 1 && sent[0]!.includes('специалисту')
+    && !sent.some((text) => text.includes('проверить состояние')), sent);
+  check('operator_note сохранён в предложке, текст для клиента пуст',
+    noteSuggestion?.operator_note === 'проверить состояние серверов вручную' && noteSuggestion.text === '', noteSuggestion);
+
+  const both = store.upsertConversation({ channel:'tg_dm', externalId:'note-2', tgUserId:8802, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-2', text:'сколько у меня трафика осталось подскажите', externalMsgId:'nt2', sentAt: Date.now() });
+  const foundCustomers = {
+    get: async () => ({ found: true, identity: {}, sources: ['test'], subscription: { trafficUsed: 10 * GiB, trafficLimit: 50 * GiB } }),
+    connected: () => true,
+  } as never;
+  const beforeBoth = sent.length;
+  await new Responder(store, box, foundCustomers, undefined, undefined,
+    replying('{"reply":"У вас осталось 40 ГБ из 50 ГБ.","operator_note":"клиент спрашивал остаток","needs_human":false,"used":[0],"reason":"цифры из блока Клиент","confidence":0.95}'))
+    .handleInbound(store.getConversation(both.id)!);
+  check('ответ цифрами из профиля уходит сам (опора — блок «Клиент»)',
+    sent.length === beforeBoth + 1 && sent.at(-1)!.includes('40 ГБ') && !sent.at(-1)!.includes('остаток'), sent.slice(beforeBoth));
+  check('в промпт попал готовый остаток', prompts.at(-1)!.includes('осталось 40.0 ГБ из 50.0 ГБ'), prompts.at(-1)?.slice(0, 300));
+  const bothSuggestion = store.db.prepare('SELECT sources FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(both.id) as { sources: string };
+  check('источник — карточка клиента', bothSuggestion.sources.includes('Карточка клиента'), bothSuggestion);
+
+  const offConv = store.upsertConversation({ channel:'tg_dm', externalId:'note-3', tgUserId:8803, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-3', text:'сколько у меня трафика осталось подскажите', externalMsgId:'nt3', sentAt: Date.now() });
+  rt.aiMode = 'suggest';
+  await new Responder(store, box, offlineCustomers, undefined, undefined,
+    replying('{"reply":"Отсюда остаток не виден. Позвать специалиста?","needs_human":false,"used":[0],"confidence":0.8}'))
+    .handleInbound(store.getConversation(offConv.id)!);
+  check('без интеграций в промпте «данные недоступны», а не «не найден»',
+    prompts.at(-1)!.includes('недоступны этой поддержке') && !prompts.at(-1)!.includes('не найден в базе'), prompts.at(-1)?.slice(0, 300));
+  const offSuggestion = store.db.prepare('SELECT sources FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(offConv.id) as { sources: string };
+  check('без профиля used=0 опорой не считается', !offSuggestion.sources.includes('Карточка клиента'), offSuggestion);
+  rt.requireKb = true;
+}
+
 // ---------- склейка сообщений ----------
 console.log('\n[ склейка сообщений ]');
 {
@@ -1223,6 +1331,46 @@ check('основная модель на 400 не повторяется впу
   seen.filter((item) => item.model === 'qwen/qwen3.8-27b').length === 1, seen);
 rejectPrimary = false;
 fbServer.close();
+
+// ---------- строгая схема ответа ----------
+console.log('\n[ json_schema ]');
+{
+  const { config: cfg } = await import('../src/config.js');
+  const { AiProvider: AP } = await import('../src/ai/provider.js');
+  const formats: string[] = [];
+  const schemaServer = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const body = JSON.parse(raw) as { response_format?: { type: string } };
+      formats.push(body.response_format?.type ?? '');
+      if (body.response_format?.type === 'json_schema') {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        return res.end('{"error":{"message":"response_format json_schema is not supported"}}');
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { content: '{"reply":"ок","confidence":0.8}' } }] }));
+    });
+  });
+  await new Promise<void>((resolve) => schemaServer.listen(0, '127.0.0.1', resolve));
+  const port = (schemaServer.address() as { port: number }).port;
+  const schemaProvider = new AP(`http://127.0.0.1:${port}/v1`, 'k', 'schema-model', 'schema-model');
+  await schemaProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { schema: true });
+  check('по умолчанию json_schema не включается', formats.join() === 'json_object', formats);
+  formats.length = 0;
+  cfg.ai.jsonSchema = true;
+  const answer = await schemaProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { schema: true });
+  check('AI_JSON_SCHEMA=true: 400 на схему → та же модель с json_object',
+    answer.includes('ок') && formats.join() === 'json_schema,json_object', formats);
+  formats.length = 0;
+  await schemaProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { schema: true });
+  check('отвергнутую схему модели больше не шлём', formats.join() === 'json_object', formats);
+  formats.length = 0;
+  await new AP(`http://127.0.0.1:${port}/v1`, 'k', 'other').complete([{ role: 'user', content: 'x' }], 0, 100);
+  check('без schema-флага (майнинг) — всегда json_object', formats.join() === 'json_object', formats);
+  cfg.ai.jsonSchema = false;
+  schemaServer.close();
+}
 
 // ---------- расшифровка голосового ----------
 console.log('\n[ голосовые ]');

@@ -42,6 +42,7 @@ $('labRun').onclick = async () => {
       <div class="item"><span class="lbl">Обращения нет</span><span class="val mono">${d.noRequest ? 'да' : 'нет'}</span></div>
       <div class="item"><span class="lbl">В боевом режиме</span><span class="val">${esc(verdict)}${body.verdict?.reason ? ` · ${esc(body.verdict.reason)}` : ''}</span></div>
       <div class="item"><span class="lbl">Модель · время</span><span class="val mono">${esc(body.model)} · ${body.ms} мс</span></div>
+      ${d.operatorNote ? `<div class="item"><span class="lbl">Оператору</span><span class="val">${esc(d.operatorNote)}</span></div>` : ''}
       ${d.reason ? `<div class="item"><span class="lbl">Пояснение модели</span><span class="val">${esc(d.reason)}</span></div>` : ''}
     </div>
     <div class="cap" style="margin-top:var(--sp-5)">Что нашлось в базе знаний</div>
