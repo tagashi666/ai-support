@@ -200,6 +200,8 @@ export function fromPanel(store: Store, all: boolean, limit: number, conversatio
 // --- автообучение пачками --------------------------------------------------
 
 const AUTO_LEARN_KEY = 'auto-learn:pending';
+/** Когда отдали последнюю пачку: майнинг не чаще раза в AI_AUTO_LEARN_MIN_HOURS. */
+const AUTO_LEARN_LAST_KEY = 'auto-learn:last-run';
 
 function pendingAutoLearn(store: Store): number[] {
   try {
@@ -216,13 +218,26 @@ function pendingAutoLearn(store: Store): number[] {
  * ставит одиночной паре уверенность не выше 0.5, так что статей почти не
  * получалось. Теперь пачка отдаётся целиком, когда набралось `batchSize`.
  */
-export function queueAutoLearn(store: Store, conversationId: number, batchSize = config.ai.autoLearnBatch): number[] | null {
+export function queueAutoLearn(
+  store: Store,
+  conversationId: number,
+  batchSize = config.ai.autoLearnBatch,
+  minIntervalMs = config.ai.autoLearnMinHours * 3_600_000,
+  now = Date.now(),
+): number[] | null {
   const pending = pendingAutoLearn(store).filter((id) => id !== conversationId);
   pending.push(conversationId);
   // Очередь не растёт бесконечно, если майнинг долго не может стартовать.
   const queue = pending.slice(-50);
-  if (queue.length >= Math.max(1, batchSize)) {
+  // Каждый проход — запрос группировки тем и несколько больших запросов
+  // майнинга. Чаще раза в N часов это расход токенов без пользы: пачка
+  // копится дальше и разбирается целиком — больше подтверждений на тему.
+  const lastRun = Number(store.getState(AUTO_LEARN_LAST_KEY) ?? 0);
+  // Метка из будущего (перевели часы) паузой не считается.
+  const rested = !(lastRun > 0) || now < lastRun || now - lastRun >= minIntervalMs;
+  if (queue.length >= Math.max(1, batchSize) && rested) {
     store.setState(AUTO_LEARN_KEY, '[]');
+    store.setState(AUTO_LEARN_LAST_KEY, String(now));
     return queue;
   }
   store.setState(AUTO_LEARN_KEY, JSON.stringify(queue));
@@ -233,6 +248,8 @@ export function queueAutoLearn(store: Store, conversationId: number, batchSize =
 export function requeueAutoLearn(store: Store, conversationIds: number[]): void {
   const merged = [...new Set([...conversationIds, ...pendingAutoLearn(store)])].slice(-50);
   store.setState(AUTO_LEARN_KEY, JSON.stringify(merged));
+  // Пачка не стартовала — паузу не считаем.
+  store.setState(AUTO_LEARN_LAST_KEY, '0');
 }
 
 // --- главный проход ---------------------------------------------------------
@@ -318,7 +335,7 @@ export async function runMining(
       { role: 'user', content: body },
     ];
     try {
-      const parsed = parseArticles(await provider.complete(messages, 3, config.ai.mineMaxTokens));
+      const parsed = parseArticles(await provider.complete(messages, 3, config.ai.mineMaxTokens, { purpose: 'mining' }));
       articles.push(...parsed);
       progress(`Запрос ${index + 1}/${batches.length}: ${group.length} пар → ${parsed.length} статей`);
     } catch (err) {

@@ -155,6 +155,84 @@ console.log('\n[ фильтрация размышлений ]');
     extractJson('{"a":{"b":1},"c":"}"}') === '{"a":{"b":1},"c":"}"}');
 }
 
+// ---------- ремонт сломанного JSON ----------
+console.log('\n[ ремонт ответа модели ]');
+{
+  const { parseDraftDetailed, completeDraft, REASON_MAX } = await import('../src/ai/provider.js');
+  // Реальная поломка (обобщённо): reply пустой, needs_human, reason дважды,
+  // в первом reason модель рассуждает о самой инструкции.
+  const real = '{"reply":"", "confidence":0.0, "needs_human":true, "no_request":false, "used":[], "reason":"В выдержках нет списка доступных серверов. Согласно правилам требуется человек. Текст для оператора в поле reply должен быть коротким, однако инструкция гласит: " ,"reason":"Нет данных о текущем списке серверов, нужен специалист. Текст для оператора: проверить актуальный список серверов и их статус."}';
+  const realDraft = parseDraftDetailed(real).draft;
+  check('пустой reply с needs_human — законный ответ «нужен человек»',
+    realDraft?.needsHuman === true && realDraft.reply === '', realDraft);
+  check('повторённый reason: берётся последний и обрезается',
+    !!realDraft && realDraft.reason.startsWith('Нет данных о текущем') && realDraft.reason.length <= REASON_MAX, realDraft?.reason);
+
+  const quotes = parseDraftDetailed('{"reply":"Нажмите "Подключить" и подождите","confidence":0.8,"needs_human":false,"used":[1]}');
+  check('неэкранированные кавычки внутри reply чинятся',
+    quotes.draft?.reply === 'Нажмите "Подключить" и подождите' && quotes.repaired && quotes.draft.used[0] === 1, quotes);
+  const quotesEnd = parseDraft('{"confidence":0.8,"reply":"Откройте раздел "Подписка""}');
+  check('кавычка в конце строки перед } не теряется', quotesEnd?.reply === 'Откройте раздел "Подписка"', quotesEnd);
+  const dupReply = parseDraftDetailed('{"reply":"Перезапустите приложение.","confidence":0.8,"reply":""}');
+  check('повторённый reply: первое непустое значение', dupReply.draft?.reply === 'Перезапустите приложение.' && dupReply.repaired, dupReply);
+  check('висячая запятая', parseDraft('{"reply":"Обновите подписку","confidence":0.9,}')?.confidence === 0.9);
+  const tail = parseDraft('{"reply":"Обновите подписку в приложении.","confidence":0.85,"needs_human":false,"reason":"есть в ста');
+  check('обрезанный хвост после целого reply разбирается', tail?.reply === 'Обновите подписку в приложении.' && tail.confidence === 0.85, tail);
+  check('обрезанный reply по-прежнему не годится', parseDraft('{"confidence":0.9,"reply":"Откройте приложение и наж') === null);
+  const prose = parseDraft('Вот ответ:\n```json\n{"reply":"Готово","confidence":0.7}\n```\nНадеюсь, помог!');
+  check('ограждение посреди текста', prose?.reply === 'Готово', prose);
+  const bare = parseDraft("{reply: \"Да, можно\", confidence: 0.9, needs_human: false}");
+  check('ключи без кавычек', bare?.reply === 'Да, можно' && bare.confidence === 0.9, bare);
+  const newline = parseDraft('{"reply":"Первая строка\nвторая строка","confidence":0.9}');
+  check('сырой перевод строки внутри строки', newline?.reply === 'Первая строка\nвторая строка', newline);
+  const loose = parseDraft('reply: "Перезагрузите роутер", confidence: 0.7, needs_human: false');
+  check('без фигурных скобок поля достаются регулярками', loose?.reply === 'Перезагрузите роутер' && loose.confidence === 0.7, loose);
+  const thinkFence = parseDraft('<think>{"reply":"нет"}</think>```json\n{"reply":"Да","confidence":0.6}\n```');
+  check('<think> и ограждение вместе', thinkFence?.reply === 'Да', thinkFence);
+  const note = parseDraft('{"reply":"","needs_human":true,"operator_note":"Проверить   оплату\\nв панели","reason":"нет данных"}');
+  check('operator_note читается одной строкой', note?.operatorNote === 'Проверить оплату в панели' && note.reply === '', note);
+  check('пустой reply без флага — не ответ', parseDraft('{"reply":"","confidence":0.9}') === null);
+  check('used принимает 0 (блок «Клиент»)', parseDraft('{"reply":"Осталось 5 ГБ","confidence":0.9,"used":[0,0,2]}')?.used.join() === '0,2');
+
+  // Повтор и запасная модель при неразобранном ответе.
+  type Call = { model?: string; maxTokens?: number; system: string };
+  const stub = (answers: string[], fallback?: string) => {
+    const calls: Call[] = [];
+    return {
+      calls,
+      client: {
+        lastModel: 'main-model',
+        fallbackName: () => fallback,
+        async complete(messages: { role: string; content: unknown }[], _r?: number, maxTokens?: number, options?: { model?: string }) {
+          calls.push({ model: options?.model, maxTokens, system: String(messages[0]?.content ?? '') });
+          if (options?.model) this.lastModel = options.model;
+          return answers.shift() ?? 'мусор';
+        },
+      },
+    };
+  };
+  const ask = [{ role: 'system' as const, content: 'промпт' }, { role: 'user' as const, content: 'вопрос' }];
+  const viaRetry = stub(['совсем не json', '{"reply":"Исправлено","confidence":0.8}'], 'backup-model');
+  const retried = await completeDraft(viaRetry.client, ask);
+  check('неразобранный ответ: один повтор той же модели', retried.outcome === 'retry' && retried.draft?.reply === 'Исправлено'
+    && viaRetry.calls.length === 2 && viaRetry.calls[1]!.model === 'main-model'
+    && (viaRetry.calls[1]!.maxTokens ?? 9999) <= 400 && viaRetry.calls[1]!.system.includes('валидный JSON'), viaRetry.calls);
+  const viaBackup = stub(['мусор', 'опять мусор', '{"reply":"От запасной","confidence":0.8}'], 'backup-model');
+  const backed = await completeDraft(viaBackup.client, ask);
+  check('после неудачного повтора — запасная модель с исходным запросом', backed.outcome === 'fallback'
+    && backed.draft?.reply === 'От запасной' && viaBackup.calls[2]!.model === 'backup-model'
+    && viaBackup.calls[2]!.system === 'промпт', viaBackup.calls);
+  const noBackup = stub(['мусор', 'мусор'], 'main-model');
+  const failed = await completeDraft(noBackup.client, ask);
+  check('запасная совпадает с основной — не вызывается, итог failed',
+    failed.outcome === 'failed' && failed.draft === null && noBackup.calls.length === 2, noBackup.calls);
+  const okFirst = stub(['{"reply":"Сразу","confidence":0.9}'], 'backup-model');
+  const ok = await completeDraft(okFirst.client, ask);
+  check('валидный ответ — без лишних запросов', ok.outcome === 'ok' && !ok.retried && okFirst.calls.length === 1);
+  const repairedFirst = stub(['{"reply":"Нажмите "Да"","confidence":0.9}']);
+  check('починенный разбором — outcome repaired', (await completeDraft(repairedFirst.client, ask)).outcome === 'repaired');
+}
+
 // ---------- ротация ключей ----------
 console.log('\n[ ротация ключей ]');
 {
@@ -884,6 +962,225 @@ console.log('\n[ передача человеку ]');
   stubServer.close();
 }
 
+// ---------- подсказка оператору и личные вопросы ----------
+console.log('\n[ operator_note и личные вопросы ]');
+{
+  const { Outbox } = await import('../src/core/outbox.js');
+  const { Responder, renderCustomer, trafficLine, expiryLine, devicesLine, systemPrompt } = await import('../src/ai/responder.js');
+  const { personalTopics } = await import('../src/ai/gate.js');
+  const { runtime: rt } = await import('../src/core/settings.js');
+  const GiB = 1073741824;
+
+  // Эвристика личных вопросов.
+  const topicsOf = (text: string) => personalTopics(text).join(',');
+  check('«сколько трафика осталось» — трафик', topicsOf('сколько у меня трафика осталось подскажите') === 'traffic', topicsOf('сколько у меня трафика осталось подскажите'));
+  check('«когда закончится подписка» — срок', topicsOf('когда закончится подписка?') === 'expiry', topicsOf('когда закончится подписка?'));
+  check('«сколько устройств можно» — устройства', topicsOf('сколько устройств можно подключить') === 'devices');
+  check('«пришла ли оплата» — оплата', topicsOf('пришла ли оплата') === 'payment');
+  check('«какой у меня тариф» — тариф', topicsOf('какой у меня тариф') === 'tariff');
+  check('«дайте мою ссылку подписки» — ссылка', personalTopics('дайте мою ссылку подписки').includes('link'));
+  for (const text of ['не работает впн на айфоне', 'у меня оператор связи блокирует', 'ключ не добавляется в приложение', 'медленно грузит видео', 'спасибо всё работает']) {
+    check(`не личный вопрос: «${text}»`, personalTopics(text).length === 0, personalTopics(text));
+  }
+
+  // Остаток трафика считается в коде.
+  check('остаток = лимит − израсходовано', trafficLine(10 * GiB, 50 * GiB) === 'Трафик: осталось 40.0 ГБ из 50.0 ГБ (израсходовано 10.0 ГБ)', trafficLine(10 * GiB, 50 * GiB));
+  check('лимита нет — «без лимита»', trafficLine(7 * GiB, 0)!.startsWith('Трафик: без лимита') && trafficLine(7 * GiB, undefined)!.includes('без лимита'));
+  check('ушёл в минус — лимит исчерпан и перерасход', trafficLine(52 * GiB, 50 * GiB) === 'Трафик: лимит 50.0 ГБ исчерпан, израсходовано 52.0 ГБ (сверх лимита 2.0 ГБ)', trafficLine(52 * GiB, 50 * GiB));
+  check('ровно по лимиту — исчерпан без перерасхода', trafficLine(50 * GiB, 50 * GiB) === 'Трафик: лимит 50.0 ГБ исчерпан, израсходовано 50.0 ГБ');
+  check('нет данных о трафике — строки нет', trafficLine(undefined, undefined) === undefined);
+  const now = Date.parse('2026-11-09T12:00:00Z');
+  check('дата окончания по-человечески и сколько дней', expiryLine('2026-12-15T12:00:00Z', now) === 'Действует до: 15 декабря 2026 г. (осталось 36 дн.)', expiryLine('2026-12-15T12:00:00Z', now));
+  check('истёкшая подписка', expiryLine('2026-11-06T12:00:00Z', now)!.includes('истекла') && expiryLine('2026-11-06T12:00:00Z', now)!.includes('3 дн. назад'), expiryLine('2026-11-06T12:00:00Z', now));
+  check('устройства: свободные места', devicesLine(2, 3) === 'Устройства: подключено 2 из 3, можно добавить ещё 1');
+  check('устройства: лимит исчерпан', devicesLine(3, 3)!.includes('лимит исчерпан'));
+
+  // Три состояния блока «Клиент».
+  const offline = renderCustomer(null, { connected: false, topics: ['traffic'] });
+  check('интеграции не подключены — так и сказано', offline.includes('недоступны этой поддержке') && !offline.includes('не найден') && offline.includes('позвать специалиста'), offline);
+  const missing = renderCustomer({ found: false, identity: {}, sources: [] }, { connected: true, topics: ['traffic'] });
+  check('подключены, но не найден — просим ссылку подписки', missing.includes('не найден') && missing.includes('ссылку подписки') && !missing.includes('недоступны'), missing);
+  const card = renderCustomer({
+    found: true, identity: {}, sources: ['test'],
+    subscription: { status: 'ACTIVE', expiresAt: '2026-12-15T12:00:00Z', trafficUsed: 10 * GiB, trafficLimit: 50 * GiB, devices: 2, deviceLimit: 3 },
+  }, { connected: true, topics: ['traffic'], now });
+  check('найден — готовые цифры и правило отвечать ими', card.includes('осталось 40.0 ГБ') && card.includes('осталось 36 дн.')
+    && card.includes('Подписка: активна') && card.includes('used=[0]'), card);
+  check('без личного вопроса правила-подсказки нет', !renderCustomer({ found: true, identity: {}, sources: [], subscription: { trafficUsed: GiB } }).includes('used=[0]'));
+
+  // Промпт: однозначный контракт и бюджет.
+  const prompt = systemPrompt('Сервис', 'Коротко.');
+  check('промпт: reply — только для клиента, operator_note — для оператора',
+    prompt.includes('reply — ТОЛЬКО текст') && prompt.includes('operator_note') && !prompt.includes('в reply напиши'), prompt.slice(0, 200));
+  // Было 4147 символов шаблона; цель экономии — не больше 2800 (стиль — отдельно).
+  check('промпт не длиннее 2800 символов без стиля', prompt.length - 'Коротко.'.length <= 2800, prompt.length);
+  check('в промпте один пример JSON', (prompt.match(/\{"reply"/g) ?? []).length === 1);
+
+  // Сквозной прогон через Responder.
+  const sent: string[] = [];
+  const box = new Outbox(store);
+  box.register('tg_dm', { send: async (_c, p) => { sent.push(p.text); return { externalMsgId: `n${sent.length}` }; } });
+  const prompts: string[] = [];
+  const replying = (content: string) => ({
+    lastModel: 'note-model',
+    complete: async (messages: { content: unknown }[]) => {
+      prompts.push(JSON.stringify(messages));
+      return content;
+    },
+  }) as never;
+  rt.aiMode = 'auto'; rt.requireKb = true;
+
+  const noteConv = store.upsertConversation({ channel:'tg_dm', externalId:'note-1', tgUserId:8801, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-1', text:'почему не работает сервер', externalMsgId:'nt1', sentAt: Date.now() });
+  const offlineCustomers = { get: async () => null, connected: () => false } as never;
+  await new Responder(store, box, offlineCustomers, undefined, undefined,
+    replying('{"reply":"","needs_human":true,"operator_note":"проверить состояние серверов вручную","reason":"нет данных","confidence":0.2}'))
+    .handleInbound(store.getConversation(noteConv.id)!);
+  const noteSuggestion = store.db.prepare('SELECT text, operator_note FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(noteConv.id) as { text: string; operator_note: string | null };
+  check('operator_note не уходит клиенту', sent.length === 1 && sent[0]!.includes('специалисту')
+    && !sent.some((text) => text.includes('проверить состояние')), sent);
+  check('operator_note сохранён в предложке, текст для клиента пуст',
+    noteSuggestion?.operator_note === 'проверить состояние серверов вручную' && noteSuggestion.text === '', noteSuggestion);
+
+  const both = store.upsertConversation({ channel:'tg_dm', externalId:'note-2', tgUserId:8802, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-2', text:'сколько у меня трафика осталось подскажите', externalMsgId:'nt2', sentAt: Date.now() });
+  const foundCustomers = {
+    get: async () => ({ found: true, identity: {}, sources: ['test'], subscription: { trafficUsed: 10 * GiB, trafficLimit: 50 * GiB } }),
+    connected: () => true,
+  } as never;
+  const beforeBoth = sent.length;
+  await new Responder(store, box, foundCustomers, undefined, undefined,
+    replying('{"reply":"У вас осталось 40 ГБ из 50 ГБ.","operator_note":"клиент спрашивал остаток","needs_human":false,"used":[0],"reason":"цифры из блока Клиент","confidence":0.95}'))
+    .handleInbound(store.getConversation(both.id)!);
+  check('ответ цифрами из профиля уходит сам (опора — блок «Клиент»)',
+    sent.length === beforeBoth + 1 && sent.at(-1)!.includes('40 ГБ') && !sent.at(-1)!.includes('остаток'), sent.slice(beforeBoth));
+  check('в промпт попал готовый остаток', prompts.at(-1)!.includes('осталось 40.0 ГБ из 50.0 ГБ'), prompts.at(-1)?.slice(0, 300));
+  const bothSuggestion = store.db.prepare('SELECT sources FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(both.id) as { sources: string };
+  check('источник — карточка клиента', bothSuggestion.sources.includes('Карточка клиента'), bothSuggestion);
+
+  const offConv = store.upsertConversation({ channel:'tg_dm', externalId:'note-3', tgUserId:8803, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'note-3', text:'сколько у меня трафика осталось подскажите', externalMsgId:'nt3', sentAt: Date.now() });
+  rt.aiMode = 'suggest';
+  await new Responder(store, box, offlineCustomers, undefined, undefined,
+    replying('{"reply":"Отсюда остаток не виден. Позвать специалиста?","needs_human":false,"used":[0],"confidence":0.8}'))
+    .handleInbound(store.getConversation(offConv.id)!);
+  check('без интеграций в промпте «данные недоступны», а не «не найден»',
+    prompts.at(-1)!.includes('недоступны этой поддержке') && !prompts.at(-1)!.includes('не найден в базе'), prompts.at(-1)?.slice(0, 300));
+  const offSuggestion = store.db.prepare('SELECT sources FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(offConv.id) as { sources: string };
+  check('без профиля used=0 опорой не считается', !offSuggestion.sources.includes('Карточка клиента'), offSuggestion);
+  rt.requireKb = true;
+}
+
+// ---------- прогон качества (логика проверок) ----------
+console.log('\n[ aieval ]');
+{
+  const { runEval, summarize, renderReport, judge, evalCases } = await import('../src/ai/eval.js');
+  const { runtime: rtEval } = await import('../src/core/settings.js');
+  const savedMode = rtEval.aiMode; const savedKb = rtEval.requireKb;
+  rtEval.aiMode = 'auto'; rtEval.requireKb = true;
+  check('в наборе ~40 обращений с уникальными id', evalCases().length >= 38 && new Set(evalCases().map((c) => c.id)).size === evalCases().length);
+  const scripted = (answer: (prompt: string) => string) => ({
+    lastModel: 'eval-stub',
+    complete: async (messages: { content: unknown }[]) => answer(String(messages.at(-1)?.content ?? '')),
+  });
+  const good = scripted((prompt) => {
+    if (prompt.includes('<client>сколько у меня трафика')) return '{"reply":"У вас осталось 40 ГБ из 50 ГБ.","used":[0],"confidence":0.95}';
+    if (prompt.includes('<client>не работает впн')) return '{"reply":"На каком устройстве и в каком приложении не подключается?","clarify":true,"confidence":0.9}';
+    if (prompt.includes('<client>позовите')) return '{"reply":"Передаю специалисту.","confidence":0.9}';
+    return 'мусор';
+  });
+  const only = ['traffic', 'vague', 'human', 'thanks'];
+  const rows = await runEval(good, () => [], { only });
+  check('ожидания: цифры из профиля, уточнение, человек, молчание', rows.every((row) => row.ok), rows);
+  check('«спасибо» отсекается без запроса к модели', rows.find((row) => row.id === 'thanks')?.outcome === 'early');
+  const bad = scripted((prompt) => prompt.includes('трафика')
+    ? '{"reply":"Остаток указан в карточке вашей подписки, посмотрите в карточке.","used":[],"confidence":0.9}'
+    : 'совсем не json');
+  const badRows = await runEval(bad, () => [], { only: ['traffic', 'vague'] });
+  const traffic = badRows.find((row) => row.id === 'traffic')!;
+  check('ответ без цифр и с отсылкой к карточке — провал', !traffic.ok
+    && traffic.problems.some((p) => p.includes('ожидалось answer')) && traffic.problems.some((p) => p.includes('карточке')), traffic.problems);
+  check('ответ без нужных цифр — провал', judge(evalCases().find((c) => c.id === 'traffic')!, 'answer', 'Остаток трафика смотрите в приложении.').some((p) => p.includes('«40»')));
+  check('неразобранный ответ — провал «не разобран»', badRows.find((row) => row.id === 'vague')?.result === 'unparsed');
+  const summary = summarize([...rows, ...badRows]);
+  check('сводка: parse rate и pass rate', Math.abs(summary.parseRate - 4 / 5) < 1e-9 && Math.abs(summary.passRate - 4 / 6) < 1e-9, summary);
+  const report = renderReport(rows, 'eval-stub');
+  check('отчёт — markdown-таблица со сводкой', report.includes('| # | Случай |') && report.includes('прошло: 100%'), report.slice(0, 300));
+  const injection = evalCases().find((c) => c.id === 'inject-role')!;
+  check('внутреннее имя сервера в ответе — провал', judge(injection, 'answer', 'Подключитесь к node-alpha-01').some((p) => p.includes('node-alpha') || p.includes('сервера')));
+  check('упоминание ИИ — провал', judge(evalCases()[0]!, 'answer', 'Я ИИ и не могу проверить').includes('упоминание ИИ'));
+  rtEval.aiMode = savedMode; rtEval.requireKb = savedKb;
+}
+
+// ---------- база знаний кусками ----------
+console.log('\n[ KB кусками ]');
+{
+  const { splitArticle, selectChunks } = await import('../src/ai/chunks.js');
+  const { buildReplyMessages, compactScreen } = await import('../src/ai/responder.js');
+  const filler = (word: string, n: number) => Array.from({ length: n }, (_, i) => `Предложение ${i} про ${word} и прочее.`).join(' ');
+  const article = `Вступление о сервисе.\n\n## Оплата картой\n${filler('оплату картой', 20)}\n\n## Продление подписки\n${filler('продление', 20)}\n\n### Лимит устройств\nУстройств столько, сколько в тарифе; лишнее удалите в боте.`;
+  const parts = splitArticle(article);
+  check('статья режется по заголовкам ##/###', parts.some((p) => p.section === 'Оплата картой') && parts.some((p) => p.section === 'Лимит устройств') && parts[0]!.section === undefined, parts.map((p) => p.section));
+  const plain = Array.from({ length: 8 }, (_, i) => `Абзац ${i}. ${filler('скорость', 4)}`).join('\n\n');
+  const plainParts = splitArticle(plain);
+  check('без заголовков — по абзацам до ~900 символов', plainParts.length > 1 && plainParts.every((p) => p.body.length <= 950), plainParts.map((p) => p.body.length));
+  const hits = [
+    { id: 1, source: 't', title: 'Подписка и оплата', body: article, score: -2 },
+    { id: 2, source: 't', title: 'Скорость', body: plain, score: -1 },
+  ];
+  const picked = selectChunks(hits as never, 'сколько устройств можно подключить', 1500);
+  check('выбирается раздел с ответом', picked[0]?.section === 'Лимит устройств', picked.map((c) => c.section));
+  const total = selectChunks(hits as never, 'оплата картой продление скорость', 2000).reduce((n, c) => n + c.title.length + (c.section?.length ?? 0) + c.body.length + 8, 0);
+  check('общий бюджет символов соблюдается', total <= 2000, total);
+  check('ничего не совпало — начало лучшей статьи', selectChunks(hits as never, 'ау', 1500)[0]?.title === 'Подписка и оплата');
+
+  const { messages, sources } = buildReplyMessages({
+    serviceName: 'S', hits: hits as never, customer: '—', clientText: 'не проходит оплата картой, и как продлить',
+    interfaceScreens: [1, 2, 3].map((n) => ({ id: `s${n}`, title: `Экран ${n}`, routeDescription: 'Меню → Раздел', keywords: [], instructions: ['Нажмите', 'Готово'] })),
+  });
+  const user = String(messages[1]!.content);
+  const kb = user.slice(0, user.indexOf('# Клиент'));
+  check('в промпте куски с заголовком «статья › раздел»', kb.includes('Подписка и оплата › Оплата картой'), kb.slice(0, 200));
+  check('источник куска — название статьи (used → статья)', sources[0] === 'Подписка и оплата' && sources.every((s) => !s.includes('›')), sources);
+  check('экранов интерфейса не больше двух', sources.filter((s) => s.startsWith('Интерфейс')).length === 2, sources);
+  check('экран — компактно одной строкой', compactScreen({ id: 'x', title: 'Продление', routeDescription: 'Подписка → Продлить', keywords: [], instructions: ['Выберите срок', 'Оплатите'] })
+    === 'Экран «Продление» (Подписка → Продлить): 1) Выберите срок; 2) Оплатите');
+  check('база в промпте укладывается в бюджет', kb.length < 3500 + 1200 + 200, kb.length);
+}
+
+// ---------- без лишних запросов к модели ----------
+console.log('\n[ лишние запросы ]');
+{
+  const { dedupeLines, answeredRepeat, clearlyNoRequest: noReq } = await import('../src/ai/responder.js');
+  const { queueAutoLearn: queue } = await import('../src/ai/mining.js');
+  check('одинаковые подряд реплики склеиваются', dedupeLines(['не работает', 'Не работает!', '', 'на айфоне']).join('|') === 'не работает|на айфоне');
+  const t0 = Date.now();
+  const msg = (id: number, direction: 'in' | 'out', text: string, at: number, author: string | null = null) =>
+    ({ id, direction, author, text, created_at: at, media_type: null }) as never;
+  const answered = [msg(1, 'in', 'не подключается на айфоне', t0 - 60_000), msg(2, 'out', 'Обновите подписку.', t0 - 30_000, 'ai')];
+  check('повтор только что отвеченного — без модели',
+    answeredRepeat([...answered, msg(3, 'in', 'Не подключается на айфоне!', t0)], [msg(3, 'in', 'Не подключается на айфоне!', t0)], t0));
+  check('новый текст после ответа — модель нужна',
+    !answeredRepeat([...answered, msg(3, 'in', 'не помогло', t0)], [msg(3, 'in', 'не помогло', t0)], t0));
+  check('ответ был давно — повтор обрабатывается',
+    !answeredRepeat(answered, [msg(3, 'in', 'не подключается на айфоне', t0 + 10 * 60_000)], t0 + 10 * 60_000));
+  check('без ответа повтор не отсекается',
+    !answeredRepeat([answered[0]!], [msg(3, 'in', 'не подключается на айфоне', t0)], t0));
+  check('только эмодзи или стикер-подпись — без модели', noReq('👍') && noReq('🙏🙏'));
+
+  // Автообучение не чаще раза в N часов, накопленное — одной пачкой.
+  const hour = 3_600_000;
+  const start = Date.now() + 1000 * hour;
+  for (const id of [101, 102]) queue(store, id, 3, 6 * hour, start);
+  check('первая пачка отдаётся сразу', (queue(store, 103, 3, 6 * hour, start) ?? []).length === 3);
+  for (const id of [104, 105]) queue(store, id, 3, 6 * hour, start + hour);
+  check('через час новая пачка ждёт паузы', queue(store, 106, 3, 6 * hour, start + hour) === null);
+  const later = queue(store, 107, 3, 6 * hour, start + 7 * hour);
+  check('после паузы — всё накопленное разом', later?.length === 4, later);
+  store.setState('auto-learn:last-run', '0');
+  store.setState('auto-learn:pending', '[]');
+}
+
 // ---------- склейка сообщений ----------
 console.log('\n[ склейка сообщений ]');
 {
@@ -1145,6 +1442,82 @@ check('основная модель на 400 не повторяется впу
   seen.filter((item) => item.model === 'qwen/qwen3.8-27b').length === 1, seen);
 rejectPrimary = false;
 fbServer.close();
+
+// ---------- строгая схема ответа ----------
+console.log('\n[ json_schema ]');
+{
+  const { config: cfg } = await import('../src/config.js');
+  const { AiProvider: AP } = await import('../src/ai/provider.js');
+  const formats: string[] = [];
+  const schemaServer = createServer((req, res) => {
+    let raw = '';
+    req.on('data', (c) => { raw += c; });
+    req.on('end', () => {
+      const body = JSON.parse(raw) as { response_format?: { type: string } };
+      formats.push(body.response_format?.type ?? '');
+      if (body.response_format?.type === 'json_schema') {
+        res.writeHead(400, { 'content-type': 'application/json' });
+        return res.end('{"error":{"message":"response_format json_schema is not supported"}}');
+      }
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ choices: [{ message: { content: '{"reply":"ок","confidence":0.8}' } }] }));
+    });
+  });
+  await new Promise<void>((resolve) => schemaServer.listen(0, '127.0.0.1', resolve));
+  const port = (schemaServer.address() as { port: number }).port;
+  const schemaProvider = new AP(`http://127.0.0.1:${port}/v1`, 'k', 'schema-model', 'schema-model');
+  await schemaProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { schema: true });
+  check('по умолчанию json_schema не включается', formats.join() === 'json_object', formats);
+  formats.length = 0;
+  cfg.ai.jsonSchema = true;
+  const answer = await schemaProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { schema: true });
+  check('AI_JSON_SCHEMA=true: 400 на схему → та же модель с json_object',
+    answer.includes('ок') && formats.join() === 'json_schema,json_object', formats);
+  formats.length = 0;
+  await schemaProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { schema: true });
+  check('отвергнутую схему модели больше не шлём', formats.join() === 'json_object', formats);
+  formats.length = 0;
+  await new AP(`http://127.0.0.1:${port}/v1`, 'k', 'other').complete([{ role: 'user', content: 'x' }], 0, 100);
+  check('без schema-флага (майнинг) — всегда json_object', formats.join() === 'json_object', formats);
+  cfg.ai.jsonSchema = false;
+  schemaServer.close();
+}
+
+// ---------- учёт токенов ----------
+console.log('\n[ учёт токенов ]');
+{
+  const { AiProvider: AP, onAiUsage, readUsage, completeDraft } = await import('../src/ai/provider.js');
+  check('usage: cached_tokens из prompt_tokens_details',
+    readUsage({ prompt_tokens: 1200, completion_tokens: 80, prompt_tokens_details: { cached_tokens: 900 } }, 'reply', 'm')?.cached === 900);
+  check('usage: пустой — без записи', readUsage({}, 'reply', 'm') === undefined && readUsage(undefined, 'reply', 'm') === undefined);
+  const usageServer = createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"ок","confidence":0.9}' } }],
+        usage: { prompt_tokens: 1500, completion_tokens: 60, prompt_cache_hit_tokens: 1000 },
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => usageServer.listen(0, '127.0.0.1', resolve));
+  const port = (usageServer.address() as { port: number }).port;
+  const seenUsage: { purpose: string; prompt: number; cached: number }[] = [];
+  const off = onAiUsage((usage) => { seenUsage.push(usage); store.logEvent('ai_usage', null, usage); });
+  const usageProvider = new AP(`http://127.0.0.1:${port}/v1`, 'k', 'usage-model');
+  await completeDraft(usageProvider, [{ role: 'user', content: 'x' }]);
+  await usageProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { purpose: 'mining' });
+  off();
+  check('учёт: назначение reply и mining, вход и кэш', seenUsage.map((u) => u.purpose).join() === 'reply,mining'
+    && seenUsage[0]!.prompt === 1500 && seenUsage[0]!.cached === 1000, seenUsage);
+  const usage = store.aiUsage();
+  const reply = usage.week.find((row) => row.purpose === 'reply');
+  check('статистика: токены за 7 дней по назначению и средний вход на ответ',
+    reply?.prompt === 1500 && reply.completion === 60 && usage.avgReplyPrompt === 1500
+      && usage.today.some((row) => row.purpose === 'mining'), usage);
+  check('ai_usage не забивает список событий', !store.stats(7).events.some((row) => row.kind === 'ai_usage'));
+  usageServer.close();
+}
 
 // ---------- расшифровка голосового ----------
 console.log('\n[ голосовые ]');

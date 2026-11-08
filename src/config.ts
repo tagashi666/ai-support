@@ -268,6 +268,9 @@ export const config = {
     // не 'none'), provider поднимает его до 1000: размышление расходует тот
     // же лимит, и на 700 JSON ответа обрывается на полуслове.
     maxTokens: num('AI_MAX_TOKENS', 700),
+    // response_format=json_schema для черновиков ответа. Поддержка у
+    // провайдеров разная, поэтому выключено; на 400 — повтор с json_object.
+    jsonSchema: bool('AI_JSON_SCHEMA', false),
     timeoutMs: num('AI_TIMEOUT_MS', 45000),
     // Порог самооценки модели для автоответа. По диалогам 0.8 отсекает
     // слабо: у отклонённых черновиков ~0.65, у принятых ~0.9. Значение из
@@ -278,7 +281,11 @@ export const config = {
     autoPerHour: num('AI_AUTO_PER_HOUR', 12),
     humanHoldMinutes: num('AI_HUMAN_HOLD_MINUTES', 30),
     kbLimit: num('AI_KB_LIMIT', 5),
+    // Потолок на один кусок статьи (совместимость: раньше — на статью целиком).
     kbChars: num('AI_KB_CHARS', 4200),
+    // Общий бюджет символов базы знаний в одном запросе: статьи режутся на
+    // разделы, в промпт идут лучшие куски в пределах бюджета.
+    kbBudgetChars: num('AI_KB_BUDGET_CHARS', 3500),
     // Потолок содержимого одного запроса при майнинге. Считается против TPM
     // провайдера: у Groq на qwen это 8K токенов в минуту, и один жирный
     // запрос упирается в лимит целиком.
@@ -327,6 +334,8 @@ export const config = {
     autoLearn: bool('AI_AUTO_LEARN', false),
     // Сколько закрытых диалогов копить перед одним проходом автообучения.
     autoLearnBatch: Math.max(1, Math.floor(num('AI_AUTO_LEARN_BATCH', 5))),
+    // Автообучение не чаще раза в N часов: накопленная очередь — одной пачкой.
+    autoLearnMinHours: Math.max(0, num('AI_AUTO_LEARN_MIN_HOURS', 6)),
   },
 
   transcribe: {

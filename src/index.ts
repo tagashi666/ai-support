@@ -10,7 +10,7 @@ import { detectSubLink } from './ai/sublink.js';
 import { openDatabase } from './core/db.js';
 import { checkWritable } from './panel/kbfiles.js';
 import { MediaFetcher } from './core/media.js';
-import { AiProvider } from './ai/provider.js';
+import { AiProvider, onAiUsage } from './ai/provider.js';
 import { Outbox } from './core/outbox.js';
 import { SlaWatcher } from './core/sla.js';
 import { Notifier } from './core/notify.js';
@@ -29,6 +29,9 @@ async function main(): Promise<void> {
   const store = new Store(db);
   seedTemplates(store);
   loadSettings(store);
+  // Учёт токенов: каждый ответ провайдера с usage — событие ai_usage.
+  // Отдельная таблица не нужна, статистика собирает журнал по назначению.
+  onAiUsage((usage) => store.logEvent('ai_usage', null, usage));
 
   const bots = new TelegramBotRegistry();
   for (const source of config.telegramBots) {

@@ -92,6 +92,16 @@ export class CustomerDirectory {
       : remnawave ? [{ id: 'remnawave-default', name: 'Remnawave', client: remnawave }] : [];
   }
 
+  /**
+   * Подключён ли хоть один источник данных о подписках для этого диалога.
+   * Без них «клиент не найден» — неправда: искать было негде, и модель
+   * должна говорить именно это, а не строить догадки.
+   */
+  connected(conversation?: Pick<Conversation, 'channel'>): boolean {
+    if (this.bedolaga || this.remnawaves.length || config.supportApi.enabled) return true;
+    return !!this.minishop && (!conversation || conversation.channel === 'minishop');
+  }
+
   async build(conversation: Conversation): Promise<Profile> {
     const linkRef = conversation.sub_link ? detectSubLink(conversation.sub_link)?.ref : undefined;
     const telegramId = conversation.tg_user_id ?? undefined;

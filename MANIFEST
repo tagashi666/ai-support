@@ -60,7 +60,9 @@ scripts/source-updater.sh
 scripts/uitest.ts
 scripts/updatetest.ts
 scripts/webtest.ts
+src/ai/chunks.ts
 src/ai/cluster.ts
+src/ai/eval.ts
 src/ai/examples.ts
 src/ai/gate.ts
 src/ai/interface-kb.ts
@@ -68,12 +70,14 @@ src/ai/kb.ts
 src/ai/mining.ts
 src/ai/outbound.ts
 src/ai/provider.ts
+src/ai/repair.ts
 src/ai/responder.ts
 src/ai/scrub.ts
 src/ai/sublink.ts
 src/channels/bedolaga.ts
 src/channels/minishop.ts
 src/channels/tgdm.ts
+src/cli/aieval.ts
 src/cli/kbmine.ts
 src/cli/rwprobe.ts
 src/cli/selfcheck.ts

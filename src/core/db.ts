@@ -601,6 +601,12 @@ const MIGRATIONS: string[] = [
     INSERT INTO qa_fts (qa_fts, rowid, question) VALUES ('delete', old.id, old.question);
   END;
   `,
+
+  // 023 — подсказка оператору от модели. Раньше модель писала её в reply,
+  // и текст «для оператора» мог уйти клиенту кнопкой «Отправить».
+  `
+  ALTER TABLE ai_suggestion ADD COLUMN operator_note TEXT;
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {

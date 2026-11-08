@@ -114,7 +114,7 @@ export async function groupTopics(items: Groupable[], provider: AiProvider): Pro
     const raw = await provider.complete([
       { role: 'system', content: TOPIC_PROMPT },
       { role: 'user', content: list },
-    ]);
+    ], undefined, undefined, { purpose: 'mining' });
     const block = extractJson(stripThinking(raw));
     if (!block) throw new Error('в ответе нет JSON');
 

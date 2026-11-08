@@ -130,6 +130,8 @@ export interface Suggestion {
   final_text?: string | null;
   /** Сообщение, которым ушёл итоговый ответ человека. */
   answer_message_id?: number | null;
+  /** Подсказка оператору от модели, клиенту не уходит (миграция 023). */
+  operator_note?: string | null;
 }
 
 export interface Template {

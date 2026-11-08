@@ -1,5 +1,6 @@
 import { config, log } from '../config.js';
 import { runtime } from '../core/settings.js';
+import { lenientParse, mergePairs, regexFields, stripFences } from './repair.js';
 
 export type ContentPart =
   | { type: 'text'; text: string }
@@ -35,7 +36,7 @@ export function stripThinking(raw: string): string {
  * вложенность и пропускаем содержимое строк.
  */
 export function extractJson(raw: string): string | undefined {
-  const text = raw.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, '');
+  const text = stripFences(raw);
   const start = text.indexOf('{');
   if (start === -1) return undefined;
 
@@ -131,14 +132,96 @@ export interface AiDraft {
   reply: string;
   confidence: number;
   needsHuman: boolean;
+  /** Одна короткая фраза: почему такое решение. Обрезается до REASON_MAX. */
   reason: string;
+  /** Подсказка оператору. Клиенту не уходит никогда. */
+  operatorNote?: string;
   /** В сообщениях нет вопроса: болтовня, благодарность, «ок». */
   noRequest: boolean;
-  /** Номера выдержек, на которые модель реально опиралась. */
+  /** Номера выдержек, на которые модель реально опиралась; 0 — блок «Клиент». */
   used: number[];
   /** Ответ — один короткий уточняющий вопрос, а не совет. */
   clarify?: boolean;
 }
+
+export interface CompleteOptions {
+  /** Строго эта модель, без перехода на запасную. */
+  model?: string;
+  /** Черновик ответа клиенту: при AI_JSON_SCHEMA=true просим json_schema. */
+  schema?: boolean;
+  /** Назначение запроса — для учёта токенов. */
+  purpose?: AiPurpose;
+}
+
+/** На что ушли токены: ответ клиенту, починка JSON, майнинг, песочница, прогон. */
+export type AiPurpose = 'reply' | 'repair' | 'mining' | 'try' | 'eval' | 'other';
+
+export interface AiUsage {
+  purpose: AiPurpose;
+  model: string;
+  prompt: number;
+  completion: number;
+  /** Токены входа из кэша префикса — у провайдеров, которые это сообщают. */
+  cached: number;
+}
+
+/**
+ * Получатели учёта токенов. Провайдер не знает о базе: index.ts вешает
+ * сюда запись в журнал событий. Глобально, потому что AiProvider создают
+ * в нескольких местах (ответы, песочница, майнинг).
+ */
+const usageSinks = new Set<(usage: AiUsage) => void>();
+export function onAiUsage(sink: (usage: AiUsage) => void): () => void {
+  usageSinks.add(sink);
+  return () => usageSinks.delete(sink);
+}
+
+interface RawUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+  prompt_cache_hit_tokens?: number;
+}
+
+export function readUsage(raw: RawUsage | undefined, purpose: AiPurpose, model: string): AiUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const n = (value: unknown): number => (Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0);
+  const usage: AiUsage = {
+    purpose,
+    model,
+    prompt: n(raw.prompt_tokens),
+    completion: n(raw.completion_tokens),
+    cached: n(raw.prompt_tokens_details?.cached_tokens ?? raw.prompt_cache_hit_tokens),
+  };
+  return usage.prompt || usage.completion ? usage : undefined;
+}
+
+function reportUsage(usage: AiUsage | undefined): void {
+  if (!usage) return;
+  for (const sink of usageSinks) {
+    try { sink(usage); } catch (err) { log.debug('Учёт токенов не записан', err); }
+  }
+}
+
+/** Компактный образец контракта — один на промпт и на повтор разбора. */
+export const DRAFT_EXAMPLE = '{"reply":"","operator_note":"","reason":"","needs_human":false,"no_request":false,"clarify":false,"used":[],"confidence":0.0}';
+
+/** Схема для response_format=json_schema (только при AI_JSON_SCHEMA=true). */
+export const DRAFT_SCHEMA = {
+  type: 'object',
+  properties: {
+    reply: { type: 'string' },
+    operator_note: { type: 'string' },
+    reason: { type: 'string' },
+    needs_human: { type: 'boolean' },
+    no_request: { type: 'boolean' },
+    clarify: { type: 'boolean' },
+    used: { type: 'array', items: { type: 'integer' } },
+    confidence: { type: 'number' },
+  },
+  required: ['reply', 'needs_human', 'confidence'],
+  additionalProperties: false,
+} as const;
 
 export class AiProvider {
   private readonly keys: string[];
@@ -225,10 +308,25 @@ export class AiProvider {
    * единицами запросов в минуту. Без повтора предложка молча терялась бы,
    * поэтому ждём столько, сколько просит Retry-After, и пробуем снова.
    */
-  async complete(messages: ChatMessage[], retries = 3, maxTokens = config.ai.maxTokens): Promise<string> {
+  async complete(
+    messages: ChatMessage[],
+    retries = 3,
+    maxTokens = config.ai.maxTokens,
+    options: CompleteOptions = {},
+  ): Promise<string> {
     const primary = this.model;
     const backup = this.fallbackModel;
     const needsVision = hasImageInput(messages);
+    const schema = options.schema === true;
+    const purpose = options.purpose ?? 'other';
+
+    // Явно названная модель — без цепочки запасных: так делают повтор
+    // разбора и переход на запасную, когда основная прислала мусор.
+    if (options.model) {
+      const answer = await this.request(messages, options.model, retries, maxTokens, schema, purpose);
+      this.lastModel = options.model;
+      return answer;
+    }
 
     // Позволяет безопасно сделать текстовую модель основной вручную:
     // изображение сразу уйдёт на vision-резерв, если он настроен.
@@ -236,13 +334,13 @@ export class AiProvider {
       if (!backup || backup === primary || !supportsVision(backup)) {
         throw new Error(`Ни одна настроенная модель не умеет обрабатывать изображения: ${primary}`);
       }
-      const answer = await this.request(messages, backup, retries, maxTokens);
+      const answer = await this.request(messages, backup, retries, maxTokens, schema, purpose);
       this.lastModel = backup;
       return answer;
     }
 
     try {
-      const answer = await this.request(messages, primary, retries, maxTokens);
+      const answer = await this.request(messages, primary, retries, maxTokens, schema, purpose);
       this.lastModel = primary;
       return answer;
     } catch (err) {
@@ -255,13 +353,28 @@ export class AiProvider {
         throw err;
       }
       log.warn(`Основная модель ${primary} недоступна, пробую ${backup}: ${(err as Error).message}`);
-      const answer = await this.request(messages, backup, 1, maxTokens);
+      const answer = await this.request(messages, backup, 1, maxTokens, schema, purpose);
       this.lastModel = backup;
       return answer;
     }
   }
 
-  private async request(messages: ChatMessage[], model: string, retries: number, maxTokens: number): Promise<string> {
+  /** Запасная модель, если настроена, — для перехода при неразобранном ответе. */
+  fallbackName(): string | undefined {
+    return this.fallbackModel || undefined;
+  }
+
+  /** Модели, отвергшие json_schema (400): им дальше шлём json_object. */
+  private readonly schemaRejected = new Set<string>();
+
+  private async request(
+    messages: ChatMessage[],
+    model: string,
+    retries: number,
+    maxTokens: number,
+    schema = false,
+    purpose: AiPurpose = 'other',
+  ): Promise<string> {
     let lastError = 'AI недоступен';
     let rateLimited = false;
     if (!this.keys.length) throw new Error('Ключи AI не заданы');
@@ -275,6 +388,9 @@ export class AiProvider {
 
     for (let attempt = 0; attempt <= budget; attempt += 1) {
       let response: Response;
+      // json_schema поддерживают не все: включается только AI_JSON_SCHEMA=true
+      // и только для черновиков ответа (майнинг ждёт другую схему).
+      const useSchema = schema && config.ai.jsonSchema && !this.schemaRejected.has(model);
       try {
         const reasoningEffort = reasoningEffortFor(model);
         response = await fetch(`${this.baseUrl.replace(/\/+$/, '')}/chat/completions`, {
@@ -285,7 +401,9 @@ export class AiProvider {
             messages,
             temperature: config.ai.temperature,
             max_tokens: effectiveMaxTokens(model, maxTokens),
-            response_format: { type: 'json_object' },
+            response_format: useSchema
+              ? { type: 'json_schema', json_schema: { name: 'support_reply', strict: false, schema: DRAFT_SCHEMA } }
+              : { type: 'json_object' },
             ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
           }),
           signal: AbortSignal.timeout(config.ai.timeoutMs),
@@ -298,7 +416,11 @@ export class AiProvider {
       }
 
       if (response.ok) {
-        const body = (await response.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+        const body = (await response.json()) as {
+          choices?: { message?: { content?: string }; finish_reason?: string }[];
+          usage?: RawUsage;
+        };
+        reportUsage(readUsage(body.usage, purpose, model));
         const content = body.choices?.[0]?.message?.content;
         // Обрезка по лимиту видна только здесь: дальше это просто «не разобрано».
         if (body.choices?.[0]?.finish_reason === 'length') {
@@ -322,6 +444,12 @@ export class AiProvider {
         rateLimited = true;
         // Пока есть живой запасной ключ, сменить его быстрее, чем ждать окна.
         if (this.keys.length > 1 && this.rotateKey('упёрся в лимит')) continue;
+      } else if (useSchema && response.status === 400) {
+        // Провайдер не знает json_schema — та же модель, но json_object.
+        this.schemaRejected.add(model);
+        log.warn(`AI ${model}: json_schema не принят (400), повторяю с json_object`);
+        attempt -= 1;
+        continue;
       } else if (modelUnavailable(response.status, text)) {
         throw new ModelUnavailableError(lastError);
       } else if (response.status < 500) {
@@ -375,38 +503,174 @@ export class AiProvider {
   }
 }
 
+/** reason — служебная фраза для панели, не сочинение. */
+export const REASON_MAX = 140;
+const OPERATOR_NOTE_MAX = 400;
+
+function oneLine(value: unknown, max: number): string {
+  if (typeof value !== 'string') return '';
+  const text = value.replace(/\s+/g, ' ').trim();
+  return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;
+}
+
+export interface ParsedDraft {
+  draft: AiDraft | null;
+  /** Строгий JSON.parse не справился, помог терпимый разбор. */
+  repaired: boolean;
+}
+
 /**
- * Модели периодически заворачивают JSON в ```json и добавляют пояснения.
- * Разбираем терпимо, но без выдумывания: не распарсилось — значит не распарсилось.
+ * Разбор ответа модели. Сначала строго, затем терпимо (repair.ts): кавычки
+ * внутри текста, повторённые ключи, висячие запятые, обрыв хвоста. Ничего
+ * не выдумываем: обрезанный reply клиенту не годится — тогда null.
  */
-export function parseDraft(raw: string): AiDraft | null {
-  const block = extractJson(stripThinking(raw));
-  if (!block) return null;
+export function parseDraftDetailed(raw: string): ParsedDraft {
+  const text = stripFences(stripThinking(raw));
+  if (!text) return { draft: null, repaired: false };
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(block) as Record<string, unknown>;
-  } catch (err) {
-    log.debug('Не удалось разобрать ответ модели', err);
-    return null;
+  let fields: Record<string, unknown> | undefined;
+  let truncated = new Set<string>();
+  let repaired = false;
+
+  const block = extractJson(text);
+  if (block) {
+    try {
+      const parsed = JSON.parse(block) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) fields = parsed as Record<string, unknown>;
+    } catch (err) {
+      log.debug('Строгий разбор ответа модели не удался', err);
+    }
   }
+  // JSON.parse при повторе ключа берёт последнее значение. Если оно пустое,
+  // а раньше модель уже написала ответ, — достаём его терпимым разбором.
+  const strictEmptyReply = fields && !(typeof fields['reply'] === 'string' && fields['reply'].trim());
+  if (!fields || strictEmptyReply) {
+    const lenient = lenientParse(text);
+    const pairs = lenient?.pairs.length ? lenient.pairs : regexFields(text);
+    if (pairs.length) {
+      const merged = mergePairs(pairs);
+      const replyFound = typeof merged.fields['reply'] === 'string' && (merged.fields['reply'] as string).trim();
+      if (!fields || (replyFound && !merged.truncated.has('reply'))) {
+        fields = merged.fields;
+        truncated = merged.truncated;
+        repaired = true;
+      }
+    }
+  }
+  if (!fields) return { draft: null, repaired: false };
 
-  const reply = typeof parsed['reply'] === 'string' ? parsed['reply'].trim() : '';
-  // При no_request текста ответа может не быть вовсе — это нормально.
-  if (!reply && parsed['no_request'] !== true && parsed['noRequest'] !== true) return null;
+  const flag = (...names: string[]): boolean => names.some((name) => fields![name] === true || fields![name] === 'true');
+  const noRequest = flag('no_request', 'noRequest');
+  const needsHuman = flag('needs_human', 'needsHuman');
+  // Обрезанный лимитом токенов текст клиенту отправлять нельзя.
+  const reply = typeof fields['reply'] === 'string' && !truncated.has('reply') ? fields['reply'].trim() : '';
+  if (truncated.has('reply')) return { draft: null, repaired };
+  // Пустой reply законен, только когда модель сказала, почему: «обращения
+  // нет» или «нужен человек». Иначе это не ответ.
+  if (!reply && !noRequest && !needsHuman) return { draft: null, repaired };
 
-  const rawConfidence = Number(parsed['confidence']);
+  const rawConfidence = Number(fields['confidence']);
   const confidence = Number.isFinite(rawConfidence) ? Math.min(1, Math.max(0, rawConfidence)) : 0;
+  const operatorNote = oneLine(fields['operator_note'] ?? fields['operatorNote'], OPERATOR_NOTE_MAX);
 
   return {
-    reply,
-    confidence,
-    needsHuman: parsed['needs_human'] === true || parsed['needsHuman'] === true,
-    reason: typeof parsed['reason'] === 'string' ? parsed['reason'] : '',
-    noRequest: parsed['no_request'] === true || parsed['noRequest'] === true,
-    used: Array.isArray(parsed['used'])
-      ? (parsed['used'] as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n > 0)
-      : [],
-    clarify: parsed['clarify'] === true,
+    draft: {
+      reply,
+      confidence,
+      needsHuman,
+      reason: oneLine(fields['reason'], REASON_MAX),
+      ...(operatorNote ? { operatorNote } : {}),
+      noRequest,
+      used: Array.isArray(fields['used'])
+        ? [...new Set((fields['used'] as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n >= 0))]
+        : [],
+      clarify: flag('clarify'),
+    },
+    repaired,
   };
+}
+
+export function parseDraft(raw: string): AiDraft | null {
+  return parseDraftDetailed(raw).draft;
+}
+
+/** Чем закончился разбор: для журнала событий и метрик. */
+export type DraftOutcome = 'ok' | 'repaired' | 'retry' | 'fallback' | 'failed';
+
+export interface DraftResult {
+  draft: AiDraft | null;
+  outcome: DraftOutcome;
+  /** Делался ли дополнительный запрос из-за неразобранного ответа. */
+  retried: boolean;
+}
+
+/** Достаточно для заглушек в тестах: настоящий AiProvider подходит целиком. */
+export interface DraftClient {
+  lastModel: string;
+  complete(messages: ChatMessage[], retries?: number, maxTokens?: number, options?: CompleteOptions): Promise<string>;
+  fallbackName?(): string | undefined;
+}
+
+/** Сколько сломанного вывода отдаём на починку: бюджет токенов маленький. */
+const REPAIR_INPUT_CHARS = 1500;
+const REPAIR_MAX_TOKENS = 400;
+
+export function repairMessages(broken: string): ChatMessage[] {
+  const cut = stripThinking(broken).slice(0, REPAIR_INPUT_CHARS);
+  return [
+    {
+      role: 'system',
+      content: `Перепиши текст ниже в один валидный JSON-объект по схеме ${DRAFT_EXAMPLE}. `
+        + 'Каждый ключ один раз, кавычки внутри строк экранируй, reason — одна короткая фраза, '
+        + 'смысл и текст reply не меняй. Верни только JSON.',
+    },
+    { role: 'user', content: cut },
+  ];
+}
+
+/** Фрагмент сломанного ответа для журнала: коротко в warn, полнее в debug. */
+function logBroken(model: string, raw: string): void {
+  log.warn(`AI ${model}: ответ не разобран: ${raw.slice(0, 200).replace(/\s+/g, ' ')}`);
+  log.debug(`AI ${model}: неразобранный ответ целиком`, raw.slice(0, 4000));
+}
+
+/**
+ * Запрос черновика с восстановлением. Не разобрали ответ — сначала чиним
+ * терпимым разбором, затем ОДИН короткий запрос той же модели «верни
+ * валидный JSON», затем запасная модель (если она есть и другая). Только
+ * после этого — «не разобрано», и решает человек.
+ */
+export async function completeDraft(
+  provider: DraftClient,
+  messages: ChatMessage[],
+  purpose: AiPurpose = 'reply',
+): Promise<DraftResult> {
+  const raw = await provider.complete(messages, undefined, undefined, { schema: true, purpose });
+  const first = parseDraftDetailed(raw);
+  if (first.draft) return { draft: first.draft, outcome: first.repaired ? 'repaired' : 'ok', retried: false };
+
+  const model = provider.lastModel;
+  logBroken(model, raw);
+
+  try {
+    const fixed = await provider.complete(repairMessages(raw), 1, REPAIR_MAX_TOKENS, { model, schema: true, purpose: 'repair' });
+    const draft = parseDraft(fixed);
+    if (draft) return { draft, outcome: 'retry', retried: true };
+    logBroken(model, fixed);
+  } catch (err) {
+    log.warn(`AI ${model}: повтор разбора не удался: ${(err as Error).message}`);
+  }
+
+  const backup = provider.fallbackName?.();
+  if (backup && backup !== model && (!hasImageInput(messages) || supportsVision(backup))) {
+    try {
+      const other = await provider.complete(messages, 1, undefined, { model: backup, schema: true, purpose });
+      const parsed = parseDraftDetailed(other);
+      if (parsed.draft) return { draft: parsed.draft, outcome: 'fallback', retried: true };
+      logBroken(backup, other);
+    } catch (err) {
+      log.warn(`AI ${backup}: запасная модель не ответила: ${(err as Error).message}`);
+    }
+  }
+  return { draft: null, outcome: 'failed', retried: true };
 }
