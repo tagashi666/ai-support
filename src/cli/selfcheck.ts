@@ -4,6 +4,7 @@
  *
  *   npm run selfcheck
  */
+import { existsSync } from 'node:fs';
 import { Bot } from 'grammy';
 import { config, knownEnvKeys, version } from '../config.js';
 import { syncKbFromBedolaga, syncKbFromFiles } from '../ai/kb.js';
@@ -12,6 +13,7 @@ import { BedolagaClient } from '../channels/bedolaga.js';
 import { MinishopClient } from '../channels/minishop.js';
 import { Store } from '../core/store.js';
 import { openDatabase } from '../core/db.js';
+import { explainError } from '../core/netdiag.js';
 
 type Level = 'ok' | 'warn' | 'fail' | 'skip';
 const MARK: Record<Level, string> = { ok: '  ok  ', warn: ' warn ', fail: ' FAIL ', skip: ' skip ' };
@@ -23,11 +25,12 @@ function report(level: Level, label: string, detail = ''): void {
   (level === 'fail' ? console.error : console.log)(line);
 }
 
-async function step(label: string, run: () => Promise<string>, optional = false): Promise<void> {
+async function step(label: string, run: () => Promise<string>, optional = false, target?: string): Promise<void> {
   try {
     report('ok', label, await run());
   } catch (err) {
-    report(optional ? 'warn' : 'fail', label, (err as Error).message);
+    // Вместо голого «fetch failed» — причина и что с ней делать.
+    report(optional ? 'warn' : 'fail', label, explainError(err, target));
   }
 }
 
@@ -37,6 +40,14 @@ console.log(`\n=== ai-support ${version}: предполётная провер�
 report('ok', 'Конфигурация загружена', `AI в режиме ${config.ai.mode}`);
 report(config.alertChatId ? 'ok' : 'warn', 'ALERT_CHAT_ID', config.alertChatId || 'не задан, уведомления никуда не уйдут');
 report(config.panelUrl ? 'ok' : 'warn', 'PANEL_URL', config.panelUrl || 'не задан — в уведомлениях не будет ссылки на диалог');
+
+// В Docker публикация порта и healthcheck смотрят на 8080 внутри контейнера.
+// Другой PANEL_PORT значит, что docker-compose.yml изменён или устарел:
+// панель будет слушать не тот порт и снаружи не ответит.
+if (existsSync('/.dockerenv') && config.panelPort !== 8080) {
+  report('warn', 'PANEL_PORT', `${config.panelPort} внутри контейнера — публикация и healthcheck ждут 8080. `
+    + 'Внешний порт меняется через PANEL_PUBLISH_PORT, PANEL_PORT в Docker не трогайте');
+}
 
 // Опечатка в имени ключа молча игнорируется, и настройка не действует.
 // Смотрим переменные окружения с префиксами проекта, которых код не читает.
@@ -80,11 +91,11 @@ if (config.bedolaga.enabled) {
   await step('Бедолага: тикеты', async () => {
     const tickets = await bedolaga!.activeTickets();
     return `${tickets.length} активных`;
-  });
+  }, false, config.bedolaga.url);
   await step('Бедолага: FAQ', async () => {
     const { items } = await bedolaga!.faqPages(config.bedolaga.language);
     return `${items?.length ?? 0} страниц`;
-  }, true);
+  }, true, config.bedolaga.url);
 } else {
   report('skip', 'Бедолага', 'BEDOLAGA_ENABLED=false');
 }
@@ -96,7 +107,7 @@ if (config.minishop.enabled) {
     const probe = await minishop.probe();
     const tickets = await minishop.activeTickets();
     return `${probe}; активных тикетов ${tickets.length}`;
-  });
+  }, false, config.minishop.url);
 } else {
   report('skip', 'MiniShop', 'MINISHOP_ENABLED=false');
 }
@@ -113,7 +124,7 @@ if (config.supportApi.enabled) {
     // 404 на несуществующего клиента — нормальный ответ живого API.
     if (response.status >= 500) throw new Error(`HTTP ${response.status}`);
     return `отвечает, HTTP ${response.status}`;
-  }, true);
+  }, true, config.supportApi.url);
 } else {
   report('skip', 'Support API', 'SUPPORT_API_ENABLED=false');
 }
@@ -129,7 +140,7 @@ if (config.remnawave.enabled) {
     await client.findUser(0);
     const { size } = client.indexState();
     return size ? `${size} пользователей в индексе` : probe.note;
-  }, true);
+  }, true, config.remnawave.url);
 } else {
   report('skip', 'Remnawave', 'REMNAWAVE_ENABLED=false');
 }
@@ -160,7 +171,7 @@ if (config.ai.mode === 'off') {
     await provider.ping();
     const { total } = provider.keyState();
     return `${config.ai.model} отвечает, ключей ${total}`;
-  });
+  }, false, config.ai.baseUrl);
   if (config.ai.fallbackModel) {
     report('ok', 'Запасная модель', `${config.ai.fallbackModel} — резерв для текстовых обращений`);
   }

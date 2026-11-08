@@ -9,7 +9,11 @@ services:
       MEDIA_DIR: /app/data/media
       KB_DIR: /app/kb
       DRAFT_DIR: /app/data/kb-draft
+      # Внутри контейнера панель всегда слушает 0.0.0.0:8080: на этот порт
+      # смотрят публикация ниже и healthcheck. PANEL_PORT/PANEL_HOST из .env
+      # здесь намеренно перекрыты. Внешний порт — PANEL_PUBLISH_PORT.
       PANEL_HOST: 0.0.0.0
+      PANEL_PORT: 8080
     volumes:
       - ./data:/app/data
       # Панель редактирует статьи, поэтому каталог на запись.
@@ -24,10 +28,12 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # Порт публикуем только на loopback: наружу пускает системный nginx.
-    # Docker обходит UFW, поэтому 127.0.0.1 здесь принципиально.
+    # По умолчанию порт публикуется только на loopback: наружу пускает
+    # nginx/Caddy или туннель. Docker обходит UFW, поэтому 127.0.0.1 здесь
+    # принципиально. Внешний порт и адрес меняются в .env:
+    # PANEL_PUBLISH_PORT и PANEL_BIND (подставляет docker compose).
     ports:
-      - "127.0.0.1:8080:8080"
+      - "${PANEL_BIND:-127.0.0.1}:${PANEL_PUBLISH_PORT:-8080}:8080"
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s

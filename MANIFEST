@@ -54,6 +54,7 @@ scripts/notifytest.ts
 scripts/pack.sh
 scripts/releasecheck.sh
 scripts/sectest.ts
+scripts/setuptest.ts
 scripts/smoke.ts
 scripts/source-updater.sh
 scripts/uitest.ts
@@ -76,12 +77,15 @@ src/channels/tgdm.ts
 src/cli/kbmine.ts
 src/cli/rwprobe.ts
 src/cli/selfcheck.ts
+src/cli/setup.ts
+src/cli/setupfiles.ts
 src/config.ts
 src/core/channels.ts
 src/core/db.ts
 src/core/fts.ts
 src/core/http.ts
 src/core/media.ts
+src/core/netdiag.ts
 src/core/nodes.ts
 src/core/notify.ts
 src/core/operations.ts

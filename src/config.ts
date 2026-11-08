@@ -46,6 +46,8 @@ export const knownEnvKeys = new Set<string>([
   'ENV_FILE',
   // Читаются условно (при заданном *_JSON их пропускают), но ключи валидные.
   'BOT_TOKEN', 'REMNAWAVE_ENABLED', 'REMNAWAVE_URL', 'REMNAWAVE_TOKEN', 'REMNAWAVE_READONLY',
+  // Читает docker compose (публикация порта), приложению они не нужны.
+  'PANEL_PUBLISH_PORT', 'PANEL_BIND',
 ]);
 
 function env(name: string, fallback?: string): string {
