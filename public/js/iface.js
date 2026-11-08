@@ -87,6 +87,7 @@ export function renderInterface(box) {
       <span class="iface-live" id="ifaceLive">${esc(ifaceBadge())}</span>
       ${editor ? '<button class="btn" type="button" data-iface-add>Добавить свой экран</button>' : ''}
     </div>
+    <p class="iface-note">Это справочник экранов кабинета Bedolaga, по которому AI объясняет клиенту, куда нажать. У кабинета два вида: «Полный» (все разделы) и «Простой» (lite-режим, урезанное меню) — названия кнопок и путь к ним в них разные. Вид определяется автоматически по настройке брендинга кабинета (нужен доступ к API Bedolaga); если не определился — задайте его вручную в настройках AI. Переключатель здесь только меняет, какой вид вы просматриваете.</p>
     ${ifaceKb.enabled ? '' : '<p class="iface-note">AI пока не использует справочник: включите его в настройках («Включить базу знаний интерфейса Бедолаги»).</p>'}
     ${ifaceKb.shipped ? '' : '<p class="iface-note">Поставляемый справочник не найден — доступны только свои экраны.</p>'}
     ${rows.length ? rows.map((row) => `<article class="doc-row iface-row${row.hidden ? ' is-hidden' : ''}" data-iface-id="${esc(row.id)}"

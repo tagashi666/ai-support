@@ -10,8 +10,17 @@ export const canWrite = () => canPermission('conversation:reply');
 export const canCompose = () => ['conversation:reply','conversation:attachments','conversation:notes'].some(canPermission);
 export const canReview = () => canPermission('knowledge:review');
 
+const ROLE_NAMES = { admin:'Администратор', lead:'Руководитель', agent:'Оператор', viewer:'Наблюдатель' };
+
 export function applyRoleUi() {
   const reviewer = canReview();
+  // Подпись внизу боковой панели — тот, кто вошёл, а не всегда «Владелец».
+  const actor = state.currentActor;
+  const actorName = $('actorName');
+  if (actorName) {
+    actorName.textContent = actor?.root ? 'Владелец' : (actor?.name || 'Оператор');
+    actorName.title = actor?.root ? 'Вход по токену владельца' : (ROLE_NAMES[actor?.role] ?? '');
+  }
   $('templates').disabled = !canPermission('templates:read');
   $('noteBtn').disabled = !canPermission('conversation:notes');
   $('attachBtn').disabled = !canPermission('conversation:attachments');
