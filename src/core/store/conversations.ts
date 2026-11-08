@@ -5,6 +5,16 @@ import { CHANNEL_IDS, CHANNELS } from '../channels.js';
 // Идентификаторы каналов — константы справочника, не ввод: можно вставить в SQL.
 const TELEGRAM_CHANNELS_SQL = CHANNEL_IDS.filter((id) => CHANNELS[id].telegram).map((id) => `'${id}'`).join(',');
 
+/**
+ * Начало текущего цикла диалога `c`: первое живое входящее после последнего
+ * закрытия. NULL, если диалог ни разу не закрывали или клиент после закрытия
+ * не писал. Первый цикл описывают first_inbound_at/first_response_at.
+ */
+export const REOPENED_AT_SQL = `CASE WHEN c.last_resolved_at IS NOT NULL THEN (
+  SELECT MIN(r.created_at) FROM message r
+   WHERE r.conversation_id = c.id AND r.direction = 'in' AND r.is_backfill = 0
+     AND r.created_at > c.last_resolved_at) END`;
+
 /** Диалоги: карточка, флаги, профиль клиента, SLA. */
 export class ConversationRepo {
   getConversation(this: Store, id: number): Conversation | undefined {
@@ -256,10 +266,19 @@ export class ConversationRepo {
     if (before.status === status && before.resolved_at === resolved) return false;
     this.db
       // Закрытие завершает и передачу человеку: новое обращение после него —
-      // новый разговор, а не «ждите специалиста» по старому.
+      // новый разговор, а не «ждите специалиста» по старому. Удержание
+      // оператора (claimed_at) тоже снимается: иначе вернувшегося клиента
+      // ещё 15 минут не мог взять никто другой. Назначение (assignee) остаётся.
       .prepare(`UPDATE conversation SET status = ?, resolved_at = ?, last_resolved_at = COALESCE(?, last_resolved_at),
-                       handoff_at = CASE WHEN ? IS NULL THEN handoff_at ELSE NULL END, updated_at = ? WHERE id = ?`)
-      .run(status, resolved, resolved, resolved, Date.now(), conversationId);
+                       handoff_at = CASE WHEN ? IS NULL THEN handoff_at ELSE NULL END,
+                       claimed_at = CASE WHEN ? IS NULL THEN claimed_at ELSE NULL END, updated_at = ? WHERE id = ?`)
+      .run(status, resolved, resolved, resolved, resolved, Date.now(), conversationId);
+    // Черновик AI к закрытому разговору устарел: иначе он висел в карточке и
+    // мог уйти клиенту уже после закрытия.
+    if (resolved !== null) {
+      this.db.prepare(`UPDATE ai_suggestion SET status = 'superseded', decided_at = ? WHERE conversation_id = ? AND status = 'pending'`)
+        .run(Date.now(), conversationId);
+    }
     const conversation = this.getConversation(conversationId);
     if (conversation) this.emit('conversation', conversation);
     return true;
@@ -307,34 +326,46 @@ export class ConversationRepo {
    * таблицы, что показывает экран SLA. Раньше уведомления жили по отдельному
    * глобальному сроку и расходились с очередью. `overrideMinutes` — для тестов.
    */
-  overdueConversations(this: Store, maxAgeHours = 24, overrideMinutes?: number): Conversation[] {
+  overdueConversations(this: Store, maxAgeHours = 24, overrideMinutes?: number): Array<Conversation & { reopened_at: number | null }> {
     const now = Date.now();
     const floor = now - maxAgeHours * 3_600_000;
     // Два повода ждать: клиенту вообще не отвечали, либо AI передал вопрос
     // человеку, а человек ещё не ответил. Второй случай без этого запроса
     // был невидим: «ожидайте» от AI закрывало первый ответ.
+    // Третий повод — диалог закрыли, а клиент вернулся с новым вопросом:
+    // first_response_at и first_inbound_at остались от первого цикла, и без
+    // отдельной ветки повторное обращение в SLA не попадало вовсе.
+    // Скрытые диалоги оператор убрал из работы сам — по ним не напоминаем.
     return this.db
       .prepare(
-        `SELECT c.* FROM conversation c
-           LEFT JOIN sla_policy p ON p.priority = c.priority
-          WHERE c.status NOT IN ('closed','resolved')
-            AND (
-              (c.first_response_at IS NULL AND c.last_inbound_at IS NOT NULL
-                 AND COALESCE(c.first_inbound_at, c.last_inbound_at) < :now - COALESCE(:override, p.first_response_minutes, 60) * 60000
-                 AND COALESCE(c.first_inbound_at, c.last_inbound_at) > :floor)
-              OR
-              (c.handoff_at IS NOT NULL
-                 AND c.handoff_at < :now - COALESCE(:override, p.first_response_minutes, 60) * 60000
-                 AND c.handoff_at > :floor
-                 AND NOT EXISTS (
-                   SELECT 1 FROM message
-                    WHERE message.conversation_id = c.id
-                      AND message.author = 'agent' AND message.direction = 'out'
-                      AND message.created_at > c.handoff_at))
-            )
-          ORDER BY COALESCE(c.handoff_at, c.last_inbound_at) ASC`,
+        `SELECT * FROM (
+           SELECT c.*, COALESCE(:override, p.first_response_minutes, 60) * 60000 AS sla_due_ms,
+                  ${REOPENED_AT_SQL} AS reopened_at
+             FROM conversation c
+             LEFT JOIN sla_policy p ON p.priority = c.priority
+            WHERE c.status NOT IN ('closed','resolved') AND c.hidden_at IS NULL
+         ) c
+          WHERE (c.first_response_at IS NULL AND c.last_inbound_at IS NOT NULL
+                   AND COALESCE(c.first_inbound_at, c.last_inbound_at) < :now - c.sla_due_ms
+                   AND COALESCE(c.first_inbound_at, c.last_inbound_at) > :floor)
+             OR (c.handoff_at IS NOT NULL
+                   AND c.handoff_at < :now - c.sla_due_ms
+                   AND c.handoff_at > :floor
+                   AND NOT EXISTS (
+                     SELECT 1 FROM message
+                      WHERE message.conversation_id = c.id
+                        AND message.author = 'agent' AND message.direction = 'out'
+                        AND message.created_at > c.handoff_at))
+             OR (c.reopened_at IS NOT NULL
+                   AND c.reopened_at < :now - c.sla_due_ms
+                   AND c.reopened_at > :floor
+                   AND NOT EXISTS (
+                     SELECT 1 FROM message
+                      WHERE message.conversation_id = c.id AND message.direction = 'out'
+                        AND message.created_at >= c.reopened_at))
+          ORDER BY COALESCE(c.handoff_at, c.reopened_at, c.last_inbound_at) ASC`,
       )
-      .all({ now, floor, override: overrideMinutes ?? null }) as Conversation[];
+      .all({ now, floor, override: overrideMinutes ?? null }) as Array<Conversation & { reopened_at: number | null }>;
   }
 
   /** Однократно переносит прежний глобальный срок в политику «normal». */
@@ -352,7 +383,7 @@ export class ConversationRepo {
         .prepare(
           `SELECT COUNT(*) AS n FROM conversation
             WHERE first_response_at IS NULL AND last_inbound_at IS NOT NULL
-              AND status NOT IN ('closed','resolved')`,
+              AND status NOT IN ('closed','resolved') AND hidden_at IS NULL`,
         )
         .get() as { n: number }
     ).n;

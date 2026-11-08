@@ -615,6 +615,17 @@ const MIGRATIONS: string[] = [
   ALTER TABLE conversation ADD COLUMN last_resolved_at INTEGER;
   UPDATE conversation SET last_resolved_at = resolved_at WHERE resolved_at IS NOT NULL;
   `,
+
+  // 025 — до 024 закрытие не снимало передачу человеку и черновики AI.
+  // В уже закрытых диалогах они остались: вернувшийся клиент получал
+  // «ждите специалиста» по старой передаче, а в карточке висела предложка.
+  `
+  UPDATE conversation SET handoff_at = NULL
+   WHERE status IN ('resolved','closed') AND handoff_at IS NOT NULL;
+  UPDATE ai_suggestion SET status = 'superseded', decided_at = CAST(strftime('%s','now') AS INTEGER) * 1000
+   WHERE status = 'pending'
+     AND conversation_id IN (SELECT id FROM conversation WHERE status IN ('resolved','closed'));
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {

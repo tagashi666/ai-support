@@ -46,13 +46,19 @@ export class SlaWatcher {
         log.warn(`Ещё ${overdue.length - attempted} диалогов без ответа — уведомления придут следующим циклом`);
         break;
       }
+      // Отметка хранит момент уведомления. Одна на диалог навсегда глушила
+      // все следующие ожидания: новую передачу человеку, вопрос после
+      // закрытия. Теперь молчим, только если уведомляли уже в этом ожидании.
       const key = `sla:alerted:${conversation.id}`;
-      if (this.store.getState(key)) continue;
+      const waitingSince = conversation.handoff_at
+        ?? conversation.reopened_at
+        ?? (conversation.first_response_at == null
+          ? (conversation.first_inbound_at ?? conversation.last_inbound_at ?? 0)
+          : (conversation.last_inbound_at ?? 0));
+      const alertedAt = Number(this.store.getState(key) ?? 0);
+      if (alertedAt && alertedAt >= waitingSince) continue;
       attempted += 1;
 
-      const waitingSince = conversation.first_response_at == null
-        ? (conversation.first_inbound_at ?? conversation.last_inbound_at ?? 0)
-        : (conversation.handoff_at ?? conversation.last_inbound_at ?? 0);
       const waited = Math.round((Date.now() - waitingSince) / 60_000);
       const last = this.store.lastInboundMessage(conversation.id);
       const delivered = await this.notifier.notify('sla', conversation, {

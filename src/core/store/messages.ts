@@ -205,6 +205,16 @@ export class MessageRepo {
         input.conversationId,
       );
 
+    // Человек ответил сам — из панели, Telegram Business или админки тикетов.
+    // Черновик AI к тому же вопросу устарел; отправляемую предложку решает
+    // маршрут ответа (sent/edited).
+    if (input.author === 'agent' && input.backfill !== true) {
+      this.db
+        .prepare(`UPDATE ai_suggestion SET status = 'superseded', decided_at = ?
+                   WHERE conversation_id = ? AND status = 'pending' AND id != ?`)
+        .run(Date.now(), input.conversationId, input.suggestionId ?? 0);
+    }
+
     return emitMessage(this, input.conversationId, messageId, input.backfill === true);
   }
 
@@ -380,6 +390,11 @@ export class MessageRepo {
       ).all(...messages.map((message) => message.id)) as Array<{ file_ref: string }>).map((row) => row.file_ref);
       this.db.prepare(`DELETE FROM message WHERE id IN (${messages.map(() => '?').join(',')})`)
         .run(...messages.map((message) => message.id));
+      // Клиент удалил вопрос — черновик ответа на него больше не нужен.
+      this.db.prepare(
+        `UPDATE ai_suggestion SET status = 'superseded', decided_at = ?
+          WHERE conversation_id = ? AND status = 'pending' AND message_id IN (${messages.map(() => '?').join(',')})`,
+      ).run(Date.now(), conversationId, ...messages.map((message) => message.id));
       this.db.prepare(
         `UPDATE conversation
             SET last_message_at = (SELECT MAX(created_at) FROM message WHERE conversation_id = ?),

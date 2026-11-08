@@ -47,6 +47,7 @@ scripts/aitest.ts
 scripts/baretest.ts
 scripts/host-updater.sh
 scripts/install-host-updater.sh
+scripts/lifecycletest.ts
 scripts/mediatest.ts
 scripts/minetest.ts
 scripts/minishoptest.ts

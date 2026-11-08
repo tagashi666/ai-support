@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { Conversation, Store } from './store.js';
+import { REOPENED_AT_SQL } from './store/conversations.js';
 
 export type OperatorRole = 'admin' | 'lead' | 'agent' | 'viewer';
 
@@ -490,20 +491,29 @@ export class Operations {
 
   queue(): Array<Record<string, unknown>> {
     const now = Date.now();
+    // Сроки считаются от начала текущего цикла: у диалога, который закрыли и
+    // открыли заново, created_at и first_response_at остались от прошлого
+    // обращения, и свежий вопрос сразу числился просроченным.
     return (this.db.prepare(`
       SELECT c.id, c.channel, c.username, c.display_name, c.status, c.priority, c.assignee,
              c.first_inbound_at, c.first_response_at, c.created_at, c.last_message_at,
-             p.first_response_minutes, p.resolution_minutes
+             p.first_response_minutes, p.resolution_minutes,
+             ${REOPENED_AT_SQL} AS reopened_at
         FROM conversation c JOIN sla_policy p ON p.priority = c.priority
-       WHERE c.status != 'resolved'
+       WHERE c.status NOT IN ('closed','resolved') AND c.hidden_at IS NULL
        ORDER BY CASE c.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'normal' THEN 3 ELSE 4 END,
                 c.last_message_at ASC
     `).all() as Array<Record<string, unknown>>).map((row) => {
-      const firstBase = Number(row.first_inbound_at ?? row.created_at);
-      const resolutionBase = Number(row.created_at);
+      const reopenedAt = row.reopened_at == null ? null : Number(row.reopened_at);
+      const firstBase = reopenedAt ?? Number(row.first_inbound_at ?? row.created_at);
+      const resolutionBase = reopenedAt ?? Number(row.created_at);
       const firstDue = firstBase + Number(row.first_response_minutes) * 60_000;
       const resolutionDue = resolutionBase + Number(row.resolution_minutes) * 60_000;
-      const due = row.first_response_at ? resolutionDue : Math.min(firstDue, resolutionDue);
+      const responded = reopenedAt === null
+        ? Boolean(row.first_response_at)
+        : Boolean(this.db.prepare(`SELECT 1 FROM message WHERE conversation_id = ? AND direction = 'out' AND created_at >= ? LIMIT 1`)
+          .get(row.id, reopenedAt));
+      const due = responded ? resolutionDue : Math.min(firstDue, resolutionDue);
       return { ...row, due_at: due, overdue: due < now, owner_name: row.assignee ? this.actorName(String(row.assignee)) : null };
     });
   }
