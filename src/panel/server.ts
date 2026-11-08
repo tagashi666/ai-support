@@ -417,6 +417,35 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     }
   };
 
+  /**
+   * Фоновый проход майнинга: прогресс и итог пишутся в журнал задач и уходят
+   * по WS тем, у кого есть право на этот вид задач. `onDone` выполняется до
+   * события «done»; если он бросит, задача помечается упавшей.
+   */
+  const runJob = (
+    jobId: number,
+    kind: 'mine' | 'auto-learn',
+    options: Parameters<typeof runMining>[1],
+    onDone: (report: Awaited<ReturnType<typeof runMining>>) => void,
+  ): void => {
+    const permission: Permission = kind === 'mine' ? 'knowledge:mine' : 'knowledge:review';
+    void (async () => {
+      try {
+        const report = await runMining(store, options, (message) => {
+          store.updateJob(jobId, message);
+          broadcast({ type: 'job', kind, status: 'running', progress: message }, permission);
+        });
+        store.finishJob(jobId, report);
+        onDone(report);
+        broadcast({ type: 'job', kind, status: 'done', report }, permission);
+      } catch (err) {
+        const message = (err as Error).message;
+        store.finishJob(jobId, undefined, message);
+        broadcast({ type: 'job', kind, status: 'failed', error: message }, permission);
+      }
+    })();
+  };
+
   const expected = Buffer.from(config.panelToken);
   // Сравнение за постоянное время: обычное === утекает длину общего префикса.
   /**
@@ -1071,21 +1100,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       if (batchIds) {
         const jobId = store.startJob('auto-learn');
         if (jobId <= 0) requeueAutoLearn(store, batchIds);
-        if (jobId > 0) void (async () => {
-          try {
-            const report = await runMining(store, { source: 'panel', conversationIds: batchIds, all: true, limit: batchIds.length }, (message) => {
-              store.updateJob(jobId, message);
-              broadcast({ type: 'job', kind: 'auto-learn', status: 'running', progress: message }, 'knowledge:review');
-            });
-            store.finishJob(jobId, report);
+        if (jobId > 0) {
+          runJob(jobId, 'auto-learn', { source: 'panel', conversationIds: batchIds, all: true, limit: batchIds.length }, (report) => {
             if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, 'auto-learn');
-            broadcast({ type: 'job', kind: 'auto-learn', status: 'done', report }, 'knowledge:review');
-          } catch (err) {
-            const message = (err as Error).message;
-            store.finishJob(jobId, undefined, message);
-            broadcast({ type: 'job', kind: 'auto-learn', status: 'failed', error: message }, 'knowledge:review');
-          }
-        })();
+          });
+        }
       }
       return { ok: true, conversation: decorate(store.getConversation(id)!, store, operations) };
     },
@@ -2077,22 +2096,10 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       const jobId = store.startJob('mine');
       if (jobId < 0) return reply.code(409).send({ error: 'Сбор уже идёт' });
 
-      void (async () => {
-        try {
-          const report = await runMining(store, { source: 'export', exchanges }, (message) => {
-            store.updateJob(jobId, message);
-            broadcast({ type: 'job', kind: 'mine', status: 'running', progress: message }, 'knowledge:mine');
-          });
-          store.finishJob(jobId, report);
-          if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, 'telegram-export');
-          if (report.articles.length) onKbChanged?.();
-          broadcast({ type: 'job', kind: 'mine', status: 'done', report }, 'knowledge:mine');
-        } catch (err) {
-          const message = (err as Error).message;
-          store.finishJob(jobId, undefined, message);
-          broadcast({ type: 'job', kind: 'mine', status: 'failed', error: message }, 'knowledge:mine');
-        }
-      })();
+      runJob(jobId, 'mine', { source: 'export', exchanges }, (report) => {
+        if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, 'telegram-export');
+        if (report.articles.length) onKbChanged?.();
+      });
 
       return { ok: true, chatName, pairs: exchanges.length };
     },
@@ -2111,32 +2118,16 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       const options = request.body ?? {};
       // Запускаем в фоне: проход с паузами против лимитов длится минуты,
       // держать ради него HTTP-соединение незачем.
-      void (async () => {
-        try {
-          const report = await runMining(
-            store,
-            {
-              source: options.source === 'panel' ? 'panel' : 'archive',
-              status: options.status,
-              limit: options.limit,
-              all: options.all,
-              dryRun: options.dryRun,
-            },
-            (message) => {
-              store.updateJob(jobId, message);
-              broadcast({ type: 'job', kind: 'mine', status: 'running', progress: message }, 'knowledge:mine');
-            },
-          );
-          store.finishJob(jobId, report);
-          if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, String(options.source ?? 'archive'));
-          if (!report.dryRun && report.articles.length) onKbChanged?.();
-          broadcast({ type: 'job', kind: 'mine', status: 'done', report }, 'knowledge:mine');
-        } catch (err) {
-          const message = (err as Error).message;
-          store.finishJob(jobId, undefined, message);
-          broadcast({ type: 'job', kind: 'mine', status: 'failed', error: message }, 'knowledge:mine');
-        }
-      })();
+      runJob(jobId, 'mine', {
+        source: options.source === 'panel' ? 'panel' : 'archive',
+        status: options.status,
+        limit: options.limit,
+        all: options.all,
+        dryRun: options.dryRun,
+      }, (report) => {
+        if (!report.dryRun && report.articles.length) operations.registerCandidates(report.articles, String(options.source ?? 'archive'));
+        if (!report.dryRun && report.articles.length) onKbChanged?.();
+      });
 
       return { ok: true, jobId };
     },
