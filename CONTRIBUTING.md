@@ -7,7 +7,7 @@ issue и опишите задачу: так мы не потратим врем
 
 ```bash
 cp .env.example .env
-# Укажите тестовые BOT_TOKEN и PANEL_TOKEN, AI_MODE можно оставить off.
+# Укажите тестовые BOT_TOKEN и PANEL_TOKEN, AI_API_KEY оставьте пустым — AI останется выключенным.
 npm ci
 npm run typecheck
 npm test

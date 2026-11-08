@@ -41,14 +41,22 @@ export const version: string = (() => {
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 } as const;
 export type Level = keyof typeof LEVELS;
 
+/** Имена переменных, которые код реально читает: selfcheck по ним ловит опечатки. */
+export const knownEnvKeys = new Set<string>([
+  'ENV_FILE',
+  // Читаются условно (при заданном *_JSON их пропускают), но ключи валидные.
+  'BOT_TOKEN', 'REMNAWAVE_ENABLED', 'REMNAWAVE_URL', 'REMNAWAVE_TOKEN', 'REMNAWAVE_READONLY',
+]);
+
 function env(name: string, fallback?: string): string {
+  knownEnvKeys.add(name);
   const raw = process.env[name]?.trim();
   if (raw) return raw;
   if (fallback !== undefined) return fallback;
   throw new Error(`Не задана обязательная переменная окружения ${name}`);
 }
 
-const optional = (name: string): string => process.env[name]?.trim() ?? '';
+const optional = (name: string): string => { knownEnvKeys.add(name); return process.env[name]?.trim() ?? ''; };
 
 /**
  * Список ключей из одной переменной: через запятую, пробел или перенос.
@@ -58,6 +66,7 @@ const optional = (name: string): string => process.env[name]?.trim() ?? '';
 const keyList = (name: string): string[] =>
   optional(name).split(/[\s,;]+/).map((key) => key.trim()).filter(Boolean);
 const num = (name: string, fallback: number): number => {
+  knownEnvKeys.add(name);
   const raw = process.env[name]?.trim();
   if (!raw) return fallback;
   const parsed = Number(raw);
@@ -65,6 +74,7 @@ const num = (name: string, fallback: number): number => {
   return parsed;
 };
 const bool = (name: string, fallback: boolean): boolean => {
+  knownEnvKeys.add(name);
   const raw = process.env[name]?.trim().toLowerCase();
   if (!raw) return fallback;
   if (['1', 'true', 'yes', 'on', 'да'].includes(raw)) return true;

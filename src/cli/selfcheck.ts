@@ -5,7 +5,7 @@
  *   npm run selfcheck
  */
 import { Bot } from 'grammy';
-import { config, version } from '../config.js';
+import { config, knownEnvKeys, version } from '../config.js';
 import { syncKbFromBedolaga, syncKbFromFiles } from '../ai/kb.js';
 import { AiProvider } from '../ai/provider.js';
 import { BedolagaClient } from '../channels/bedolaga.js';
@@ -37,6 +37,17 @@ console.log(`\n=== ai-support ${version}: предполётная провер�
 report('ok', 'Конфигурация загружена', `AI в режиме ${config.ai.mode}`);
 report(config.alertChatId ? 'ok' : 'warn', 'ALERT_CHAT_ID', config.alertChatId || 'не задан, уведомления никуда не уйдут');
 report(config.panelUrl ? 'ok' : 'warn', 'PANEL_URL', config.panelUrl || 'не задан — в уведомлениях не будет ссылки на диалог');
+
+// Опечатка в имени ключа молча игнорируется, и настройка не действует.
+// Смотрим переменные окружения с префиксами проекта, которых код не читает.
+const ENV_PREFIXES = ['AI_', 'BEDOLAGA_', 'MINISHOP_', 'REMNAWAVE_', 'SUPPORT_API_', 'TRANSCRIBE_',
+  'NODES_', 'SLA_', 'UPDATE_', 'SOURCE_', 'MEDIA_', 'PANEL_', 'TELEGRAM_', 'NOTIFY_'];
+const unknownEnv = Object.keys(process.env)
+  .filter((name) => ENV_PREFIXES.some((prefix) => name.startsWith(prefix)) && !knownEnvKeys.has(name))
+  .sort();
+if (unknownEnv.length) {
+  report('warn', 'Неизвестные ключи окружения', `${unknownEnv.join(', ')} — возможно, опечатка, они не действуют`);
+}
 
 // --- база --------------------------------------------------------------
 const db = openDatabase();
