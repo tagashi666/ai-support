@@ -3,7 +3,7 @@ import { config } from '../../config.js';
 import { type ConversationStatus, StatusSyncError } from '../../core/outbox.js';
 import { runtime } from '../../core/settings.js';
 import { queueAutoLearn, requeueAutoLearn } from '../../ai/mining.js';
-import { channelAvailability, decorate } from '../helpers.js';
+import { channelAvailability, decorate, livePendingSuggestion } from '../helpers.js';
 import type { RouteContext } from '../context.js';
 
 /** Диалоги: список, папки, история, прочтение, присутствие, удержание, заметки и статус. */
@@ -77,7 +77,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         conversation: decorate(conversation, store, operations),
         messages: fresh,
         attachments: store.attachmentsFor(fresh.map((message) => message.id)),
-        suggestion: store.pendingSuggestion(conversation.id) ?? null,
+        suggestion: livePendingSuggestion(store, conversation),
         after,
       };
     }
@@ -89,7 +89,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       messages,
       hasMore: messages.length === 200,
       attachments: store.attachmentsFor(messages.map((message) => message.id)),
-      suggestion: store.pendingSuggestion(conversation.id) ?? null,
+      suggestion: livePendingSuggestion(store, conversation),
       // Только кэш: за свежей карточкой панель сходит отдельным запросом,
       // уже показав переписку.
       ...(customers ? (({ profile, stale }) => ({ customer: profile, customerStale: stale }))(customers.peek(conversation)) : { customer: null, customerStale: false }),
@@ -210,7 +210,13 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
           });
         }
       }
-      return { ok: true, conversation: decorate(store.getConversation(id)!, store, operations) };
+      const after = store.getConversation(id)!;
+      // Режим AI, передача и важность пишутся без события хранилища: другие
+      // вкладки и операторы видели старую шапку и старый режим до перезагрузки.
+      if (aiMode !== undefined || typeof handoff === 'boolean' || typeof escalated === 'boolean') {
+        store.emit('conversation', after);
+      }
+      return { ok: true, conversation: decorate(after, store, operations) };
     },
   );
 }

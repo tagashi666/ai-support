@@ -36,6 +36,7 @@ public/js/live.js
 public/js/nav.js
 public/js/nodes.js
 public/js/queue.js
+public/js/rules.js
 public/js/settings.js
 public/js/state.js
 public/js/stats.js

@@ -244,7 +244,7 @@ check('2K и 4K получают масштаб без двойного увел
 // 21. Цитаты: показываем, на что отвечает сообщение, и даём ответить
 // на конкретное — половина смысла переписки в Telegram именно в этом.
 check('цитата отрисовывается в переписке', /function quoteBlock\(/.test(html));
-check('можно ответить на конкретное сообщение', /function setQuote\(/.test(html) && /payload\.replyTo = state\.quoting\.id/.test(html));
+check('можно ответить на конкретное сообщение', /function setQuote\(/.test(html) && /payload\.replyTo = target\.quoting\.id/.test(html));
 
 // 24. Вложение в переписке — превью, а не полотно. Вертикальный скриншот
 // с телефона без ограничения занимает весь экран.
@@ -569,6 +569,72 @@ check('в разметке нет inline-обработчиков и javascript:
   });
   check('модули панели: синтаксис, импорты и имена сходятся, импортам не присваивают', problems.length === 0, problems.slice(0, 20));
 }
+console.log('\n[ живое состояние панели ]');
+{
+  // Чистые правила (public/js/rules.js) исполняются в node; state.js при
+  // импорте читает localStorage — подставляем пустой.
+  (globalThis as any).localStorage ??= { getItem: () => null };
+  const rules = await import(new URL('../public/js/rules.js', import.meta.url).href) as any;
+  const pending = { id: 7, status: 'pending' };
+  const conversation = { id: 1, status: 'open' };
+  const after = (frame: any) => rules.suggestionAfterFrame(pending, { conversation, ...frame });
+  check('предложку снимает новый вопрос клиента', after({ type:'message', message:{ direction:'in', author:'client' } }) === null);
+  check('предложку снимает ответ человека, в том числе из Telegram мимо панели',
+    after({ type:'message', message:{ direction:'out', author:'agent', suggestion_id:null } }) === null);
+  check('предложку снимает отправка этого же черновика AI',
+    after({ type:'message', message:{ direction:'out', author:'ai', suggestion_id:7 } }) === null);
+  check('сообщение AI о передаче человеку предложку не снимает',
+    after({ type:'message', message:{ direction:'out', author:'ai', suggestion_id:null } }) === pending);
+  check('заметка и импорт истории предложку не снимают',
+    after({ type:'message', message:{ direction:'note', author:'agent' } }) === pending
+    && after({ type:'message', message:{ direction:'in', author:'client', is_backfill:1 } }) === pending);
+  check('решение по предложке в другой вкладке её снимает',
+    after({ type:'suggestion', suggestion:{ id:7, status:'rejected' } }) === null
+    && after({ type:'suggestion', suggestion:{ id:6, status:'superseded' } }) === pending);
+  check('новая предложка заменяет прежнюю', after({ type:'suggestion', suggestion:{ id:8, status:'pending' } })?.id === 8);
+  check('закрытие диалога снимает предложку',
+    rules.suggestionAfterFrame(pending, { type:'conversation', conversation:{ id:1, status:'resolved' } }) === null
+    && after({ type:'conversation' }) === pending);
+  check('закрытый без ответа диалог не висит в «Ждут» и «Без ответа»',
+    !rules.awaitingReply({ unread:0, first_response_at:null, status:'resolved' })
+    && !rules.unanswered({ first_response_at:null, last_inbound_at:1, status:'resolved' })
+    && rules.awaitingReply({ unread:0, first_response_at:null, status:'open' })
+    && rules.awaitingReply({ unread:2, first_response_at:5, status:'resolved' })
+    && rules.unanswered({ first_response_at:null, last_inbound_at:1, status:'open' }));
+  check('скрытый диалог живой кадр в список не возвращает', !rules.listable({ hidden_at:5 }) && rules.listable({ hidden_at:null }));
+
+  const body = (path: string, start: string): string => {
+    const source = readPublic(path);
+    const from = source.indexOf(start);
+    const next = source.indexOf('\nexport ', from + start.length);
+    return from < 0 ? '' : source.slice(from, next < 0 ? undefined : next);
+  };
+  const merge = body('js/conversation.js', 'export function mergeLiveConversation');
+  check('живой кадр открытого диалога перерисовывает шапку, окно и режим AI',
+    /paintHeader\(state\.current, \{ keepError:true \}\)/.test(merge) && /renderWindow\(\)/.test(merge)
+    && /renderAiNote\(\)/.test(merge) && /listable\(conversation\)/.test(merge));
+  check('живой кадр подбирает предложку по правилам', /suggestionAfterFrame\(state\.suggestion, frame\)/.test(readPublic('js/live.js'))
+    && !/frame\.type === 'suggestion' && state\.current/.test(readPublic('js/live.js')));
+  check('удаление процитированного сообщения снимает цитату',
+    /state\.quoting\.id === frame\.message\.external_msg_id\) clearQuote\(\)/.test(readPublic('js/live.js')));
+  const openBody = body('js/conversation.js', 'export async function open');
+  check('переключение диалога меняет черновик и сбрасывает цитату до загрузки',
+    openBody.indexOf('swapDraft(state.current?.id, id)') > 0
+    && openBody.indexOf('state.quoting = null; renderQuoting();') < openBody.indexOf('const known'));
+  const windowBody = body('js/inbox-list.js', 'export function renderWindow');
+  check('закрытое окно 24 ч блокирует ответ, но не заметку',
+    /\$\('send'\)\.disabled = windowState === 'closed';/.test(windowBody)
+    && /\$\('input'\)\.disabled = windowState === 'closed' && !canPermission\('conversation:notes'\)/.test(windowBody));
+  const composer = readPublic('js/composer.js');
+  check('пачка файлов и ответ уходят в диалог, где нажали «Отправить»',
+    !/state\.current\.id\}\/(?:attachments|reply)/.test(composer) && /\/api\/conversations\/\$\{target\.id\}\/attachments/.test(composer)
+    && /\/api\/conversations\/\$\{target\.id\}\/reply/.test(composer));
+  check('смена режима AI в настройках обновляет подпись в диалоге',
+    /state\.settings\.runtime = saved\.runtime;[\s\S]{0,120}renderAiNote\(\)/.test(readPublic('js/settings.js')));
+  check('обновлённая карточка клиента не ложится в другой диалог',
+    /customer\/refresh`[\s\S]{0,200}if \(state\.current\?\.id !== id\) return;/.test(readPublic('js/inspector.js')));
+}
+
 const serverSource = readFileSync(new URL('../src/panel/server.ts', import.meta.url), 'utf8');
 check('CSP: script-src только self, без unsafe-inline и хэшей',
   /script-src 'self';/.test(serverSource) && !/script-src[^;]*(?:unsafe-inline|unsafe-eval|sha256-)/.test(serverSource));

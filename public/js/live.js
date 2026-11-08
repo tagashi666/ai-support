@@ -6,13 +6,14 @@ import { $ } from './dom.js';
 import { ticket, ticketAt, refreshTicket } from './api.js';
 import { toast } from './nav.js';
 import { renderWindow } from './inbox-list.js';
-import { messageSignature, bubble, renderSuggestion } from './thread.js';
+import { messageSignature, bubble, renderSuggestion, clearQuote } from './thread.js';
 import { renderAiNote } from './inspector.js';
 import {
   refreshSoon, markOpenConversationRead, syncCurrentMessages, refresh, mergeLiveConversation,
   removeLiveConversation,
 } from './conversation.js';
 import { loadDocs } from './kb.js';
+import { suggestionAfterFrame } from './rules.js';
 
 /* ═══ живое обновление ═══ */
 // Сервер закрывает сокет, когда истекает его билет. Поэтому при каждом
@@ -131,6 +132,13 @@ function handleLiveFrame(event) {
     return;
   }
   if (frame.conversation) mergeLiveConversation(frame.conversation);
+  // Предложка открытого диалога живёт по тем же кадрам: новый вопрос клиента,
+  // ответ человека (в том числе из Telegram мимо панели), отправка этого
+  // черновика AI, решение в другой вкладке, закрытие диалога.
+  if (frame.conversation && state.current?.id === frame.conversation.id) {
+    const next = suggestionAfterFrame(state.suggestion, frame);
+    if (next !== state.suggestion) { state.suggestion = next; renderSuggestion(); }
+  }
   if (frame.type === 'message' && state.current?.id === frame.conversation.id) {
     const nearBottom = $('thread').scrollHeight - $('thread').scrollTop - $('thread').clientHeight < 140;
     state.current = frame.conversation;
@@ -148,9 +156,7 @@ function handleLiveFrame(event) {
     }
     if (nearBottom || frame.message.direction === 'out') requestAnimationFrame(() => { $('thread').scrollTop = $('thread').scrollHeight; });
     else toast('Новое сообщение ниже по переписке');
-    if (frame.message.direction === 'in') {
-      state.suggestion = null; renderSuggestion(); markOpenConversationRead(frame.conversation.id);
-    }
+    if (frame.message.direction === 'in') markOpenConversationRead(frame.conversation.id);
     renderWindow(); renderAiNote();
   }
   if (frame.type === 'message_updated' && state.current?.id === frame.conversation.id) {
@@ -168,11 +174,12 @@ function handleLiveFrame(event) {
     const inner = $('thread').dataset.conversationId === String(frame.conversation.id)
       ? $('thread').querySelector('.thread-inner') : null;
     inner?.querySelector(`.msg[data-message-id="${frame.message.id}"]`)?.remove();
+    // Ответ цитатой на удалённое сообщение Telegram не доставит.
+    if (state.quoting?.id && state.quoting.id === frame.message.external_msg_id) clearQuote();
     if (inner && !inner.querySelector('.msg[data-message-id]')) {
       inner.innerHTML = '<p class="empty">Сообщений пока нет.</p>';
     }
   }
-  if (frame.type === 'suggestion' && state.current?.id === frame.conversation.id) { state.suggestion = frame.suggestion; renderSuggestion(); }
   // Кадр с карточкой уже применён локально: перезапрашивать весь список
   // незачем. Сверка нужна только для кадров без данных.
   if (!frame.conversation) refreshSoon();
