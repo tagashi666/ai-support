@@ -68,6 +68,7 @@ src/ai/kb.ts
 src/ai/mining.ts
 src/ai/outbound.ts
 src/ai/provider.ts
+src/ai/repair.ts
 src/ai/responder.ts
 src/ai/scrub.ts
 src/ai/sublink.ts

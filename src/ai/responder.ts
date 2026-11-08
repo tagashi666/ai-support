@@ -7,7 +7,7 @@ import { resolveService, runtime, withServiceGreeting } from '../core/settings.j
 import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
 import { decide, resolveMode } from './gate.js';
-import { AiProvider, parseDraft, type ChatMessage, type ContentPart } from './provider.js';
+import { AiProvider, completeDraft, type ChatMessage, type ContentPart } from './provider.js';
 import { activeInterfaceKnowledge, effectiveInterfaceMode, renderInterfaceKnowledge } from './interface-kb.js';
 import { renderExamples, similarExamples, syncExamples } from './examples.js';
 
@@ -294,7 +294,7 @@ export async function tryDraft(question: string, hits: KbHit[], provider = new A
       `# Последнее сообщение клиента\n${fenceClient(question)}`,
     ].filter(Boolean).join('\n\n') },
   ];
-  return parseDraft(await provider.complete(messages));
+  return (await completeDraft(provider, messages)).draft;
 }
 
 export class Responder {
@@ -499,19 +499,29 @@ export class Responder {
         { role: 'user', content },
       ];
 
-      const raw = await this.provider.complete(messages);
+      const result = await completeDraft(this.provider, messages);
+      // Метрика качества разбора. Сырой ответ не сохраняем: модель могла
+      // повторить персональные данные клиента из истории диалога.
+      if (result.outcome === 'repaired') {
+        this.store.logEvent('ai_parse_repaired', conversation.id, { model: this.provider.lastModel });
+      }
+      if (result.retried) {
+        this.store.logEvent('ai_parse_retry', conversation.id, {
+          model: this.provider.lastModel,
+          ok: result.draft !== null,
+          via: result.outcome,
+        });
+      }
       // Пока модель думала, клиент мог уточнить вопрос. Ответ на прежнюю
       // версию диалога не отправляем: debounce уже поставил свежий проход.
       if (!this.inboundStillCurrent(conversation.id, message.id)) {
         this.store.logEvent('ai_superseded_inbound', conversation.id, { message: message.id });
         return;
       }
-      const draft = parseDraft(raw);
+      const draft = result.draft;
       if (!draft) {
-        log.warn(`Диалог ${conversation.id}: ответ модели не разобран`);
-        // Не сохраняем сырой ответ: модель могла повторить персональные
-        // данные клиента из истории диалога.
-        this.store.logEvent('ai_unparsed', conversation.id, { model: this.provider.lastModel });
+        log.warn(`Диалог ${conversation.id}: ответ модели не разобран даже после повтора`);
+        this.store.logEvent('ai_parse_failed', conversation.id, { model: this.provider.lastModel });
         if (!this.claimedByOperator(conversation.id, message.created_at)
             && !this.heldByOperator(conversation.id)) {
           await this.handOff(liveConversation, {

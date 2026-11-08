@@ -155,6 +155,84 @@ console.log('\n[ фильтрация размышлений ]');
     extractJson('{"a":{"b":1},"c":"}"}') === '{"a":{"b":1},"c":"}"}');
 }
 
+// ---------- ремонт сломанного JSON ----------
+console.log('\n[ ремонт ответа модели ]');
+{
+  const { parseDraftDetailed, completeDraft, REASON_MAX } = await import('../src/ai/provider.js');
+  // Реальная поломка (обобщённо): reply пустой, needs_human, reason дважды,
+  // в первом reason модель рассуждает о самой инструкции.
+  const real = '{"reply":"", "confidence":0.0, "needs_human":true, "no_request":false, "used":[], "reason":"В выдержках нет списка доступных серверов. Согласно правилам требуется человек. Текст для оператора в поле reply должен быть коротким, однако инструкция гласит: " ,"reason":"Нет данных о текущем списке серверов, нужен специалист. Текст для оператора: проверить актуальный список серверов и их статус."}';
+  const realDraft = parseDraftDetailed(real).draft;
+  check('пустой reply с needs_human — законный ответ «нужен человек»',
+    realDraft?.needsHuman === true && realDraft.reply === '', realDraft);
+  check('повторённый reason: берётся последний и обрезается',
+    !!realDraft && realDraft.reason.startsWith('Нет данных о текущем') && realDraft.reason.length <= REASON_MAX, realDraft?.reason);
+
+  const quotes = parseDraftDetailed('{"reply":"Нажмите "Подключить" и подождите","confidence":0.8,"needs_human":false,"used":[1]}');
+  check('неэкранированные кавычки внутри reply чинятся',
+    quotes.draft?.reply === 'Нажмите "Подключить" и подождите' && quotes.repaired && quotes.draft.used[0] === 1, quotes);
+  const quotesEnd = parseDraft('{"confidence":0.8,"reply":"Откройте раздел "Подписка""}');
+  check('кавычка в конце строки перед } не теряется', quotesEnd?.reply === 'Откройте раздел "Подписка"', quotesEnd);
+  const dupReply = parseDraftDetailed('{"reply":"Перезапустите приложение.","confidence":0.8,"reply":""}');
+  check('повторённый reply: первое непустое значение', dupReply.draft?.reply === 'Перезапустите приложение.' && dupReply.repaired, dupReply);
+  check('висячая запятая', parseDraft('{"reply":"Обновите подписку","confidence":0.9,}')?.confidence === 0.9);
+  const tail = parseDraft('{"reply":"Обновите подписку в приложении.","confidence":0.85,"needs_human":false,"reason":"есть в ста');
+  check('обрезанный хвост после целого reply разбирается', tail?.reply === 'Обновите подписку в приложении.' && tail.confidence === 0.85, tail);
+  check('обрезанный reply по-прежнему не годится', parseDraft('{"confidence":0.9,"reply":"Откройте приложение и наж') === null);
+  const prose = parseDraft('Вот ответ:\n```json\n{"reply":"Готово","confidence":0.7}\n```\nНадеюсь, помог!');
+  check('ограждение посреди текста', prose?.reply === 'Готово', prose);
+  const bare = parseDraft("{reply: \"Да, можно\", confidence: 0.9, needs_human: false}");
+  check('ключи без кавычек', bare?.reply === 'Да, можно' && bare.confidence === 0.9, bare);
+  const newline = parseDraft('{"reply":"Первая строка\nвторая строка","confidence":0.9}');
+  check('сырой перевод строки внутри строки', newline?.reply === 'Первая строка\nвторая строка', newline);
+  const loose = parseDraft('reply: "Перезагрузите роутер", confidence: 0.7, needs_human: false');
+  check('без фигурных скобок поля достаются регулярками', loose?.reply === 'Перезагрузите роутер' && loose.confidence === 0.7, loose);
+  const thinkFence = parseDraft('<think>{"reply":"нет"}</think>```json\n{"reply":"Да","confidence":0.6}\n```');
+  check('<think> и ограждение вместе', thinkFence?.reply === 'Да', thinkFence);
+  const note = parseDraft('{"reply":"","needs_human":true,"operator_note":"Проверить   оплату\\nв панели","reason":"нет данных"}');
+  check('operator_note читается одной строкой', note?.operatorNote === 'Проверить оплату в панели' && note.reply === '', note);
+  check('пустой reply без флага — не ответ', parseDraft('{"reply":"","confidence":0.9}') === null);
+  check('used принимает 0 (блок «Клиент»)', parseDraft('{"reply":"Осталось 5 ГБ","confidence":0.9,"used":[0,0,2]}')?.used.join() === '0,2');
+
+  // Повтор и запасная модель при неразобранном ответе.
+  type Call = { model?: string; maxTokens?: number; system: string };
+  const stub = (answers: string[], fallback?: string) => {
+    const calls: Call[] = [];
+    return {
+      calls,
+      client: {
+        lastModel: 'main-model',
+        fallbackName: () => fallback,
+        async complete(messages: { role: string; content: unknown }[], _r?: number, maxTokens?: number, options?: { model?: string }) {
+          calls.push({ model: options?.model, maxTokens, system: String(messages[0]?.content ?? '') });
+          if (options?.model) this.lastModel = options.model;
+          return answers.shift() ?? 'мусор';
+        },
+      },
+    };
+  };
+  const ask = [{ role: 'system' as const, content: 'промпт' }, { role: 'user' as const, content: 'вопрос' }];
+  const viaRetry = stub(['совсем не json', '{"reply":"Исправлено","confidence":0.8}'], 'backup-model');
+  const retried = await completeDraft(viaRetry.client, ask);
+  check('неразобранный ответ: один повтор той же модели', retried.outcome === 'retry' && retried.draft?.reply === 'Исправлено'
+    && viaRetry.calls.length === 2 && viaRetry.calls[1]!.model === 'main-model'
+    && (viaRetry.calls[1]!.maxTokens ?? 9999) <= 400 && viaRetry.calls[1]!.system.includes('валидный JSON'), viaRetry.calls);
+  const viaBackup = stub(['мусор', 'опять мусор', '{"reply":"От запасной","confidence":0.8}'], 'backup-model');
+  const backed = await completeDraft(viaBackup.client, ask);
+  check('после неудачного повтора — запасная модель с исходным запросом', backed.outcome === 'fallback'
+    && backed.draft?.reply === 'От запасной' && viaBackup.calls[2]!.model === 'backup-model'
+    && viaBackup.calls[2]!.system === 'промпт', viaBackup.calls);
+  const noBackup = stub(['мусор', 'мусор'], 'main-model');
+  const failed = await completeDraft(noBackup.client, ask);
+  check('запасная совпадает с основной — не вызывается, итог failed',
+    failed.outcome === 'failed' && failed.draft === null && noBackup.calls.length === 2, noBackup.calls);
+  const okFirst = stub(['{"reply":"Сразу","confidence":0.9}'], 'backup-model');
+  const ok = await completeDraft(okFirst.client, ask);
+  check('валидный ответ — без лишних запросов', ok.outcome === 'ok' && !ok.retried && okFirst.calls.length === 1);
+  const repairedFirst = stub(['{"reply":"Нажмите "Да"","confidence":0.9}']);
+  check('починенный разбором — outcome repaired', (await completeDraft(repairedFirst.client, ask)).outcome === 'repaired');
+}
+
 // ---------- ротация ключей ----------
 console.log('\n[ ротация ключей ]');
 {
