@@ -223,6 +223,19 @@ console.log('\n[ ремонт ответа модели ]');
     && backed.draft?.reply === 'От запасной' && viaBackup.calls[2]!.model === 'backup-model'
     && viaBackup.calls[2]!.system === 'промпт', viaBackup.calls);
   const noBackup = stub(['мусор', 'мусор'], 'main-model');
+  const cjk = stub(['{"reply":"Сравните скорость, так как ближайший по地理位置 сервер не всегда быстрее","confidence":0.9}',
+    'Сравните скорость, так как ближайший по расположению сервер не всегда быстрее']);
+  const cjkFixed = await completeDraft(cjk.client, ask);
+  check('иероглифы в ответе переписываются по-русски одним коротким запросом',
+    cjkFixed.draft?.reply === 'Сравните скорость, так как ближайший по расположению сервер не всегда быстрее'
+      && cjk.calls.length === 2 && (cjk.calls[1]!.maxTokens ?? 9999) <= 800, { cjkFixed, calls: cjk.calls });
+  const cjkStuck = stub(['{"reply":"Проверьте 地理位置","confidence":0.9}', 'Проверьте 地理位置']);
+  const stuck = await completeDraft(cjkStuck.client, ask);
+  check('не переписалось — ответ остаётся, но замок не пускает его к клиенту',
+    stuck.draft?.reply === 'Проверьте 地理位置' && (await import('../src/ai/outbound.js')).checkOutbound(stuck.draft.reply).found.includes('иероглифы'));
+  const cjkClient = stub(['{"reply":"你好，请重新连接","confidence":0.9}']);
+  await completeDraft(cjkClient.client, [{ role: 'system', content: 'промпт' }, { role: 'user', content: '你好 не работает' }]);
+  check('клиент сам пишет иероглифами — лишнего запроса нет', cjkClient.calls.length === 1);
   const failed = await completeDraft(noBackup.client, ask);
   check('запасная совпадает с основной — не вызывается, итог failed',
     failed.outcome === 'failed' && failed.draft === null && noBackup.calls.length === 2, noBackup.calls);

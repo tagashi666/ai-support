@@ -647,7 +647,9 @@ export async function completeDraft(
 ): Promise<DraftResult> {
   const raw = await provider.complete(messages, undefined, undefined, { schema: true, purpose });
   const first = parseDraftDetailed(raw);
-  if (first.draft) return { draft: first.draft, outcome: first.repaired ? 'repaired' : 'ok', retried: false };
+  if (first.draft) {
+    return fixForeignScript(provider, messages, { draft: first.draft, outcome: first.repaired ? 'repaired' : 'ok', retried: false });
+  }
 
   const model = provider.lastModel;
   logBroken(model, raw);
@@ -655,7 +657,7 @@ export async function completeDraft(
   try {
     const fixed = await provider.complete(repairMessages(raw), 1, REPAIR_MAX_TOKENS, { model, schema: true, purpose: 'repair' });
     const draft = parseDraft(fixed);
-    if (draft) return { draft, outcome: 'retry', retried: true };
+    if (draft) return fixForeignScript(provider, messages, { draft, outcome: 'retry', retried: true });
     logBroken(model, fixed);
   } catch (err) {
     log.warn(`AI ${model}: повтор разбора не удался: ${(err as Error).message}`);
@@ -666,11 +668,48 @@ export async function completeDraft(
     try {
       const other = await provider.complete(messages, 1, undefined, { model: backup, schema: true, purpose });
       const parsed = parseDraftDetailed(other);
-      if (parsed.draft) return { draft: parsed.draft, outcome: 'fallback', retried: true };
+      if (parsed.draft) return fixForeignScript(provider, messages, { draft: parsed.draft, outcome: 'fallback', retried: true });
       logBroken(backup, other);
     } catch (err) {
       log.warn(`AI ${backup}: запасная модель не ответила: ${(err as Error).message}`);
     }
   }
   return { draft: null, outcome: 'failed', retried: true };
+}
+
+/**
+ * Китайские/японские/корейские символы. Qwen иногда вставляет их посреди
+ * русского текста («по地理位置»): смысл теряется, клиенту такое уходить не должно.
+ */
+export const FOREIGN_SCRIPT = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+function clientUsesForeignScript(messages: ChatMessage[]): boolean {
+  return messages.some((message) => message.role === 'user' && (typeof message.content === 'string'
+    ? FOREIGN_SCRIPT.test(message.content.slice(-2000))
+    : message.content.some((part) => part.type === 'text' && FOREIGN_SCRIPT.test(part.text.slice(-2000)))));
+}
+
+/**
+ * Если в reply затесались иероглифы, а клиент сам так не писал, — один
+ * дешёвый запрос «перепиши по-русски» только для текста ответа. Не помогло —
+ * reply остаётся как есть, а замок outbound не даст отправить его без человека.
+ */
+async function fixForeignScript(provider: DraftClient, messages: ChatMessage[], result: DraftResult): Promise<DraftResult> {
+  const reply = result.draft?.reply ?? '';
+  if (!reply || !FOREIGN_SCRIPT.test(reply) || clientUsesForeignScript(messages)) return result;
+  const model = provider.lastModel;
+  try {
+    const rewritten = stripThinking(await provider.complete([
+      { role: 'system', content: 'Перепиши текст пользователя по-русски: замени все иероглифы и слова на других языках русскими словами с тем же смыслом. Ничего не добавляй и не убирай. Верни только исправленный текст.' },
+      { role: 'user', content: reply },
+    ], 1, Math.min(800, 100 + reply.length), { model, purpose: 'repair' })).trim();
+    if (rewritten && !FOREIGN_SCRIPT.test(rewritten) && rewritten.length < reply.length * 1.6) {
+      log.info(`AI ${model}: в ответе были иероглифы — переписан по-русски`);
+      return { ...result, draft: { ...result.draft!, reply: rewritten }, retried: true };
+    }
+  } catch (err) {
+    log.warn(`AI ${model}: не удалось переписать ответ без иероглифов: ${(err as Error).message}`);
+  }
+  log.warn(`AI ${model}: в ответе остались иероглифы — автоотправка заблокирована`);
+  return result;
 }
