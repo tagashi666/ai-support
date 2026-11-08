@@ -262,7 +262,9 @@ export class MessageRepo {
    */
   pendingInbound(this: Store, conversationId: number, limit = 12): Message[] {
     const lastOut = this.db
-      .prepare(`SELECT MAX(id) AS id FROM message WHERE conversation_id = ? AND direction != 'in'`)
+      // Внутренняя заметка оператора клиенту не отвечает: раньше заметка во
+      // время debounce считалась ответом, и вопрос клиента AI молча пропускал.
+      .prepare(`SELECT MAX(id) AS id FROM message WHERE conversation_id = ? AND direction = 'out'`)
       .get(conversationId) as { id: number | null };
     return this.db
       .prepare(

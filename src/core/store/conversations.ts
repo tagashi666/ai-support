@@ -268,11 +268,14 @@ export class ConversationRepo {
       // Закрытие завершает и передачу человеку: новое обращение после него —
       // новый разговор, а не «ждите специалиста» по старому. Удержание
       // оператора (claimed_at) тоже снимается: иначе вернувшегося клиента
-      // ещё 15 минут не мог взять никто другой. Назначение (assignee) остаётся.
+      // ещё 15 минут не мог взять никто другой. Эскалация из-за тона тоже
+      // относится к закрытому разговору: без сброса auto не работал неделями.
+      // Назначение (assignee) остаётся.
       .prepare(`UPDATE conversation SET status = ?, resolved_at = ?, last_resolved_at = COALESCE(?, last_resolved_at),
                        handoff_at = CASE WHEN ? IS NULL THEN handoff_at ELSE NULL END,
-                       claimed_at = CASE WHEN ? IS NULL THEN claimed_at ELSE NULL END, updated_at = ? WHERE id = ?`)
-      .run(status, resolved, resolved, resolved, resolved, Date.now(), conversationId);
+                       claimed_at = CASE WHEN ? IS NULL THEN claimed_at ELSE NULL END,
+                       escalated = CASE WHEN ? IS NULL THEN escalated ELSE 0 END, updated_at = ? WHERE id = ?`)
+      .run(status, resolved, resolved, resolved, resolved, resolved, Date.now(), conversationId);
     // Черновик AI к закрытому разговору устарел: иначе он висел в карточке и
     // мог уйти клиенту уже после закрытия.
     if (resolved !== null) {

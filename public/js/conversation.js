@@ -383,7 +383,7 @@ export function removeLiveConversation(conversationId) {
   if (state.current?.id === conversationId) {
     state.current = null; state.suggestion = null;
     $('thread').removeAttribute('data-conversation-id');
-    $('thread').innerHTML = '<p class="empty">Диалог удалён в Telegram.</p>';
+    $('thread').innerHTML = '<p class="empty">Диалог скрыт или удалён.</p>';
     paintHeader(null); renderWindow(); renderSuggestion(); renderAiNote();
   }
   renderList();

@@ -185,6 +185,18 @@ console.log('\n[ миграция: передача в закрытых диал
   migrated.close();
 }
 
+// Эскалация и заметки (найдено охотой на баги, 2026-11-09).
+{
+  const esc = store.upsertConversation({ channel:'tg_dm', externalId:'esc-1', tgUserId: 99001, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'esc-1', text:'вы издеваетесь', externalMsgId:'e1', sentAt: Date.now() - 5000 });
+  store.setEscalated(esc.id, true);
+  store.setStatus(esc.id, 'resolved');
+  check('закрытие снимает эскалацию по тону', store.getConversation(esc.id)!.escalated === 0);
+  store.recordInbound({ channel:'tg_dm', externalId:'esc-1', text:'новый вопрос', externalMsgId:'e2', sentAt: Date.now() - 2000 });
+  store.addNote(esc.id, 'внутренняя заметка');
+  check('заметка оператора не считается ответом клиенту', store.pendingInbound(esc.id).some((m) => m.text === 'новый вопрос'));
+}
+
 db.close();
 rmSync(dir, { recursive: true, force: true });
 console.log(failures ? `\n${failures} FAIL` : '\nвсе проверки жизненного цикла прошли');
