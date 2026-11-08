@@ -14,6 +14,7 @@ import {
   renderCustomer, renderCollaboration, loadUnifiedProfile, renderSubscription, renderAiNote,
 } from './inspector.js';
 import { renderPendingFiles } from './composer.js';
+import { listable } from './rules.js';
 
 /**
  * Открытие диалога.
@@ -60,7 +61,8 @@ setInterval(heartbeatCurrent, 15_000);
 window.addEventListener('focus', heartbeatCurrent);
 document.addEventListener('visibilitychange', heartbeatCurrent);
 
-export function paintHeader(c) {
+/** `keepError` — для живых кадров: они не должны стирать ошибку отправки. */
+export function paintHeader(c, { keepError = false } = {}) {
   if (!c) {
     $('title').textContent = 'Диалог не выбран';
     $('subtitle').textContent = 'Выберите обращение в списке';
@@ -89,7 +91,24 @@ export function paintHeader(c) {
     $(id).title = canPermission('conversation:status') ? '' : 'Действие запрещено настройками роли';
   }
   $('foldClient').textContent = c.suspicious ? 'нет в базах' : '';
-  $('err').textContent = '';
+  if (!keepError) $('err').textContent = '';
+}
+
+/**
+ * Черновик ввода у каждого диалога свой. Поле ввода одно на все диалоги, и
+ * текст, набранный (или взятый из предложки) для одного клиента, при
+ * переключении оставался в поле и уходил другому.
+ */
+const drafts = new Map();
+export const clearDraft = (id) => { drafts.delete(id); };
+function swapDraft(fromId, toId) {
+  const input = $('input');
+  if (fromId) {
+    if (input.value.trim()) drafts.set(fromId, input.value); else drafts.delete(fromId);
+  }
+  input.value = drafts.get(toId) ?? '';
+  input.style.height = 'auto';
+  if (input.value) input.style.height = Math.min(input.scrollHeight, 148) + 'px';
 }
 
 function skeleton(rows = 5) {
@@ -127,6 +146,13 @@ export async function open(id) {
     for (const item of state.pendingFiles) if (item.preview) URL.revokeObjectURL(item.preview);
     state.pendingFiles = []; renderPendingFiles();
   }
+  const switching = state.current?.id !== id;
+  if (switching) {
+    swapDraft(state.current?.id, id);
+    // Цитата относится к сообщению прежнего диалога — и тогда, когда нового
+    // диалога нет в списке (поиск, очередь, ссылка #c…).
+    state.quoting = null; renderQuoting();
+  }
   const openTicket = ++openToken;
   $('inboxSplit').dataset.pane = 'thread';
   history.replaceState(null, '', `#c${id}`);
@@ -141,6 +167,9 @@ export async function open(id) {
     paintHeader(known);
     renderWindow(); renderAiNote(); renderQuoting(); renderCollaboration(known.collaboration);
     markSelected(id);
+  } else if (switching) {
+    // Пока диалог грузится, state.current — ещё прежний: ответ ушёл бы не тому клиенту.
+    $('input').disabled = $('send').disabled = true;
   }
   $('suggestBox').innerHTML = '';
   // Скелет показываем не сразу, а только если сервер задумался. На быстром
@@ -334,10 +363,18 @@ export async function refresh({ fullThread = false } = {}) {
 export function mergeLiveConversation(conversation) {
   if (!conversation?.id) return;
   const index = state.conversations.findIndex((item) => item.id === conversation.id);
-  if (index >= 0) state.conversations[index] = { ...state.conversations[index], ...conversation };
+  // Скрытый диалог (скрыт в другой вкладке, а кадр пришёл от фонового
+  // обновления профиля или прочтения) в список не возвращаем: сервер его не отдаёт.
+  if (!listable(conversation)) { if (index >= 0) state.conversations.splice(index, 1); }
+  else if (index >= 0) state.conversations[index] = { ...state.conversations[index], ...conversation };
   else state.conversations.push(conversation);
   state.conversations.sort((a, b) => Number(b.last_message_at ?? b.created_at ?? 0) - Number(a.last_message_at ?? a.created_at ?? 0));
-  if (state.current?.id === conversation.id) state.current = { ...state.current, ...conversation };
+  if (state.current?.id === conversation.id) {
+    state.current = { ...state.current, ...conversation };
+    // Статус, режим AI и передача могли смениться не здесь: другой оператор,
+    // AI, новое сообщение клиента, Bedolaga. Шапка и подпись режима — по кадру.
+    paintHeader(state.current, { keepError:true }); renderWindow(); renderAiNote();
+  }
   renderList();
 }
 

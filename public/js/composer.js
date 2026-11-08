@@ -8,26 +8,38 @@ import { canPermission, canWrite } from './access.js';
 import { toast } from './nav.js';
 import { renderWindow } from './inbox-list.js';
 import { clearQuote, renderSuggestion } from './thread.js';
-import { heartbeatCurrent, engageCurrent, open } from './conversation.js';
+import { heartbeatCurrent, engageCurrent, open, clearDraft } from './conversation.js';
 
-export async function sendText(text, extra = {}) {
-  if (!canWrite() || !text.trim() || !state.current) return;
+/**
+ * Диалог и цитата фиксируются в момент нажатия «Отправить». Пока запрос
+ * летит, оператор может открыть другой диалог: раньше после ответа очищались
+ * поле, цитата и предложка уже нового диалога, а он сам переоткрывался.
+ */
+export async function sendText(text, extra = {}, target = { id: state.current?.id, quoting: state.quoting }) {
+  if (!canWrite() || !text.trim() || !target.id) return;
   $('send').disabled = true;
   const payload = { text, ...extra };
-  if (state.quoting) { payload.replyTo = state.quoting.id; payload.replyExcerpt = state.quoting.excerpt; }
+  if (target.quoting) { payload.replyTo = target.quoting.id; payload.replyExcerpt = target.quoting.excerpt; }
   let res;
   try {
-    res = await api(`/api/conversations/${state.current.id}/reply`, { method:'POST', body: JSON.stringify(payload) });
+    res = await api(`/api/conversations/${target.id}/reply`, { method:'POST', body: JSON.stringify(payload) });
   } catch (err) {
-    $('err').textContent = `Нет связи с сервером: ${err.message}`;
+    if (state.current?.id === target.id) $('err').textContent = `Нет связи с сервером: ${err.message}`;
+    else toast(`Ответ не отправлен: ${err.message}`);
     renderWindow(); return false;
   }
+  const stillOpen = state.current?.id === target.id;
   if (res.ok) {
-    $('input').value = ''; $('input').style.height = 'auto'; $('err').textContent = '';
-    state.suggestion = null; renderSuggestion(); clearQuote();
-    void open(state.current.id);
+    clearDraft(target.id);
+    if (stillOpen) {
+      $('input').value = ''; $('input').style.height = 'auto'; $('err').textContent = '';
+      state.suggestion = null; renderSuggestion(); clearQuote();
+      void open(target.id);
+    }
+  } else {
+    const error = (await res.json().catch(() => ({}))).error ?? `Отправить не удалось (${res.status})`;
+    if (state.current?.id === target.id) $('err').textContent = error; else toast(error);
   }
-  else $('err').textContent = (await res.json().catch(() => ({}))).error ?? `Отправить не удалось (${res.status})`;
   renderWindow();
   return res.ok;
 }
@@ -90,10 +102,10 @@ export function renderPendingFiles() {
   }
 }
 
-function uploadOne(item, batchId, batchSize, index, caption, dangerConfirmed) {
+function uploadOne(item, batchId, batchSize, index, caption, dangerConfirmed, target) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', `/api/conversations/${state.current.id}/attachments`);
+    xhr.open('POST', `/api/conversations/${target.id}/attachments`);
     xhr.setRequestHeader('Authorization', `Bearer ${state.token}`);
     xhr.setRequestHeader('Content-Type', 'application/vnd.ai-support.attachment');
     xhr.setRequestHeader('X-File-Name', encodeURIComponent(item.file.name));
@@ -102,7 +114,7 @@ function uploadOne(item, batchId, batchSize, index, caption, dangerConfirmed) {
     xhr.setRequestHeader('X-Upload-Batch-Size', String(batchSize));
     xhr.setRequestHeader('X-Upload-Index', String(index));
     if (caption) xhr.setRequestHeader('X-Caption', encodeURIComponent(caption));
-    if (state.quoting?.id) xhr.setRequestHeader('X-Reply-To', encodeURIComponent(state.quoting.id));
+    if (target.quoting?.id) xhr.setRequestHeader('X-Reply-To', encodeURIComponent(target.quoting.id));
     if (dangerConfirmed) xhr.setRequestHeader('X-Dangerous-Confirmed', 'yes');
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) { item.progress = event.loaded / event.total * 100; renderPendingFiles(); }
@@ -126,15 +138,21 @@ async function sendPending() {
   const batch = crypto.randomUUID().replaceAll('-', '_');
   const initial = [...state.pendingFiles];
   const text = $('input').value.trim();
+  // Файлы пачки идут в диалог, где нажали «Отправить», даже если оператор
+  // за время загрузки открыл другой: раньше остаток пачки уходил другому клиенту.
+  const target = { id: state.current.id, quoting: state.quoting };
   try {
     for (let index = 0; index < initial.length; index += 1) {
       const item = initial[index];
-      await uploadOne(item, batch, initial.length, index, index === 0 && text.length <= 1024 ? text : '', dangerousFile(item.file));
+      await uploadOne(item, batch, initial.length, index, index === 0 && text.length <= 1024 ? text : '', dangerousFile(item.file), target);
       removePending(item.id);
     }
-    if (text.length > 1024 && !await sendText(text)) throw new Error($('err').textContent || 'Текст не отправлен');
-    else { $('input').value = ''; $('input').style.height = 'auto'; clearQuote(); }
-    state.suggestion = null; renderSuggestion(); void open(state.current.id);
+    if (text.length > 1024 && !await sendText(text, {}, target)) throw new Error($('err').textContent || 'Текст не отправлен');
+    clearDraft(target.id);
+    if (state.current?.id === target.id) {
+      $('input').value = ''; $('input').style.height = 'auto'; clearQuote();
+      state.suggestion = null; renderSuggestion(); void open(target.id);
+    }
   } catch (err) {
     $('err').textContent = err.message || String(err);
   } finally {
@@ -244,8 +262,10 @@ $('input').addEventListener('input', (e) => {
 $('noteBtn').onclick = async () => {
   if (!canPermission('conversation:notes')) return;
   const text = $('input').value.trim(); if (!text || !state.current) return;
-  if (await mutate(`/api/conversations/${state.current.id}/note`,
+  const id = state.current.id;
+  if (await mutate(`/api/conversations/${id}/note`,
     { method:'POST', body: JSON.stringify({ text }) }, 'Заметка добавлена')) {
-    $('input').value = ''; open(state.current.id);
+    clearDraft(id);
+    if (state.current?.id === id) { $('input').value = ''; open(id); }
   }
 };

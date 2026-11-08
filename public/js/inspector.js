@@ -51,8 +51,11 @@ export function renderCustomer(profile) {
   if ($('bedolagaCardBtn')) $('bedolagaCardBtn').onclick = () => openBedolagaCard();
   if ($('refreshCust')) $('refreshCust').onclick = async () => {
     $('refreshCust').disabled = true;
-    const data = await mutate(`/api/conversations/${state.current.id}/customer/refresh`, { method:'POST' }, 'Карточка обновлена');
-    $('refreshCust').disabled = false;
+    const id = state.current.id;
+    const data = await mutate(`/api/conversations/${id}/customer/refresh`, { method:'POST' }, 'Карточка обновлена');
+    // Карточка другого клиента не должна лечь в инспектор уже открытого диалога.
+    if (state.current?.id !== id) return;
+    if ($('refreshCust')) $('refreshCust').disabled = false;
     if (data) renderCustomer(data.customer);
   };
 }

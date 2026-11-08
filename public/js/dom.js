@@ -1,6 +1,6 @@
 // Панель: DOM-хелперы и сочетания клавиш платформы.
 // Первый import — предыдущий раздел: так модули исполняются в исходном порядке (см. app.js).
-import './state.js';
+import './rules.js';
 
 export const WINDOW_MS = 864e5, SOON_MS = 108e5;
 export const $ = (id) => document.getElementById(id);

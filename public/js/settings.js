@@ -8,7 +8,7 @@ import { canPermission } from './access.js';
 import { requestedSettingsSection, scrollToSettingsCategory } from './theme.js';
 import { toast, sheet, closeSheet } from './nav.js';
 import { fmtTime, safeColor, sourceKind, renderInboxTabs, renderList } from './inbox-list.js';
-import { confirmAction } from './inspector.js';
+import { confirmAction, renderAiNote } from './inspector.js';
 
 /* ═══ настройки ═══ */
 /**
@@ -474,6 +474,8 @@ export async function loadSettings() {
       row.classList.remove('is-saving'); el.disabled = false;
       if (saved?.runtime) {
         state.settings.runtime = saved.runtime;
+        // Подпись режима в открытом диалоге зависит от глобального режима.
+        renderAiNote();
         for (const f of FIELDS) {
           const target = $('aiSettings').querySelector(`[data-setting="${f.key}"]`); if (!target) continue;
           const inactive = f.active && !f.active(state.settings.runtime);

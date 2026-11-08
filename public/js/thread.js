@@ -263,8 +263,10 @@ export function renderSuggestion() {
     $('sgEdit').onclick = () => { $('input').value = state.suggestion.text; $('input').focus(); };
   }
   $('sgNo').onclick = async () => {
-    await mutate(`/api/suggestions/${state.suggestion.id}/decide`,
+    const id = state.suggestion.id;
+    await mutate(`/api/suggestions/${id}/decide`,
       { method:'POST', body: JSON.stringify({ status:'rejected' }) }, 'Предложка отклонена');
-    state.suggestion = null; renderSuggestion();
+    // Пока шёл запрос, мог открыться другой диалог со своей предложкой.
+    if (state.suggestion?.id === id) { state.suggestion = null; renderSuggestion(); }
   };
 }

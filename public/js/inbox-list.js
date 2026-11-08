@@ -7,6 +7,7 @@ import { json, reloadMedia, mediaRetryDelay } from './api.js';
 import { canPermission, canWrite, canCompose } from './access.js';
 import { show } from './nav.js';
 import { open } from './conversation.js';
+import { awaitingReply, unanswered } from './rules.js';
 
 /* ═══ инбокс ═══ */
 export const fmtLeft = (ms) => { const h = Math.floor(ms/36e5), m = Math.floor(ms%36e5/6e4); return h ? `${h} ч ${m} мин` : `${m} мин`; };
@@ -60,7 +61,7 @@ export function armAvatars(root = document) {
 const visible = () => {
   const folderId = state.filter.startsWith('folder:') ? Number(state.filter.slice(7)) : 0;
   const folder = folderId ? state.inboxFolders.find((item) => item.id === folderId) : null;
-  const scoped = state.filter === 'waiting' ? state.conversations.filter(c => c.unread > 0 || !c.first_response_at)
+  const scoped = state.filter === 'waiting' ? state.conversations.filter(awaitingReply)
     : state.filter === 'hot' ? state.conversations.filter(c => c.escalated || c.suspicious || c.handoff_at || c.priority === 'high')
     : folder ? state.conversations.filter((c) => (c.source_ids ?? []).some((id) => folder.source_ids.includes(id)))
     : state.conversations;
@@ -167,7 +168,7 @@ function renderBoard() {
   const board = $('pulseBoard');
   if (!board) return;
   const unread = state.conversations.filter(c => c.unread > 0).length;
-  const noAnswer = state.conversations.filter(c => !c.first_response_at && c.last_inbound_at).length;
+  const noAnswer = state.conversations.filter(unanswered).length;
   const waitHuman = state.conversations.filter(c => c.handoff_at).length;
   const unknown = state.conversations.filter(c => c.suspicious).length;
 
@@ -223,12 +224,17 @@ export function renderWindow() {
   box.dataset.window = windowState;
   $('ring').style.setProperty('--p', Math.round(left / WINDOW_MS * 100));
   $('wleft').textContent = windowState === 'closed' ? 'окно ответа закрыто' : `осталось ${fmtLeft(left)}`;
-  $('input').disabled = $('send').disabled = windowState === 'closed';
+  // Окно закрывает только ответ клиенту: внутренняя заметка в Telegram не
+  // уходит, поэтому поле ввода для неё остаётся доступным.
+  $('send').disabled = windowState === 'closed';
+  $('input').disabled = windowState === 'closed' && !canPermission('conversation:notes');
   $('send').innerHTML = windowState === 'closed'
     ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg>'
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 14-7-4 14-3-6-7-1Z"/></svg>';
   $('send').setAttribute('aria-label', windowState === 'closed' ? 'Окно ответа закрыто' : 'Отправить сообщение');
   $('input').placeholder = windowState === 'closed'
-    ? 'Клиент не писал больше суток — Telegram не пропустит ответ'
+    ? (canPermission('conversation:notes')
+      ? 'Клиент не писал больше суток — ответ не уйдёт, можно оставить заметку'
+      : 'Клиент не писал больше суток — Telegram не пропустит ответ')
     : 'Ответ уйдёт от имени аккаунта поддержки';
 }
