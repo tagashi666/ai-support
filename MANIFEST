@@ -61,6 +61,7 @@ scripts/uitest.ts
 scripts/updatetest.ts
 scripts/webtest.ts
 src/ai/cluster.ts
+src/ai/eval.ts
 src/ai/examples.ts
 src/ai/gate.ts
 src/ai/interface-kb.ts
@@ -75,6 +76,7 @@ src/ai/sublink.ts
 src/channels/bedolaga.ts
 src/channels/minishop.ts
 src/channels/tgdm.ts
+src/cli/aieval.ts
 src/cli/kbmine.ts
 src/cli/rwprobe.ts
 src/cli/selfcheck.ts

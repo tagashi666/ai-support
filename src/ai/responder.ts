@@ -8,7 +8,7 @@ import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
 import { decide, personalTopics, resolveMode, type PersonalTopic } from './gate.js';
 import { AiProvider, completeDraft, DRAFT_EXAMPLE, type ChatMessage, type ContentPart } from './provider.js';
-import { activeInterfaceKnowledge, effectiveInterfaceMode, renderInterfaceKnowledge } from './interface-kb.js';
+import { activeInterfaceKnowledge, effectiveInterfaceMode, renderInterfaceKnowledge, type InterfaceScreen } from './interface-kb.js';
 import { renderExamples, similarExamples, syncExamples } from './examples.js';
 
 /**
@@ -328,27 +328,73 @@ export async function visionImages(
  */
 export async function tryDraft(question: string, hits: KbHit[], provider = new AiProvider(), store?: Store) {
   const interfaceScreens = activeInterfaceKnowledge(question, runtime.bedolagaInterfaceKb, undefined, effectiveInterfaceMode(runtime.bedolagaInterfaceMode));
-  const regularKnowledge = hits.length
-    ? hits.map((hit, index) => {
-        const body = hit.body.length > config.ai.kbChars ? `${hit.body.slice(0, config.ai.kbChars)}…` : hit.body;
-        return `[${index + 1}] ${hit.title}\n${body}`;
-      }).join('\n\n')
-    : '';
-  const interfaceKnowledge = interfaceScreens.map((screen, index) =>
-    `[${hits.length + index + 1}] ${screen.title}\n${renderInterfaceKnowledge([screen])}`).join('\n\n');
-  const knowledge = [regularKnowledge, interfaceKnowledge].filter(Boolean).join('\n\n')
-    || NO_KNOWLEDGE;
-
-  const messages: ChatMessage[] = [
-    { role: 'system', content: systemPrompt(runtime.brand, runtime.replyStyle) },
-    { role: 'user', content: [
-      `# Выдержки из базы знаний\n${knowledge}`,
-      `# Клиент\nПроверочный запуск, клиента нет.`,
-      store ? examplesBlock(store, question) : '',
-      `# Последнее сообщение клиента\n${fenceClient(question)}`,
-    ].filter(Boolean).join('\n\n') },
-  ];
+  const { messages } = buildReplyMessages({
+    serviceName: runtime.brand,
+    hits,
+    interfaceScreens,
+    customer: 'Проверочный запуск, клиента нет.',
+    examples: store ? examplesBlock(store, question) : '',
+    clientText: question,
+  });
   return (await completeDraft(provider, messages)).draft;
+}
+
+export interface ReplyInput {
+  serviceName: string;
+  hits: KbHit[];
+  interfaceScreens?: InterfaceScreen[];
+  /** Готовый текст блока «Клиент» (renderCustomer). */
+  customer: string;
+  /** Состояние серверов; undefined — блок «сведений нет». */
+  nodes?: string;
+  examples?: string;
+  history?: string;
+  clientText: string;
+  images?: string[];
+}
+
+/**
+ * Сборка запроса к модели — одна на боевой путь, песочницу и aieval: иначе
+ * проверка в песочнице и прогон качества ничего не говорят о реальном
+ * поведении. Статичный системный промпт — первым и неизменным (кэш
+ * префикса у провайдеров), всё переменное — в сообщении пользователя.
+ */
+export function buildReplyMessages(input: ReplyInput): { messages: ChatMessage[]; sources: string[] } {
+  const screens = input.interfaceScreens ?? [];
+  // Выдержки режем: на бесплатных тарифах вход считается в тот же
+  // дневной лимит, что и ответ, и длинная база съедает его за полдня.
+  const regularKnowledge = input.hits.map((hit, index) => {
+    const body = hit.body.length > config.ai.kbChars ? `${hit.body.slice(0, config.ai.kbChars)}…` : hit.body;
+    return `[${index + 1}] ${hit.title}\n${body}`;
+  }).join('\n\n');
+  const interfaceKnowledge = screens.map((screen, index) =>
+    `[${input.hits.length + index + 1}] ${screen.title}\n${renderInterfaceKnowledge([screen])}`).join('\n\n');
+  const knowledge = [regularKnowledge, interfaceKnowledge].filter(Boolean).join('\n\n') || NO_KNOWLEDGE;
+  const sources = [
+    ...input.hits.map((hit) => hit.title),
+    ...screens.map((screen) => `Интерфейс Bedolaga: ${screen.title}`),
+  ];
+
+  const prompt = [
+    `# Выдержки из базы знаний\n${knowledge}`,
+    `# Клиент\n${input.customer}`,
+    `# Состояние серверов\n${input.nodes ?? 'Сведений о серверах нет. Не утверждай ничего об авариях.'}`,
+    input.examples ?? '',
+    input.history ? `# История диалога\n${input.history}` : '',
+    `# Последнее сообщение клиента\n${fenceClient(input.clientText)}`,
+  ].filter(Boolean).join('\n\n');
+
+  const images = input.images ?? [];
+  const content: string | ContentPart[] = images.length
+    ? [{ type: 'text', text: prompt }, ...images.map((url): ContentPart => ({ type: 'image_url', image_url: { url } }))]
+    : prompt;
+  return {
+    messages: [
+      { role: 'system', content: systemPrompt(input.serviceName, runtime.replyStyle) },
+      { role: 'user', content },
+    ],
+    sources,
+  };
 }
 
 export class Responder {
@@ -516,45 +562,19 @@ export class Responder {
       const liveConversation = this.store.getConversation(conversation.id) ?? conversation;
       const service = resolveService(this.store, liveConversation);
 
-      // Выдержки режем: на бесплатных тарифах вход считается в тот же
-      // дневной лимит, что и ответ, и длинная база съедает его за полдня.
       const interfaceScreens = activeInterfaceKnowledge(searchText, runtime.bedolagaInterfaceKb, undefined, effectiveInterfaceMode(runtime.bedolagaInterfaceMode));
-      const regularKnowledge = hits.length
-        ? hits
-            .map((hit, index) => {
-              const body = hit.body.length > config.ai.kbChars
-                ? `${hit.body.slice(0, config.ai.kbChars)}…`
-                : hit.body;
-              return `[${index + 1}] ${hit.title}\n${body}`;
-            })
-            .join('\n\n') : '';
-      const interfaceKnowledge = interfaceScreens.map((screen, index) =>
-        `[${hits.length + index + 1}] ${screen.title}\n${renderInterfaceKnowledge([screen])}`).join('\n\n');
-      const knowledge = [regularKnowledge, interfaceKnowledge].filter(Boolean).join('\n\n')
-        || NO_KNOWLEDGE;
-      const knowledgeSources = [
-        ...hits.map((hit) => hit.title),
-        ...interfaceScreens.map((screen) => `Интерфейс Bedolaga: ${screen.title}`),
-      ];
-
-      const prompt = [
-        `# Выдержки из базы знаний\n${knowledge}`,
-        `# Клиент\n${renderCustomer(snapshot, { connected: subscriptionsConnected, topics })}`,
-        `# Состояние серверов\n${this.nodes?.render() ?? 'Сведений о серверах нет. Не утверждай ничего об авариях.'}`,
-        examplesBlock(this.store, searchText, conversation.id),
-        `# История диалога\n${renderHistory(history)}`,
-        `# Последнее сообщение клиента\n${fenceClient(clientText)}`,
-      ].filter(Boolean).join('\n\n');
-
       const images = config.ai.vision ? await visionImages(this.store, pendingIds) : [];
-      const content: string | ContentPart[] = images.length
-        ? [{ type: 'text', text: prompt }, ...images.map((url): ContentPart => ({ type: 'image_url', image_url: { url } }))]
-        : prompt;
-
-      const messages: ChatMessage[] = [
-        { role: 'system', content: systemPrompt(service.serviceName, runtime.replyStyle) },
-        { role: 'user', content },
-      ];
+      const { messages, sources: knowledgeSources } = buildReplyMessages({
+        serviceName: service.serviceName,
+        hits,
+        interfaceScreens,
+        customer: renderCustomer(snapshot, { connected: subscriptionsConnected, topics }),
+        nodes: this.nodes?.render(),
+        examples: examplesBlock(this.store, searchText, conversation.id),
+        history: renderHistory(history),
+        clientText,
+        images,
+      });
 
       const result = await completeDraft(this.provider, messages);
       // Метрика качества разбора. Сырой ответ не сохраняем: модель могла

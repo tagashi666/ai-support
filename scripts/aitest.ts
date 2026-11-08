@@ -1070,6 +1070,47 @@ console.log('\n[ operator_note и личные вопросы ]');
   rt.requireKb = true;
 }
 
+// ---------- прогон качества (логика проверок) ----------
+console.log('\n[ aieval ]');
+{
+  const { runEval, summarize, renderReport, judge, evalCases } = await import('../src/ai/eval.js');
+  const { runtime: rtEval } = await import('../src/core/settings.js');
+  const savedMode = rtEval.aiMode; const savedKb = rtEval.requireKb;
+  rtEval.aiMode = 'auto'; rtEval.requireKb = true;
+  check('в наборе ~40 обращений с уникальными id', evalCases().length >= 38 && new Set(evalCases().map((c) => c.id)).size === evalCases().length);
+  const scripted = (answer: (prompt: string) => string) => ({
+    lastModel: 'eval-stub',
+    complete: async (messages: { content: unknown }[]) => answer(String(messages.at(-1)?.content ?? '')),
+  });
+  const good = scripted((prompt) => {
+    if (prompt.includes('<client>сколько у меня трафика')) return '{"reply":"У вас осталось 40 ГБ из 50 ГБ.","used":[0],"confidence":0.95}';
+    if (prompt.includes('<client>не работает впн')) return '{"reply":"На каком устройстве и в каком приложении не подключается?","clarify":true,"confidence":0.9}';
+    if (prompt.includes('<client>позовите')) return '{"reply":"Передаю специалисту.","confidence":0.9}';
+    return 'мусор';
+  });
+  const only = ['traffic', 'vague', 'human', 'thanks'];
+  const rows = await runEval(good, () => [], { only });
+  check('ожидания: цифры из профиля, уточнение, человек, молчание', rows.every((row) => row.ok), rows);
+  check('«спасибо» отсекается без запроса к модели', rows.find((row) => row.id === 'thanks')?.outcome === 'early');
+  const bad = scripted((prompt) => prompt.includes('трафика')
+    ? '{"reply":"Остаток указан в карточке вашей подписки, посмотрите в карточке.","used":[],"confidence":0.9}'
+    : 'совсем не json');
+  const badRows = await runEval(bad, () => [], { only: ['traffic', 'vague'] });
+  const traffic = badRows.find((row) => row.id === 'traffic')!;
+  check('ответ без цифр и с отсылкой к карточке — провал', !traffic.ok
+    && traffic.problems.some((p) => p.includes('ожидалось answer')) && traffic.problems.some((p) => p.includes('карточке')), traffic.problems);
+  check('ответ без нужных цифр — провал', judge(evalCases().find((c) => c.id === 'traffic')!, 'answer', 'Остаток трафика смотрите в приложении.').some((p) => p.includes('«40»')));
+  check('неразобранный ответ — провал «не разобран»', badRows.find((row) => row.id === 'vague')?.result === 'unparsed');
+  const summary = summarize([...rows, ...badRows]);
+  check('сводка: parse rate и pass rate', Math.abs(summary.parseRate - 4 / 5) < 1e-9 && Math.abs(summary.passRate - 4 / 6) < 1e-9, summary);
+  const report = renderReport(rows, 'eval-stub');
+  check('отчёт — markdown-таблица со сводкой', report.includes('| # | Случай |') && report.includes('прошло: 100%'), report.slice(0, 300));
+  const injection = evalCases().find((c) => c.id === 'inject-role')!;
+  check('внутреннее имя сервера в ответе — провал', judge(injection, 'answer', 'Подключитесь к node-alpha-01').some((p) => p.includes('node-alpha') || p.includes('сервера')));
+  check('упоминание ИИ — провал', judge(evalCases()[0]!, 'answer', 'Я ИИ и не могу проверить').includes('упоминание ИИ'));
+  rtEval.aiMode = savedMode; rtEval.requireKb = savedKb;
+}
+
 // ---------- склейка сообщений ----------
 console.log('\n[ склейка сообщений ]');
 {
