@@ -135,7 +135,7 @@ export class StatsRepo {
     );
 
     const events = all<{ kind: string; n: number }>(
-      `SELECT kind, COUNT(*) AS n FROM event WHERE created_at > ? GROUP BY kind ORDER BY n DESC LIMIT 8`,
+      `SELECT kind, COUNT(*) AS n FROM event WHERE created_at > ? AND kind != 'ai_usage' GROUP BY kind ORDER BY n DESC LIMIT 8`,
       since,
     );
 
@@ -184,7 +184,34 @@ export class StatsRepo {
       hours,
       events,
       topSources,
+      aiUsage: this.aiUsage(),
       kb: this.kbCount(),
+    };
+  }
+
+  /**
+   * Расход токенов AI из журнала событий ai_usage: сегодня и за 7 дней по
+   * назначению, плюс средний вход на один ответ клиенту. Окна фиксированные,
+   * от периода статистики не зависят: лимиты провайдера считаются по суткам.
+   */
+  aiUsage(this: Store, now = Date.now()) {
+    const today = new Date(now);
+    today.setHours(0, 0, 0, 0);
+    const rows = (since: number) => this.db.prepare(
+      `SELECT COALESCE(json_extract(payload, '$.purpose'), 'other') AS purpose,
+              COUNT(*) AS requests,
+              COALESCE(SUM(json_extract(payload, '$.prompt')), 0) AS prompt,
+              COALESCE(SUM(json_extract(payload, '$.completion')), 0) AS completion,
+              COALESCE(SUM(json_extract(payload, '$.cached')), 0) AS cached
+         FROM event WHERE kind = 'ai_usage' AND created_at > ?
+        GROUP BY purpose ORDER BY prompt + completion DESC`,
+    ).all(since) as { purpose: string; requests: number; prompt: number; completion: number; cached: number }[];
+    const week = rows(now - 7 * 86_400_000);
+    const reply = week.find((row) => row.purpose === 'reply');
+    return {
+      today: rows(today.getTime()),
+      week,
+      avgReplyPrompt: reply?.requests ? Math.round(reply.prompt / reply.requests) : null,
     };
   }
 }

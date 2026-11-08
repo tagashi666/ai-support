@@ -205,7 +205,7 @@ export async function runCase(item: EvalCase, provider: DraftClient, search: Eva
   let draft: AiDraft | null = null;
   let outcome: DraftOutcome = 'failed';
   try {
-    const answer = await completeDraft(provider, messages);
+    const answer = await completeDraft(provider, messages, 'eval');
     draft = answer.draft;
     outcome = answer.outcome;
   } catch (err) {

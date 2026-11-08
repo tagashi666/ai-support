@@ -64,6 +64,28 @@ function meters(rows, unit = '') {
     <b>${n}${unit}</b></div>`).join('');
 }
 
+const PURPOSE = { reply:'Ответы клиентам', repair:'Починка ответа', mining:'Майнинг базы', try:'Песочница', eval:'Прогон качества', other:'Прочее' };
+const kTokens = (n) => n >= 10000 ? `${Math.round(n / 1000)} тыс.` : n >= 1000 ? `${(n / 1000).toFixed(1)} тыс.` : String(n);
+
+/** Расход токенов AI: сегодня, за 7 дней по назначению, средний вход на ответ. */
+function usageBlock(usage) {
+  if (!usage) return '';
+  const sum = (rows) => rows.reduce((total, row) => total + row.prompt + row.completion, 0);
+  const cached = usage.week.reduce((total, row) => total + row.cached, 0);
+  const prompt = usage.week.reduce((total, row) => total + row.prompt, 0);
+  const summary = [
+    `Сегодня: ${kTokens(sum(usage.today))}`,
+    `7 дней: ${kTokens(sum(usage.week))}`,
+    usage.avgReplyPrompt != null ? `вход на ответ: ~${kTokens(usage.avgReplyPrompt)}` : '',
+    cached && prompt ? `из кэша ${Math.round(cached / prompt * 100)}%` : '',
+  ].filter(Boolean).join(' · ');
+  return `<div>
+        <div class="cap">Токены AI за 7 дней</div>
+        <div class="group">${meters(usage.week.map((row) => [PURPOSE[row.purpose] ?? row.purpose, row.prompt + row.completion]), ' ток.')}
+          <div class="item"><span class="hint">${esc(summary)}</span></div></div>
+      </div>`;
+}
+
 export async function loadStats() {
   if ($('view-stats').dataset.loaded !== 'true') $('stats').innerHTML = '<p class="empty">Считаю…</p>';
   const s = await json(`/api/stats?days=${statsDays}`);
@@ -137,6 +159,7 @@ export async function loadStats() {
           sla_breach:'Просрочки', sub_link:'Прислали ключ', business_connection:'Подключение',
         })[x.kind] ?? x.kind, x.n]))}</div>
       </div>
+      ${usageBlock(s.aiUsage)}
     </div>`;
   $('stats').querySelector('[data-reset-stats]')?.addEventListener('click', () => confirmAction(
     'Начать статистику заново?',

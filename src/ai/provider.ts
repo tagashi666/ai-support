@@ -149,6 +149,58 @@ export interface CompleteOptions {
   model?: string;
   /** Черновик ответа клиенту: при AI_JSON_SCHEMA=true просим json_schema. */
   schema?: boolean;
+  /** Назначение запроса — для учёта токенов. */
+  purpose?: AiPurpose;
+}
+
+/** На что ушли токены: ответ клиенту, починка JSON, майнинг, песочница, прогон. */
+export type AiPurpose = 'reply' | 'repair' | 'mining' | 'try' | 'eval' | 'other';
+
+export interface AiUsage {
+  purpose: AiPurpose;
+  model: string;
+  prompt: number;
+  completion: number;
+  /** Токены входа из кэша префикса — у провайдеров, которые это сообщают. */
+  cached: number;
+}
+
+/**
+ * Получатели учёта токенов. Провайдер не знает о базе: index.ts вешает
+ * сюда запись в журнал событий. Глобально, потому что AiProvider создают
+ * в нескольких местах (ответы, песочница, майнинг).
+ */
+const usageSinks = new Set<(usage: AiUsage) => void>();
+export function onAiUsage(sink: (usage: AiUsage) => void): () => void {
+  usageSinks.add(sink);
+  return () => usageSinks.delete(sink);
+}
+
+interface RawUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  prompt_tokens_details?: { cached_tokens?: number };
+  prompt_cache_hit_tokens?: number;
+}
+
+export function readUsage(raw: RawUsage | undefined, purpose: AiPurpose, model: string): AiUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const n = (value: unknown): number => (Number.isFinite(Number(value)) ? Math.max(0, Math.round(Number(value))) : 0);
+  const usage: AiUsage = {
+    purpose,
+    model,
+    prompt: n(raw.prompt_tokens),
+    completion: n(raw.completion_tokens),
+    cached: n(raw.prompt_tokens_details?.cached_tokens ?? raw.prompt_cache_hit_tokens),
+  };
+  return usage.prompt || usage.completion ? usage : undefined;
+}
+
+function reportUsage(usage: AiUsage | undefined): void {
+  if (!usage) return;
+  for (const sink of usageSinks) {
+    try { sink(usage); } catch (err) { log.debug('Учёт токенов не записан', err); }
+  }
 }
 
 /** Компактный образец контракта — один на промпт и на повтор разбора. */
@@ -266,11 +318,12 @@ export class AiProvider {
     const backup = this.fallbackModel;
     const needsVision = hasImageInput(messages);
     const schema = options.schema === true;
+    const purpose = options.purpose ?? 'other';
 
     // Явно названная модель — без цепочки запасных: так делают повтор
     // разбора и переход на запасную, когда основная прислала мусор.
     if (options.model) {
-      const answer = await this.request(messages, options.model, retries, maxTokens, schema);
+      const answer = await this.request(messages, options.model, retries, maxTokens, schema, purpose);
       this.lastModel = options.model;
       return answer;
     }
@@ -281,13 +334,13 @@ export class AiProvider {
       if (!backup || backup === primary || !supportsVision(backup)) {
         throw new Error(`Ни одна настроенная модель не умеет обрабатывать изображения: ${primary}`);
       }
-      const answer = await this.request(messages, backup, retries, maxTokens, schema);
+      const answer = await this.request(messages, backup, retries, maxTokens, schema, purpose);
       this.lastModel = backup;
       return answer;
     }
 
     try {
-      const answer = await this.request(messages, primary, retries, maxTokens, schema);
+      const answer = await this.request(messages, primary, retries, maxTokens, schema, purpose);
       this.lastModel = primary;
       return answer;
     } catch (err) {
@@ -300,7 +353,7 @@ export class AiProvider {
         throw err;
       }
       log.warn(`Основная модель ${primary} недоступна, пробую ${backup}: ${(err as Error).message}`);
-      const answer = await this.request(messages, backup, 1, maxTokens, schema);
+      const answer = await this.request(messages, backup, 1, maxTokens, schema, purpose);
       this.lastModel = backup;
       return answer;
     }
@@ -320,6 +373,7 @@ export class AiProvider {
     retries: number,
     maxTokens: number,
     schema = false,
+    purpose: AiPurpose = 'other',
   ): Promise<string> {
     let lastError = 'AI недоступен';
     let rateLimited = false;
@@ -362,7 +416,11 @@ export class AiProvider {
       }
 
       if (response.ok) {
-        const body = (await response.json()) as { choices?: { message?: { content?: string }; finish_reason?: string }[] };
+        const body = (await response.json()) as {
+          choices?: { message?: { content?: string }; finish_reason?: string }[];
+          usage?: RawUsage;
+        };
+        reportUsage(readUsage(body.usage, purpose, model));
         const content = body.choices?.[0]?.message?.content;
         // Обрезка по лимиту видна только здесь: дальше это просто «не разобрано».
         if (body.choices?.[0]?.finish_reason === 'length') {
@@ -582,8 +640,12 @@ function logBroken(model: string, raw: string): void {
  * валидный JSON», затем запасная модель (если она есть и другая). Только
  * после этого — «не разобрано», и решает человек.
  */
-export async function completeDraft(provider: DraftClient, messages: ChatMessage[]): Promise<DraftResult> {
-  const raw = await provider.complete(messages, undefined, undefined, { schema: true });
+export async function completeDraft(
+  provider: DraftClient,
+  messages: ChatMessage[],
+  purpose: AiPurpose = 'reply',
+): Promise<DraftResult> {
+  const raw = await provider.complete(messages, undefined, undefined, { schema: true, purpose });
   const first = parseDraftDetailed(raw);
   if (first.draft) return { draft: first.draft, outcome: first.repaired ? 'repaired' : 'ok', retried: false };
 
@@ -591,7 +653,7 @@ export async function completeDraft(provider: DraftClient, messages: ChatMessage
   logBroken(model, raw);
 
   try {
-    const fixed = await provider.complete(repairMessages(raw), 1, REPAIR_MAX_TOKENS, { model, schema: true });
+    const fixed = await provider.complete(repairMessages(raw), 1, REPAIR_MAX_TOKENS, { model, schema: true, purpose: 'repair' });
     const draft = parseDraft(fixed);
     if (draft) return { draft, outcome: 'retry', retried: true };
     logBroken(model, fixed);
@@ -602,7 +664,7 @@ export async function completeDraft(provider: DraftClient, messages: ChatMessage
   const backup = provider.fallbackName?.();
   if (backup && backup !== model && (!hasImageInput(messages) || supportsVision(backup))) {
     try {
-      const other = await provider.complete(messages, 1, undefined, { model: backup, schema: true });
+      const other = await provider.complete(messages, 1, undefined, { model: backup, schema: true, purpose });
       const parsed = parseDraftDetailed(other);
       if (parsed.draft) return { draft: parsed.draft, outcome: 'fallback', retried: true };
       logBroken(backup, other);

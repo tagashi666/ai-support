@@ -336,7 +336,7 @@ export async function tryDraft(question: string, hits: KbHit[], provider = new A
     examples: store ? examplesBlock(store, question) : '',
     clientText: question,
   });
-  return (await completeDraft(provider, messages)).draft;
+  return (await completeDraft(provider, messages, 'try')).draft;
 }
 
 export interface ReplyInput {

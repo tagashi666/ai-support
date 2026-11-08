@@ -1413,6 +1413,42 @@ console.log('\n[ json_schema ]');
   schemaServer.close();
 }
 
+// ---------- учёт токенов ----------
+console.log('\n[ учёт токенов ]');
+{
+  const { AiProvider: AP, onAiUsage, readUsage, completeDraft } = await import('../src/ai/provider.js');
+  check('usage: cached_tokens из prompt_tokens_details',
+    readUsage({ prompt_tokens: 1200, completion_tokens: 80, prompt_tokens_details: { cached_tokens: 900 } }, 'reply', 'm')?.cached === 900);
+  check('usage: пустой — без записи', readUsage({}, 'reply', 'm') === undefined && readUsage(undefined, 'reply', 'm') === undefined);
+  const usageServer = createServer((req, res) => {
+    req.resume();
+    req.on('end', () => {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        choices: [{ message: { content: '{"reply":"ок","confidence":0.9}' } }],
+        usage: { prompt_tokens: 1500, completion_tokens: 60, prompt_cache_hit_tokens: 1000 },
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => usageServer.listen(0, '127.0.0.1', resolve));
+  const port = (usageServer.address() as { port: number }).port;
+  const seenUsage: { purpose: string; prompt: number; cached: number }[] = [];
+  const off = onAiUsage((usage) => { seenUsage.push(usage); store.logEvent('ai_usage', null, usage); });
+  const usageProvider = new AP(`http://127.0.0.1:${port}/v1`, 'k', 'usage-model');
+  await completeDraft(usageProvider, [{ role: 'user', content: 'x' }]);
+  await usageProvider.complete([{ role: 'user', content: 'x' }], 0, 100, { purpose: 'mining' });
+  off();
+  check('учёт: назначение reply и mining, вход и кэш', seenUsage.map((u) => u.purpose).join() === 'reply,mining'
+    && seenUsage[0]!.prompt === 1500 && seenUsage[0]!.cached === 1000, seenUsage);
+  const usage = store.aiUsage();
+  const reply = usage.week.find((row) => row.purpose === 'reply');
+  check('статистика: токены за 7 дней по назначению и средний вход на ответ',
+    reply?.prompt === 1500 && reply.completion === 60 && usage.avgReplyPrompt === 1500
+      && usage.today.some((row) => row.purpose === 'mining'), usage);
+  check('ai_usage не забивает список событий', !store.stats(7).events.some((row) => row.kind === 'ai_usage'));
+  usageServer.close();
+}
+
 // ---------- расшифровка голосового ----------
 console.log('\n[ голосовые ]');
 const voice = store.recordInbound({ channel: 'tg_dm', externalId: 'voice', externalMsgId: 'v1', mediaType: 'voice', mediaFileId: 'f1', sentAt: Date.now() })!;

@@ -318,7 +318,7 @@ export async function runMining(
       { role: 'user', content: body },
     ];
     try {
-      const parsed = parseArticles(await provider.complete(messages, 3, config.ai.mineMaxTokens));
+      const parsed = parseArticles(await provider.complete(messages, 3, config.ai.mineMaxTokens, { purpose: 'mining' }));
       articles.push(...parsed);
       progress(`Запрос ${index + 1}/${batches.length}: ${group.length} пар → ${parsed.length} статей`);
     } catch (err) {
