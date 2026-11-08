@@ -53,6 +53,18 @@ export class SuggestionRepo {
     this.db.prepare('UPDATE ai_suggestion SET status = ?, decided_at = ? WHERE id = ?').run(status, Date.now(), id);
   }
 
+  /**
+   * Гасит висящие предложки диалога: на вопрос уже ответил человек или
+   * диалог закрыт. `exceptId` — предложка, которую оператор отправляет
+   * прямо сейчас: её статус (sent/edited) ставит маршрут ответа.
+   */
+  supersedePendingSuggestions(this: Store, conversationId: number, exceptId?: number): number {
+    return this.db
+      .prepare(`UPDATE ai_suggestion SET status = 'superseded', decided_at = ?
+                 WHERE conversation_id = ? AND status = 'pending' AND id != ?`)
+      .run(Date.now(), conversationId, exceptId ?? 0).changes;
+  }
+
   aiRepliesSince(this: Store, conversationId: number, since: number): number {
     const row = this.db
       .prepare(`SELECT COUNT(*) AS n FROM message WHERE conversation_id = ? AND author = 'ai' AND created_at > ?`)

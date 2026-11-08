@@ -450,6 +450,7 @@ export class Responder {
   private readonly timers = new Map<number, NodeJS.Timeout>();
   private readonly running = new Map<number, Promise<void>>();
   private readonly rerun = new Set<number>();
+  private unwatch?: () => void;
 
   constructor(
     private readonly store: Store,
@@ -482,6 +483,32 @@ export class Responder {
   stop(): void {
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
+    this.unwatch?.();
+    this.unwatch = undefined;
+  }
+
+  /**
+   * Предложка относится к вопросу, на который ещё никто не ответил. Ответ
+   * человека мимо неё (панель, Telegram Business, админка Bedolaga/MiniShop)
+   * и закрытие диалога делают её устаревшей: раньше она так и висела
+   * «pending», и панель предлагала отправить ответ на уже решённый вопрос.
+   * Отправка самой предложки её не гасит — статус ставит маршрут ответа.
+   */
+  watch(): void {
+    if (this.unwatch) return;
+    const onMessage = ({ message, backfill }: { message: Message; backfill: boolean }): void => {
+      if (backfill || message.direction !== 'out' || message.author !== 'agent') return;
+      this.store.supersedePendingSuggestions(message.conversation_id, message.suggestion_id ?? undefined);
+    };
+    const onConversation = (conversation: Conversation): void => {
+      if (conversation.resolved_at !== null) this.store.supersedePendingSuggestions(conversation.id);
+    };
+    this.store.on('message', onMessage);
+    this.store.on('conversation', onConversation);
+    this.unwatch = () => {
+      this.store.off('message', onMessage);
+      this.store.off('conversation', onConversation);
+    };
   }
 
   /**
@@ -492,6 +519,9 @@ export class Responder {
   private claimedByOperator(conversationId: number, inboundAt: number): boolean {
     const fresh = this.store.getConversation(conversationId);
     if (!fresh) return true;
+    // Входящее обнуляет resolved_at, значит, закрыли диалог уже после него:
+    // ответ AI на закрытый вопрос заодно открыл бы диалог заново.
+    if (fresh.resolved_at !== null) return true;
     if (this.store.operatorIsActive(conversationId)) return true;
     if (fresh.operator_active_at && fresh.operator_active_at >= inboundAt) return true;
     const humanReply = this.store.lastHumanReplyAt(conversationId);
@@ -573,12 +603,13 @@ export class Responder {
       this.store.logEvent('ai_suppressed_human_hold', conversation.id, { message: message.id, suggestOnly: true });
     }
 
-    // Диалог у человека: модель не отвечает по существу, что бы клиент ни
-    // писал дальше. Единственное разрешённое действие — напомнить, что
-    // вопрос передан, и не чаще, чем раз в заданный срок.
+    // Диалог у человека: модель не отвечает клиенту по существу, что бы он
+    // ни писал дальше, — только напоминает, что вопрос передан, не чаще
+    // заданного срока. Предложка оператору при этом пишется: новое входящее
+    // погасило прежнюю, и без свежей оператор открывал диалог с пустым
+    // черновиком. Отправку клиенту запрещает decide (handoff_at).
     if (conversation.handoff_at && !held) {
       await this.remindWaiting(conversation);
-      return;
     }
 
     // Второй рубеж после флага backfill: после простоя или перезапуска в базу
@@ -734,7 +765,9 @@ export class Responder {
       // порядке с сервером Германии» поиск цеплялся за статью про скорость,
       // проверка пропускала, и модель дописывала правдоподобное от себя.
       const grounded = usedKb.length + (profileGrounded ? 1 : 0);
-      const verdict = decide(this.store, liveConversation, clientText, effectiveDraft, grounded);
+      // Режим и передачу читаем заново: за время генерации их могли сменить.
+      const current = this.store.getConversation(conversation.id) ?? liveConversation;
+      const verdict = decide(this.store, current, clientText, effectiveDraft, grounded);
       this.store.logEvent('ai_draft', conversation.id, {
         suggestion: suggestion.id,
         action: verdict.action,
@@ -872,6 +905,20 @@ export class Responder {
       log.info(`Диалог ${conversation.id}: пауза после оператора — сообщение о передаче не отправляется`);
       return;
     }
+    // Аварийные ветки (сбой разбора, ошибка провайдера, задержанный ответ)
+    // зовут handOff в обход decide. В теневом и выключенном режиме клиент не
+    // получает ничего, а уже переданный диалог второй раз не передаётся —
+    // иначе setHandoff сбросил бы метку напоминания и «ждите» ушло бы снова.
+    const fresh = this.store.getConversation(conversation.id) ?? conversation;
+    const mode = resolveMode(fresh);
+    if (mode === 'off' || mode === 'shadow') {
+      log.info(`Диалог ${conversation.id}: режим ${mode} — передача клиенту не объявляется`);
+      return;
+    }
+    if (fresh.handoff_at !== null) {
+      log.debug(`Диалог ${conversation.id}: уже ждёт специалиста — повторной передачи нет`);
+      return;
+    }
     this.store.setHandoff(conversation.id, Date.now());
 
     // Порядок важен: сперва зовём человека, потом обещаем его клиенту.
@@ -908,6 +955,8 @@ export class Responder {
 
   /** Напоминание клиенту, что вопрос у специалиста. Без ответа по существу. */
   private async remindWaiting(conversation: Conversation): Promise<void> {
+    // Теневой режим не пишет клиенту ничего, в том числе напоминаний.
+    if (resolveMode(conversation) === 'shadow') return;
     // Если первая отправка не состоялась, handoff_notified_at остаётся NULL:
     // следующий входящий должен повторить попытку сразу, а не ждать час от
     // внутренней метки handoff_at.

@@ -202,6 +202,14 @@ export function fromPanel(store: Store, all: boolean, limit: number, conversatio
 const AUTO_LEARN_KEY = 'auto-learn:pending';
 /** Когда отдали последнюю пачку: майнинг не чаще раза в AI_AUTO_LEARN_MIN_HOURS. */
 const AUTO_LEARN_LAST_KEY = 'auto-learn:last-run';
+/** Последний ответ человека, с которым диалог уже вставал в очередь. */
+const AUTO_LEARN_SEEN_PREFIX = 'auto-learn:seen:';
+
+function lastHumanAnswerId(store: Store, conversationId: number): number {
+  const answers = store.listMessages(conversationId, 200)
+    .filter((message) => message.direction === 'out' && message.author === 'agent');
+  return answers.at(-1)?.id ?? 0;
+}
 
 function pendingAutoLearn(store: Store): number[] {
   try {
@@ -225,6 +233,16 @@ export function queueAutoLearn(
   minIntervalMs = config.ai.autoLearnMinHours * 3_600_000,
   now = Date.now(),
 ): number[] | null {
+  // Диалог открывают и закрывают снова («спасибо» после закрытия — уже
+  // повторное открытие). Если нового ответа человека с прошлого раза нет,
+  // учиться нечему: та же переписка ушла бы в майнинг повторно и дала бы
+  // дубли кандидатов в базу знаний.
+  const seenKey = `${AUTO_LEARN_SEEN_PREFIX}${conversationId}`;
+  const answerId = lastHumanAnswerId(store, conversationId);
+  const seen = store.getState(seenKey);
+  if (seen !== undefined && Number(seen) >= answerId) return null;
+  store.setState(seenKey, String(answerId));
+
   const pending = pendingAutoLearn(store).filter((id) => id !== conversationId);
   pending.push(conversationId);
   // Очередь не растёт бесконечно, если майнинг долго не может стартовать.

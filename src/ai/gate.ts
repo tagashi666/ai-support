@@ -89,6 +89,27 @@ export function personalTopics(text: string): PersonalTopic[] {
 
 const CLARIFY_WINDOW_MS = 30 * 60_000;
 
+/**
+ * Начало текущего разговора для счётчиков AI. Закрытие диалога завершает
+ * разговор: ответы AI до него не должны тормозить новое обращение того же
+ * клиента (resolved_at обнуляется входящим, поэтому — last_resolved_at).
+ */
+function conversationStart(conversation: Conversation, windowMs: number, now = Date.now()): number {
+  return Math.max(now - windowMs, conversation.last_resolved_at ?? 0);
+}
+
+/**
+ * Задавал ли AI уточняющий вопрос в этом разговоре. Раньше считался любой
+ * ответ AI: после обычного совета («обновите подписку») модель уже не могла
+ * сама спросить «на каком устройстве?», хотя это первый вопрос, а не второй.
+ * Признак — сама форма сообщения: короткий вопрос, как в isClarifyingQuestion.
+ */
+function clarifiedSince(store: Store, conversationId: number, since: number): boolean {
+  return store.listMessages(conversationId, 30).some((message) =>
+    message.direction === 'out' && message.author === 'ai' && message.created_at > since
+    && isClarifyingQuestion({ reply: message.text ?? '', clarify: true, needsHuman: false }));
+}
+
 /** Черновик — ровно один короткий вопрос клиенту, без советов. */
 export function isClarifyingQuestion(draft: Pick<AiDraft, 'reply' | 'clarify' | 'needsHuman'>): boolean {
   if (!draft.clarify || draft.needsHuman) return false;
@@ -122,6 +143,9 @@ export function decide(
   kbHits = 1,
 ): GateDecision {
   const mode = resolveMode(conversation);
+  // Режим могли выключить, пока модель думала: клиенту в нём не уходит
+  // ничего, включая «передал специалисту» из ветки предложки.
+  if (mode === 'off') return { action: 'skip', reason: 'AI выключен' };
 
   // Ответ человека важнее любых свойств черновика. Раньше эта проверка
   // стояла после базы знаний, confidence и sensitive: первая сработавшая
@@ -130,9 +154,14 @@ export function decide(
   // В паузе клиенту не уходит ничего, но черновик оператору полезен:
   // в режиме «предлагает» его ждут, а в auto он просто не отправляется сам.
   if (store.humanHoldActive(conversation.id, runtime.humanHoldMinutes)) {
-    return mode === 'off' ? { action: 'skip', reason: 'AI выключен' }
-      : mode === 'shadow' ? { action: 'shadow', reason: 'теневой режим: только внутренний черновик' }
+    return mode === 'shadow' ? { action: 'shadow', reason: 'теневой режим: только внутренний черновик' }
       : { action: 'suggest', reason: 'пауза после ответа оператора: только предложка' };
+  }
+  // Диалог ждёт специалиста: по существу клиенту AI не отвечает, но свежий
+  // черновик оператору нужен — прежнюю предложку погасило новое входящее.
+  if (conversation.handoff_at) {
+    return mode === 'shadow' ? { action: 'shadow', reason: 'теневой режим: только внутренний черновик' }
+      : { action: 'suggest', reason: 'диалог ждёт специалиста: только предложка' };
   }
 
   if (mode === 'shadow') return { action: 'shadow', reason: 'теневой режим: только внутренний черновик' };
@@ -152,7 +181,7 @@ export function decide(
   // примерно в трети обращений. Второй вопрос подряд — уже допрос, его
   // решает человек.
   const clarifying = isClarifyingQuestion(draft);
-  if (clarifying && store.aiRepliesSince(conversation.id, Date.now() - CLARIFY_WINDOW_MS) > 0) {
+  if (clarifying && clarifiedSince(store, conversation.id, conversationStart(conversation, CLARIFY_WINDOW_MS))) {
     return { action: 'suggest', reason: 'уточняющий вопрос уже задавали' };
   }
   if (runtime.requireKb && kbHits === 0 && !clarifying) {
@@ -180,7 +209,7 @@ export function decide(
   // Предохранитель от зацикливания: считается в пределах одного диалога.
   // Ноль означает «без предела» — тогда проверку пропускаем совсем.
   if (runtime.autoPerHour > 0) {
-    const recentAi = store.aiRepliesSince(conversation.id, Date.now() - 3_600_000);
+    const recentAi = store.aiRepliesSince(conversation.id, conversationStart(conversation, 3_600_000));
     if (recentAi >= runtime.autoPerHour) {
       return { action: 'suggest', reason: `в этом диалоге уже ${recentAi} автоответов за час` };
     }
