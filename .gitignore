@@ -24,3 +24,7 @@ AI_SUPPORT_HANDOFF.md
 !/kb/20-устройства.md
 !/kb/30-скорость.md
 /kb/draft/
+
+# Данные мастера настройки конкретной инсталляции.
+.setup-facts.json
+docker-compose.override.yml
