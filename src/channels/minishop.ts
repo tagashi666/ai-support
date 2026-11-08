@@ -3,6 +3,7 @@ import type { AttachmentPayload, ChannelSender, SendPayload, SendResult } from '
 import type { Conversation, Store } from '../core/store.js';
 import { readLimitedBody } from '../core/http.js';
 import type { MediaSource } from '../core/media.js';
+import { CHANNELS } from '../core/channels.js';
 
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 100;
@@ -267,7 +268,7 @@ export class MinishopClient {
 
   /** Источник вложений `minishop:<imageId>` для MediaFetcher. */
   mediaSource(): MediaSource {
-    return { prefix: 'minishop', fetch: (imageId) => this.downloadImage(imageId) };
+    return { prefix: CHANNELS.minishop.mediaPrefix, fetch: (imageId) => this.downloadImage(imageId) };
   }
 }
 

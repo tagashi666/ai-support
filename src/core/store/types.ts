@@ -1,3 +1,5 @@
+import { CHANNELS } from '../channels.js';
+
 // Типы и константы хранилища. Импортировать снаружи — из core/store.js.
 
 /** next_attempt_at вложения, которое больше не повторяется автоматически. */
@@ -191,7 +193,7 @@ export interface WindowState {
 }
 
 export function replyWindow(conv: Conversation, now = Date.now()): WindowState {
-  if (conv.channel !== 'tg_dm') return { applies: false, open: true, msLeft: Infinity };
+  if (!CHANNELS[conv.channel].replyWindow) return { applies: false, open: true, msLeft: Infinity };
   if (!conv.last_inbound_at) return { applies: true, open: false, msLeft: 0 };
   const msLeft = conv.last_inbound_at + REPLY_WINDOW_MS - now;
   return { applies: true, open: msLeft > 0, msLeft: Math.max(0, msLeft) };

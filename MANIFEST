@@ -77,6 +77,7 @@ src/cli/kbmine.ts
 src/cli/rwprobe.ts
 src/cli/selfcheck.ts
 src/config.ts
+src/core/channels.ts
 src/core/db.ts
 src/core/fts.ts
 src/core/http.ts

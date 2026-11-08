@@ -1,6 +1,7 @@
 import type { Bot } from 'grammy';
 import { config, log } from '../config.js';
 import type { Conversation, Store } from './store.js';
+import { CHANNELS } from './channels.js';
 import { runtime } from './settings.js';
 
 /**
@@ -122,9 +123,7 @@ export class Notifier {
       if (Date.now() - last < throttle) return false;
     }
 
-    const channel = conversation.channel === 'tg_dm'
-      ? 'личка Business'
-      : conversation.channel === 'tg_bot' ? 'личка бота' : 'тикет';
+    const channel = CHANNELS[conversation.channel].label;
     const lines = [
       `<b>${TITLES[kind]}</b>`,
       `${escapeHtml(this.who(conversation))} · ${channel}${details.tone ? ` · ${details.tone}` : ''}`,

@@ -30,6 +30,7 @@ const { Outbox } = await import('../src/core/outbox.js');
 const { startWeb } = await import('../src/panel/server.js');
 const { limitConcurrency } = await import('../src/core/http.js');
 const { avatarKey, isPermanentMediaError, MediaFetchError, mediaPath, sweepOrphanMedia } = await import('../src/core/media.js');
+const { attachmentFileRef } = await import('../src/core/channels.js');
 
 const db = openDatabase();
 const store = new Store(db);
@@ -59,6 +60,11 @@ try {
   ok('слишком большой файл — окончательная ошибка', isPermanentMediaError(new Error("Call to 'getFile' failed! (400: Bad Request: file is too big)")));
   ok('сетевой сбой повторяется', !isPermanentMediaError(new Error('fetch failed')));
   ok('HTTP 404 источника — окончательная ошибка', isPermanentMediaError(new MediaFetchError('HTTP 404', true)));
+  ok('file_ref по каналу прежнего вида',
+    attachmentFileRef('bedolaga', 'f1') === 'bedolaga:f1'
+      && attachmentFileRef('minishop', 'f2') === 'minishop:f2'
+      && attachmentFileRef('tg_bot', 'f3', 'bot:business:1') === 'tg:bot%3Abusiness%3A1:f3'
+      && attachmentFileRef(undefined, 'f4') === 'tg:telegram-default:f4');
 
   const pendingResponse = await fetch(`${base}/api/attachments/${attachmentId}`, { headers });
   ok('пока файл качается — 202', pendingResponse.status === 202, pendingResponse.status);

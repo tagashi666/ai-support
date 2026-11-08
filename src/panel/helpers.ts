@@ -4,7 +4,8 @@ import { log } from '../config.js';
 import { avatarKey } from '../core/media.js';
 import type { Operations } from '../core/operations.js';
 import { StatusSyncError, type Outbox } from '../core/outbox.js';
-import { replyWindow, type Conversation, type Store } from '../core/store.js';
+import { replyWindow, type Channel, type Conversation, type Store } from '../core/store.js';
+import { CHANNEL_IDS } from '../core/channels.js';
 
 /** Вложение по id не меняется: файл пишется один раз и по имени из file_ref. */
 export const IMMUTABLE_PRIVATE = 'private, max-age=31536000, immutable';
@@ -18,6 +19,11 @@ export function etagMatches(header: string | string[] | undefined, etag: string)
     const candidate = item.trim();
     return candidate === '*' || candidate.replace(/^W\//, '') === bare;
   });
+}
+
+/** Какие каналы подключены (есть отправитель) — `channels` в ответах API. */
+export function channelAvailability(outbox: Outbox): Record<Channel, boolean> {
+  return Object.fromEntries(CHANNEL_IDS.map((id) => [id, outbox.has(id)])) as Record<Channel, boolean>;
 }
 
 /** Диалог в виде для панели: окно ответа, источники, версия аватарки, совместная работа. */

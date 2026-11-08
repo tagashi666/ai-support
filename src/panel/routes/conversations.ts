@@ -3,7 +3,7 @@ import { config } from '../../config.js';
 import { type ConversationStatus, StatusSyncError } from '../../core/outbox.js';
 import { runtime } from '../../core/settings.js';
 import { queueAutoLearn, requeueAutoLearn } from '../../ai/mining.js';
-import { decorate } from '../helpers.js';
+import { channelAvailability, decorate } from '../helpers.js';
 import type { RouteContext } from '../context.js';
 
 /** Диалоги: список, папки, история, прочтение, присутствие, удержание, заметки и статус. */
@@ -14,7 +14,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
 
   app.get('/api/conversations', async () => ({
     conversations: store.listConversations().map((item) => decorate(item, store, operations)),
-    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga'), minishop: outbox.has('minishop') },
+    channels: channelAvailability(outbox),
     aiMode: runtime.aiMode,
   }));
 

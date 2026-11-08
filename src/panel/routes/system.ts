@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { settingOverrides } from '../../core/settings.js';
 import { version } from '../../config.js';
 import type { RouteContext } from '../context.js';
+import { channelAvailability } from '../helpers.js';
 
 /** Диагностика и проверка здоровья. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
@@ -10,7 +11,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
   app.get('/api/diagnostics', async () => ({
     application: { version, uptime: process.uptime(), memory: process.memoryUsage() },
     database: operations.diagnostics(),
-    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga'), minishop: outbox.has('minishop') },
+    channels: channelAvailability(outbox),
     integrations: {
       telegram: Boolean(bot), bedolaga: Boolean(bedolaga), minishop: Boolean(minishop), remnawave: Boolean(remnawave), customers: Boolean(customers), nodes: Boolean(nodes),
     },

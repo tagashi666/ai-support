@@ -5,6 +5,7 @@ import type { Conversation, Store } from '../core/store.js';
 import type { AttachmentPayload, ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
 import { MediaFetchError, type MediaSource } from '../core/media.js';
 import { readLimitedBody } from '../core/http.js';
+import { CHANNELS } from '../core/channels.js';
 
 /** Достаёт из сообщения тип вложения и file_id. Скачивание — этап P2. */
 function extractMedia(msg: TgMessage): { mediaType?: string; mediaFileId?: string; mediaWidth?: number; mediaHeight?: number } {
@@ -439,7 +440,7 @@ export class TelegramBotRegistry {
  */
 export function telegramMediaSource(bots: Bot | TelegramBotRegistry): MediaSource {
   return {
-    prefix: 'tg',
+    prefix: CHANNELS.tg_dm.mediaPrefix,
     async fetch(payload: string): Promise<Buffer | null> {
       const separator = payload.indexOf(':');
       const sourceId = separator >= 0 ? decodeURIComponent(payload.slice(0, separator)) : undefined;

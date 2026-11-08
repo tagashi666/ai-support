@@ -3,6 +3,7 @@ import type { ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
 import type { Conversation, Store } from '../core/store.js';
 import { readLimitedBody } from '../core/http.js';
 import type { MediaSource } from '../core/media.js';
+import { attachmentFileRef, CHANNELS } from '../core/channels.js';
 
 /**
  * Клиент webapi бедолаги. Авторизация — заголовок X-API-Key.
@@ -287,7 +288,7 @@ export class BedolagaClient {
 
   /** Источник вложений `bedolaga:<fileId>` для MediaFetcher. */
   mediaSource(): MediaSource {
-    return { prefix: 'bedolaga', fetch: (fileId) => this.downloadMedia(fileId) };
+    return { prefix: CHANNELS.bedolaga.mediaPrefix, fetch: (fileId) => this.downloadMedia(fileId) };
   }
 
   async userByTelegramId(telegramId: number): Promise<Record<string, unknown> | null> {
@@ -626,7 +627,7 @@ export class BedolagaPoller {
           // Как и у входящих, старое сообщение могло быть записано до того,
           // как импорт научился сохранять вложения исходящих сообщений.
           const existing = this.store.findMessageByExternalId(conversation.id, String(message.id), 'out');
-          if (existing) this.store.addAttachment(existing.id, message.media_type, `bedolaga:${fileId}`);
+          if (existing) this.store.addAttachment(existing.id, message.media_type, attachmentFileRef('bedolaga', fileId));
         }
         continue;
       }
@@ -650,7 +651,7 @@ export class BedolagaPoller {
           ? this.store.findMessageByExternalId(conversation.id, String(message.id), 'in')
           : undefined;
         if (existing && fileId) {
-          this.store.addAttachment(existing.id, message.media_type, `bedolaga:${fileId}`);
+          this.store.addAttachment(existing.id, message.media_type, attachmentFileRef('bedolaga', fileId));
         }
         continue;
       }

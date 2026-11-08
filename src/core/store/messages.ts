@@ -1,16 +1,7 @@
 import type { Store } from '../store.js';
-import type { Channel, Direction, Author, Conversation, Message, InboundMessage } from './types.js';
+import type { Direction, Author, Conversation, Message, InboundMessage } from './types.js';
 import { releaseMediaFiles } from './media-files.js';
-
-/**
- * file_ref вложения: по префиксу MediaFetcher выбирает источник, а media.ts
- * вычисляет из него имя файла. Для Telegram в ссылку входит бот-источник.
- */
-function attachmentFileRef(channel: Channel | undefined, fileId: string, telegramSourceId: string | null | undefined): string {
-  if (channel === 'bedolaga') return `bedolaga:${fileId}`;
-  if (channel === 'minishop') return `minishop:${fileId}`;
-  return `tg:${encodeURIComponent(telegramSourceId ?? 'telegram-default')}:${fileId}`;
-}
+import { attachmentFileRef } from '../channels.js';
 
 /** Отдаёт свежие диалог и сообщение слушателям `message`. */
 export function emitMessage(store: Store, conversationId: number, messageId: number, backfill = false) {

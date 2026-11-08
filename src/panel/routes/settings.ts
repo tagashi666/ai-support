@@ -4,6 +4,7 @@ import { config, log, version } from '../../config.js';
 import { applySettings, runtime } from '../../core/settings.js';
 import type { Permission } from '../../core/operations.js';
 import type { RouteContext } from '../context.js';
+import { channelAvailability } from '../helpers.js';
 
 /** Настройки, внешние сервисы, источники и центр обновлений. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
@@ -21,7 +22,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     version,
     runtime,
     businessConnectionLive: await businessConnectionState(),
-    channels: { tg_dm: outbox.has('tg_dm'), tg_bot: outbox.has('tg_bot'), bedolaga: outbox.has('bedolaga'), minishop: outbox.has('minishop') },
+    channels: channelAvailability(outbox),
     remnawave: remnawave ? { ...remnawave.capabilities(), index: remnawave.indexState() } : null,
     remnawaves: remnawaves.map((panel) => ({
       id: panel.id,

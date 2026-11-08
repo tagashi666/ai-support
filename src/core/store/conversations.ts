@@ -1,5 +1,9 @@
 import type { Store } from '../store.js';
 import type { Channel, Conversation, SourceAccount } from './types.js';
+import { CHANNEL_IDS, CHANNELS } from '../channels.js';
+
+// Идентификаторы каналов — константы справочника, не ввод: можно вставить в SQL.
+const TELEGRAM_CHANNELS_SQL = CHANNEL_IDS.filter((id) => CHANNELS[id].telegram).map((id) => `'${id}'`).join(',');
 
 /** Диалоги: карточка, флаги, профиль клиента, SLA. */
 export class ConversationRepo {
@@ -60,7 +64,7 @@ export class ConversationRepo {
   telegramProfilesForRefresh(this: Store, sourceId: string, limit = 200): Conversation[] {
     return this.db.prepare(
       `SELECT * FROM conversation
-        WHERE channel IN ('tg_dm','tg_bot')
+        WHERE channel IN (${TELEGRAM_CHANNELS_SQL})
           AND tg_user_id IS NOT NULL
           AND (source_id = ? OR avatar_source_id = ?)
           AND (avatar_file_id IS NULL OR avatar_file_id = ''
@@ -86,14 +90,11 @@ export class ConversationRepo {
     avatarFileId?: string;
   }): Conversation {
     const now = Date.now();
-    const sourceId = input.sourceId ?? (input.channel === 'bedolaga'
-      ? 'bedolaga-default'
-      : input.channel === 'minishop' ? 'minishop-default' : 'telegram-default');
+    const defaultSource = CHANNELS[input.channel].defaultSource;
+    const sourceId = input.sourceId ?? defaultSource.id;
     this.syncSource({
       id: sourceId,
-      kind: input.sourceKind ?? (input.channel === 'bedolaga'
-        ? 'bedolaga'
-        : input.channel === 'minishop' ? 'minishop' : input.channel === 'tg_dm' ? 'telegram_business' : 'telegram_bot'),
+      kind: input.sourceKind ?? defaultSource.kind,
       name: input.sourceName ?? sourceId,
     });
     const sourceKey = `${sourceId}:${input.externalId}`;
