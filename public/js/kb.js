@@ -5,7 +5,7 @@ import { state } from './state.js';
 import { $, esc } from './dom.js';
 import { json, mutate } from './api.js';
 import { canPermission, canReview } from './access.js';
-import { animateContentChange, sheet, closeSheet } from './nav.js';
+import { animateContentChange, sheet, closeSheet, toast } from './nav.js';
 import { confirmAction } from './inspector.js';
 import { loadInterfaceKb, renderInterface } from './iface.js';
 
@@ -51,10 +51,16 @@ export function renderDocs() {
     return;
   }
   if (state.kbTab === 'learning') {
-    box.innerHTML = list.map((d) => `<article class="doc-row review-row">
+    // Кандидат — файл в черновиках: прежде чем принять, его надо прочитать
+    // (и при праве на правку — поправить). Раньше открыть было нельзя.
+    box.innerHTML = list.map((d) => `<article class="doc-row review-row" data-edit="${esc(d.file_name)}" role="button" tabindex="0" aria-label="Открыть материал: ${esc(d.title)}">
       <div class="doc-state"><span class="status-dot warning"></span></div><div class="doc-copy"><b>${esc(d.title)}</b><span>v${d.version} · ${esc(d.source)}${d.confidence == null ? '' : ` · уверенность ${Math.round(d.confidence * 100)}%`} · ${esc(d.file_name)}</span></div><div class="doc-actions">
         <button class="btn primary" data-approve="${d.id}">Проверено — опубликовать</button>
-        <button class="btn danger" data-reject="${d.id}">Отклонить</button></div></article>`).join('');
+        <button class="btn danger" data-reject="${d.id}">Отклонить</button><span class="doc-disclosure" aria-hidden="true">›</span></div></article>`).join('');
+    for (const row of box.querySelectorAll('.review-row[data-edit]')) {
+      row.onclick = (event) => { if (!event.target.closest('button')) editDoc(row.dataset.edit, 'draft'); };
+      row.onkeydown = (event) => { if ((event.key === 'Enter' || event.key === ' ') && !event.target.closest('button')) { event.preventDefault(); editDoc(row.dataset.edit, 'draft'); } };
+    }
     for (const b of box.querySelectorAll('[data-approve]')) b.onclick = async () => {
       if (await mutate(`/api/learning/candidates/${b.dataset.approve}`, { method:'POST', body:JSON.stringify({ decision:'approved' }) }, 'Материал опубликован')) loadDocs();
     };
@@ -81,15 +87,15 @@ export function renderDocs() {
     if (await mutate(`/api/kb/${state.kbTab}/${encodeURIComponent(b.dataset.del)}`, { method:'DELETE' }, 'Удалено')) loadDocs();
   });
 }
-async function editDoc(name) {
-  const data = await json(`/api/kb/${state.kbTab}/${encodeURIComponent(name)}`);
-  if (!data) return;
+async function editDoc(name, tab = state.kbTab) {
+  const data = await json(`/api/kb/${tab}/${encodeURIComponent(name)}`);
+  if (!data) { toast('Файл материала не найден — возможно, его уже удалили'); return; }
   sheet(name, `<textarea id="docText" ${canPermission('knowledge:manage') ? '' : 'readonly'}>${esc(data.text)}</textarea>`,
     canPermission('knowledge:manage') ? `<button class="btn" id="cancel">Отмена</button><button class="btn primary" id="save">Сохранить</button>` : '<button class="btn primary" id="cancel">Закрыть</button>');
   $('cancel').onclick = closeSheet;
   if (!canPermission('knowledge:manage')) return;
   $('save').onclick = async () => {
-    const saved = await mutate(`/api/kb/${state.kbTab}/${encodeURIComponent(name)}`,
+    const saved = await mutate(`/api/kb/${tab}/${encodeURIComponent(name)}`,
       { method:'PUT', body: JSON.stringify({ text: $('docText').value }) }, 'Сохранено');
     if (saved) { closeSheet(); loadDocs(); }
   };
