@@ -14,6 +14,7 @@ kb/00-подключение.md
 kb/10-подписка.md
 kb/20-устройства.md
 kb/30-скорость.md
+public/app.js
 public/index.html
 public/ui-v3.css
 scripts/aitest.ts

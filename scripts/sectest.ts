@@ -1,6 +1,6 @@
 /** Слои защиты: билеты, заголовки, только чтение, фильтр исходящего. */
 import { createServer } from 'node:http';
-import { mkdtempSync, rmSync, mkdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, mkdirSync, readdirSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
@@ -65,7 +65,11 @@ console.log('\n[ версии обновлений ]');
   check('старый RC нельзя выдать за переустановку', !isSameVersion('v2.0.0-rc.1', '2.0.0-rc.2'));
 
   const hostUpdater = readFileSync(join(process.cwd(), 'scripts', 'host-updater.sh'), 'utf8');
-  const panel = readFileSync(join(process.cwd(), 'public', 'index.html'), 'utf8');
+  // Скрипт панели вынесен в модули: проверяем разметку вместе с app.js и public/js/*.js.
+  const panelJsDir = join(process.cwd(), 'public', 'js');
+  const panel = [join(process.cwd(), 'public', 'index.html'), join(process.cwd(), 'public', 'app.js'),
+    ...(existsSync(panelJsDir) ? readdirSync(panelJsDir).filter((name) => name.endsWith('.js')).sort().map((name) => join(panelJsDir, name)) : [])]
+    .map((path) => readFileSync(path, 'utf8')).join('\n');
   check('долгая Docker-сборка обновляет статус каждые 5 секунд',
     /while sleep 5; do[\s\S]*Сборка изолированного образа · \$\{elapsed\} с/u.test(hostUpdater));
   const rollbackTagAt = hostUpdater.indexOf('preserve_running_image "$current_image_id" "$ROLLBACK_IMAGE"');
@@ -218,8 +222,22 @@ console.log('\n[ доступ к панели ]');
   const headers = (await fetch(`${B}/api/settings`, { headers: H })).headers;
   const csp = headers.get('content-security-policy') ?? '';
   check('политика содержимого выставлена', csp.includes("default-src 'none'"));
-  check('inline-script разрешён только точным хешем', /script-src[^;]*'sha256-[^']+'/u.test(csp)
-    && !/script-src[^;]*'unsafe-inline'/u.test(csp), csp);
+  check('скрипты только с того же origin, без inline и eval', /script-src 'self';/u.test(csp)
+    && !/script-src[^;]*(?:'unsafe-inline'|'unsafe-eval'|'sha256-|'nonce-)/u.test(csp), csp);
+  const panelPage = await (await fetch(`${B}/`)).text();
+  const entrySrc = panelPage.match(/<script type="module" src="(\/app\.js\?v=([A-Za-z0-9_-]+))"><\/script>/u);
+  const entry = entrySrc ? await fetch(`${B}${entrySrc[1]}`) : null;
+  const entryBody = entry ? await entry.text() : '';
+  check('точка входа скрипта подключена с версией и кэшируется навсегда', Boolean(entrySrc) && entry?.status === 200
+    && entry.headers.get('cache-control') === 'public, max-age=31536000, immutable'
+    && /javascript/u.test(entry.headers.get('content-type') ?? '')
+    && !/<script\b[^>]*>\s*[^<\s]/u.test(panelPage), entrySrc?.[1]);
+  const moduleImports = [...entryBody.matchAll(/\bfrom\s*'(\.\/[^']+)'/gu)].map((m) => m[1]!);
+  check('относительные import несут ту же версию, что и точка входа',
+    moduleImports.every((path) => path.endsWith(`.js?v=${entrySrc?.[2]}`)), moduleImports);
+  const staleEntry = await fetch(`${B}/app.js?v=stale`);
+  await staleEntry.arrayBuffer();
+  check('скрипт с чужой версией не кэшируется навсегда', staleEntry.headers.get('cache-control') === 'no-cache');
   check('запрет угадывания типа', headers.get('x-content-type-options') === 'nosniff');
   check('панель нельзя встроить в рамку', csp.includes("frame-ancestors 'none'"));
   check('API нельзя кешировать', headers.get('cache-control')?.includes('no-store') === true);

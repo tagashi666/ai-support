@@ -5,9 +5,28 @@
  * детьми, скрытие, перебитое классом, ссылки на несуществующие id. Браузера
  * здесь нет, поэтому проверяем инварианты структуры, а не пиксели.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 
-const pageHtml = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const pageSource = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+// Скрипт панели — нативные ES-модули: public/app.js и public/js/*.js. Для
+// проверок подставляем их тексты на место тега точки входа в порядке
+// исполнения браузером (сначала зависимости, затем модуль), чтобы проверки
+// по-прежнему видели «разметку + скрипт + стили» одним текстом.
+const readPublic = (path: string): string => readFileSync(new URL(`../public/${path}`, import.meta.url), 'utf8');
+const moduleOrder: string[] = [];
+const visiting = new Set<string>();
+const visitModule = (path: string): void => {
+  if (moduleOrder.includes(path) || visiting.has(path)) return;
+  visiting.add(path);
+  const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+  const deps = [...readPublic(path).matchAll(/\b(?:from|import)\s*['"]\.\/([^'"\n]+?\.js)['"]/g)].map((m) => dir + m[1]!);
+  for (const dep of deps) visitModule(dep);
+  moduleOrder.push(path);
+};
+visitModule('app.js');
+const scriptTags = [...pageSource.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+const panelJs = moduleOrder.map(readPublic).join('\n');
+const pageHtml = pageSource.replace(/<script type="module" src="\/app\.js"><\/script>/, () => `<script type="module">\n${panelJs}\n</script>`);
 // Проверки компонентов должны читать реально подключённые stylesheets. Иначе
 // неактивный файл может сохранять старое правило и маскировать регрессию UI.
 const activeStylesheets = [...pageHtml.matchAll(/<link\b[^>]*>/g)]
@@ -501,6 +520,24 @@ check('фоновая синхронизация переписки берёт �
   /\?after=\$\{lastId\}/.test(html));
 check('загруженные аватарки не пересоздаются при перерисовке списка',
   /loadedAvatars\.get\(/.test(html) && /freshAvatar\.replaceWith\(keptAvatar\)/.test(html));
+
+console.log('\n[ скрипты и CSP ]');
+// CSP разрешает только script-src 'self': встроенный код и обработчики в
+// атрибутах браузер молча заблокирует.
+check('в index.html нет встроенных скриптов, подключена только точка входа app.js',
+  scriptTags.length === 1 && scriptTags[0]![2]!.trim() === ''
+  && /^\s*type="module"\s+src="\/app\.js"\s*$/.test(scriptTags[0]![1]!), scriptTags.map((m) => m[1]));
+check('в разметке нет inline-обработчиков и javascript:-ссылок',
+  !/\son[a-z]+\s*=/i.test(pageSource.replace(/<!--[\s\S]*?-->/g, '')) && !/javascript:/i.test(pageSource));
+{
+  const jsDir = new URL('../public/js/', import.meta.url);
+  const onDisk = existsSync(jsDir) ? readdirSync(jsDir).filter((name) => name.endsWith('.js')).map((name) => `js/${name}`) : [];
+  const orphans = onDisk.filter((path) => !moduleOrder.includes(path));
+  check('каждый модуль public/js подключён из app.js', orphans.length === 0, orphans);
+}
+const serverSource = readFileSync(new URL('../src/panel/server.ts', import.meta.url), 'utf8');
+check('CSP: script-src только self, без unsafe-inline и хэшей',
+  /script-src 'self';/.test(serverSource) && !/script-src[^;]*(?:unsafe-inline|unsafe-eval|sha256-)/.test(serverSource));
 
 console.log(failures === 0 ? '\nВсе проверки прошли' : `\nПровалено: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);

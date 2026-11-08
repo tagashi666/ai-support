@@ -3,7 +3,7 @@ import fastifyCompress from '@fastify/compress';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
-import { readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { constants as zlibConstants, gunzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -53,14 +53,6 @@ const here = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(here, '..', '..', 'public');
 const lottiePlayer = readFileSync(join(here, '..', '..', 'node_modules', 'lottie-web', 'build', 'player', 'lottie_light.min.js'));
 
-const inlineScripts = Array.from(
-  readFileSync(join(publicDir, 'index.html'), 'utf8').matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi),
-);
-if (inlineScripts.length !== 1 || inlineScripts[0]?.[1] === undefined) {
-  throw new Error('Для строгой CSP в public/index.html должен быть ровно один встроенный script');
-}
-const PANEL_SCRIPT_HASH = `'sha256-${createHash('sha256').update(inlineScripts[0][1]).digest('base64')}'`;
-
 /**
  * Стили панели отдаются с версией в URL и кэшируются навсегда, а сама
  * страница — с ETag и обязательной перепроверкой: после обновления браузер
@@ -68,13 +60,31 @@ const PANEL_SCRIPT_HASH = `'sha256-${createHash('sha256').update(inlineScripts[0
  */
 const contentVersion = (bytes: Buffer | string): string => createHash('sha256').update(bytes).digest('base64url').slice(0, 16);
 const panelStyles = new Map<string, { body: Buffer; version: string }>();
+/**
+ * Скрипты панели — нативные ES-модули без сборщика: public/app.js и public/js/*.js.
+ * Версия одна на все модули (хэш их содержимого). Она ставится в URL точки
+ * входа и во все относительные import, поэтому после изменения любого модуля
+ * браузер запросит новые URL, а не возьмёт старый модуль из кэша.
+ */
+const panelScriptNames = ['app.js', ...(existsSync(join(publicDir, 'js'))
+  ? readdirSync(join(publicDir, 'js')).filter((name) => name.endsWith('.js')).sort().map((name) => `js/${name}`)
+  : [])];
+const panelScriptSources = panelScriptNames.map((name) => [name, readFileSync(join(publicDir, name), 'utf8')] as const);
+const PANEL_SCRIPT_VERSION = contentVersion(panelScriptSources.map(([name, source]) => `${name}\0${source}`).join('\0'));
+const panelScripts = new Map<string, { body: Buffer; etag: string }>(panelScriptSources.map(([name, source]) => {
+  const body = Buffer.from(source.replace(/(\b(?:from|import)\s*)(['"])(\.{1,2}\/[^'"\n]+?\.js)\2/g,
+    (_match, head: string, quote: string, path: string) => `${head}${quote}${path}?v=${PANEL_SCRIPT_VERSION}${quote}`));
+  return [name, { body, etag: `W/"${contentVersion(body)}"` }];
+}));
 const panelHtml = Buffer.from(readFileSync(join(publicDir, 'index.html'), 'utf8')
   .replace(/(<link\b[^>]*\bhref=")\/([A-Za-z0-9._-]+\.css)(")/g, (_match, head: string, name: string, tail: string) => {
     const body = readFileSync(join(publicDir, name));
     const version = contentVersion(body);
     panelStyles.set(name, { body, version });
     return `${head}/${name}?v=${version}${tail}`;
-  }));
+  })
+  .replace(/(<script\b[^>]*\bsrc=")\/([A-Za-z0-9._-]+\.js)(")/g, (match, head: string, name: string, tail: string) =>
+    panelScripts.has(name) ? `${head}/${name}?v=${PANEL_SCRIPT_VERSION}${tail}` : match));
 const PANEL_HTML_ETAG = `W/"${contentVersion(panelHtml)}"`;
 
 /** Совпадает ли ETag из If-None-Match; слабые и сильные варианты считаем равными. */
@@ -256,7 +266,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   app.addHook('onSend', async (request, reply, payload) => {
     reply.header('content-security-policy',
       "default-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; " +
-      `script-src 'self' ${PANEL_SCRIPT_HASH}; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`);
+      "script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
     reply.header('x-content-type-options', 'nosniff');
     reply.header('x-frame-options', 'DENY');
     reply.header('x-permitted-cross-domain-policies', 'none');
@@ -329,7 +339,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     brotliOptions: { params: { [zlibConstants.BROTLI_PARAM_QUALITY]: 5 } },
   });
   // Прочая статика без версии в имени: браузер хранит копию, но каждый раз
-  // перепроверяет её по ETag. Главная страница и стили отдаются ниже.
+  // перепроверяет её по ETag. Главная страница, стили и скрипты отдаются ниже.
   await app.register(fastifyStatic, {
     root: publicDir,
     index: false,
@@ -351,6 +361,14 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
         .header('cache-control', request.query.v === style.version ? 'public, max-age=31536000, immutable' : 'no-cache');
       if (etagMatches(request.headers['if-none-match'], etag)) return reply.code(304).send();
       return reply.type('text/css; charset=utf-8').send(style.body);
+    });
+  }
+  for (const [name, script] of panelScripts) {
+    app.get<{ Querystring: { v?: string } }>(`/${name}`, async (request, reply) => {
+      reply.header('etag', script.etag)
+        .header('cache-control', request.query.v === PANEL_SCRIPT_VERSION ? 'public, max-age=31536000, immutable' : 'no-cache');
+      if (etagMatches(request.headers['if-none-match'], script.etag)) return reply.code(304).send();
+      return reply.type('application/javascript; charset=utf-8').send(script.body);
     });
   }
 
