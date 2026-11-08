@@ -607,6 +607,14 @@ const MIGRATIONS: string[] = [
   `
   ALTER TABLE ai_suggestion ADD COLUMN operator_note TEXT;
   `,
+
+  // 024 — когда диалог закрывали в последний раз. resolved_at обнуляется
+  // новым входящим, а паузе AI после оператора нужно знать, что разговор
+  // с человеком уже завершён: ответ оператора до закрытия паузу не держит.
+  `
+  ALTER TABLE conversation ADD COLUMN last_resolved_at INTEGER;
+  UPDATE conversation SET last_resolved_at = resolved_at WHERE resolved_at IS NOT NULL;
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {

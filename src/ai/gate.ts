@@ -127,8 +127,12 @@ export function decide(
   // стояла после базы знаний, confidence и sensitive: первая сработавшая
   // ветка возвращала suggest, а Responder успевал отправить handoff клиенту.
   // В итоге AI снова влезал в разговор через пару минут после оператора.
+  // В паузе клиенту не уходит ничего, но черновик оператору полезен:
+  // в режиме «предлагает» его ждут, а в auto он просто не отправляется сам.
   if (store.humanHoldActive(conversation.id, runtime.humanHoldMinutes)) {
-    return { action: 'skip', reason: 'диалог недавно вёл человек' };
+    return mode === 'off' ? { action: 'skip', reason: 'AI выключен' }
+      : mode === 'shadow' ? { action: 'shadow', reason: 'теневой режим: только внутренний черновик' }
+      : { action: 'suggest', reason: 'пауза после ответа оператора: только предложка' };
   }
 
   if (mode === 'shadow') return { action: 'shadow', reason: 'теневой режим: только внутренний черновик' };

@@ -255,8 +255,11 @@ export class ConversationRepo {
     const resolved = isResolved ? (before.resolved_at ?? Date.now()) : null;
     if (before.status === status && before.resolved_at === resolved) return false;
     this.db
-      .prepare('UPDATE conversation SET status = ?, resolved_at = ?, updated_at = ? WHERE id = ?')
-      .run(status, resolved, Date.now(), conversationId);
+      // Закрытие завершает и передачу человеку: новое обращение после него —
+      // новый разговор, а не «ждите специалиста» по старому.
+      .prepare(`UPDATE conversation SET status = ?, resolved_at = ?, last_resolved_at = COALESCE(?, last_resolved_at),
+                       handoff_at = CASE WHEN ? IS NULL THEN handoff_at ELSE NULL END, updated_at = ? WHERE id = ?`)
+      .run(status, resolved, resolved, resolved, Date.now(), conversationId);
     const conversation = this.getConversation(conversationId);
     if (conversation) this.emit('conversation', conversation);
     return true;

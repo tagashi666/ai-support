@@ -78,6 +78,10 @@ export class SuggestionRepo {
   humanHoldActive(this: Store, conversationId: number, minutes: number, now = Date.now()): boolean {
     if (minutes <= 0) return false;
     const lastHuman = this.lastHumanReplyAt(conversationId);
-    return lastHuman !== null && now - lastHuman < minutes * 60_000;
+    if (lastHuman === null || now - lastHuman >= minutes * 60_000) return false;
+    // Оператор ответил и закрыл диалог — разговор с человеком окончен,
+    // новое сообщение клиента AI снова разбирает.
+    const closed = this.getConversation(conversationId)?.last_resolved_at ?? null;
+    return closed === null || closed < lastHuman;
   }
 }

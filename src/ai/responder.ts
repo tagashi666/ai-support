@@ -565,16 +565,18 @@ export class Responder {
     // Проверяем ДО handoff и обращения к модели. Это не только экономит
     // запрос: никакое служебное сообщение AI не вклинится в паузу после
     // ответа оператора, независимо от confidence и наличия статьи в базе.
-    if (this.heldByOperator(conversation.id)) {
-      log.info(`Диалог ${conversation.id}: действует пауза после ответа оператора — AI молчит`);
-      this.store.logEvent('ai_suppressed_human_hold', conversation.id, { message: message.id });
-      return;
+    // В паузе после ответа оператора клиенту не уходит ничего (handOff тоже
+    // молчит), но предложка для оператора пишется — её ждут в режиме suggest.
+    const held = this.heldByOperator(conversation.id);
+    if (held) {
+      log.info(`Диалог ${conversation.id}: пауза после ответа оператора — AI пишет только предложку`);
+      this.store.logEvent('ai_suppressed_human_hold', conversation.id, { message: message.id, suggestOnly: true });
     }
 
     // Диалог у человека: модель не отвечает по существу, что бы клиент ни
     // писал дальше. Единственное разрешённое действие — напомнить, что
     // вопрос передан, и не чаще, чем раз в заданный срок.
-    if (conversation.handoff_at) {
+    if (conversation.handoff_at && !held) {
       await this.remindWaiting(conversation);
       return;
     }
@@ -671,8 +673,10 @@ export class Responder {
 
       // Пока модель думала, оператор мог открыть диалог или начать ответ.
       // Не создаём даже предложку: она уже относится к устаревшему состоянию.
+      // Пауза, которая действовала с самого начала, — не перехват: ради
+      // предложки в паузе модель и вызывалась.
       if (this.claimedByOperator(conversation.id, message.created_at)
-          || this.heldByOperator(conversation.id)) {
+          || (!held && this.heldByOperator(conversation.id))) {
         log.info(`Диалог ${conversation.id}: оператор перехватил его во время генерации — AI отменён`);
         this.store.logEvent('ai_cancelled_operator', conversation.id, { message: message.id });
         return;
@@ -863,6 +867,11 @@ export class Responder {
    * сообщение в историю, как любой другой ответ.
    */
   private async handOff(conversation: Conversation, details: NotifyDetails): Promise<void> {
+    // Оператор только что отвечал: «передал специалисту» здесь лишнее.
+    if (this.heldByOperator(conversation.id)) {
+      log.info(`Диалог ${conversation.id}: пауза после оператора — сообщение о передаче не отправляется`);
+      return;
+    }
     this.store.setHandoff(conversation.id, Date.now());
 
     // Порядок важен: сперва зовём человека, потом обещаем его клиенту.

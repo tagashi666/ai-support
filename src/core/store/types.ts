@@ -42,6 +42,8 @@ export interface Conversation {
   last_message_at: number | null;
   first_response_at: number | null;
   resolved_at: number | null;
+  /** Последнее закрытие; не обнуляется новым входящим (миграция 024). */
+  last_resolved_at?: number | null;
   last_ai_at: number | null;
   handoff_at: number | null;
   handoff_notified_at: number | null;

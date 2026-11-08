@@ -311,7 +311,7 @@ console.log('\n[ пауза после человека и предел авто
 
   check('до ответа человека AI отвечает сам', decide(store, conv(), 'вопрос', sure, 2).action === 'auto');
   store.recordOutbound({ conversationId: hold.id, author:'agent', text:'веду сам' });
-  check('после ответа человека AI молчит', decide(store, conv(), 'вопрос', sure, 2).action === 'skip');
+  check('после ответа человека AI только предлагает, но не отправляет', decide(store, conv(), 'вопрос', sure, 2).action === 'suggest');
 
   // Внутренняя заметка не является ответом клиенту и не включает паузу.
   const noteOnly = store.upsertConversation({ channel:'tg_dm', externalId:'note-only', tgUserId:9350, businessConnectionId:'b1' });
@@ -424,6 +424,15 @@ check('пересинхронизация удаляет исчезнувшие 
   check('выражение FTS без служебных символов', !/[()]/.test(ftsExpression('OR ( "x" AND')));
   store.syncKb('stem', [{ extId: 's.md', title: 'Оплата картой', body: 'Если оплата не прошла, повторите через бота.' }]);
   check('поиск с морфологией: «оплатила» находит «Оплата»', store.searchKb('я оплатила, а подписки нет')[0]?.title === 'Оплата картой');
+  // Случай из жизни: короткая статья с заголовком в именительном падеже и
+  // разговорный вопрос с другой формой слова.
+  store.syncKb('stem', [
+    { extId: 'o.md', title: 'Политика оферта документы', body: 'Публичная оферта и политика конфиденциальности доступны в боте: раздел «Информация».' },
+    { extId: 'p.md', title: 'Оплата картой', body: 'Если оплата не прошла, повторите через бота.' },
+  ]);
+  check('«есть чет по типу оферты» находит статью про оферту',
+    store.searchKb('бля а есть чет по типу оферты у вас?')[0]?.title === 'Политика оферта документы',
+    store.searchKb('бля а есть чет по типу оферты у вас?').map((h) => h.title));
   store.syncKb('stem', []);
 }
 
@@ -892,8 +901,8 @@ console.log('\n[ передача человеку ]');
     store.getConversation(missed.id)!.handoff_at !== null);
   noRequest = false;
 
-  // После видимого ответа оператора AI не должен даже обращаться к модели
-  // и не должен отправлять handoff на новое сообщение клиента.
+  // После видимого ответа оператора AI клиенту ничего не отправляет (ни
+  // ответа, ни handoff), но готовит предложку оператору.
   const held = store.upsertConversation({ channel:'tg_dm', externalId:'held-live', tgUserId:8620, businessConnectionId:'b1' });
   const threeMinutesAgo = Date.now() - 3 * 60_000;
   store.recordInbound({ channel:'tg_dm', externalId:'held-live', text:'первый вопрос', externalMsgId:'hl1', sentAt: threeMinutesAgo - 1000 });
@@ -902,9 +911,21 @@ console.log('\n[ передача человеку ]');
   const callsBeforeHold = modelCalls;
   const sentBeforeHold = sent.length;
   await responder.handleInbound(store.getConversation(held.id)!);
-  check('через 3 минуты после оператора модель не вызывается', modelCalls === callsBeforeHold, modelCalls - callsBeforeHold);
+  check('в паузе после оператора готовится предложка', modelCalls > callsBeforeHold
+    && store.pendingSuggestion(held.id) !== undefined, modelCalls - callsBeforeHold);
   check('через 3 минуты после оператора AI ничего не отправляет', sent.length === sentBeforeHold, sent.slice(sentBeforeHold));
   check('пауза оператора не переводит диалог в handoff', store.getConversation(held.id)!.handoff_at === null);
+
+  // Оператор ответил и закрыл диалог: пауза кончилась, новое обращение — новый разговор.
+  const reopened = store.upsertConversation({ channel:'tg_dm', externalId:'held-closed', tgUserId:8621, businessConnectionId:'b1' });
+  store.recordInbound({ channel:'tg_dm', externalId:'held-closed', text:'вопрос', externalMsgId:'hc1', sentAt: threeMinutesAgo - 1000 });
+  store.recordOutbound({ conversationId: reopened.id, author:'agent', text:'ответ оператора', sentAt: threeMinutesAgo });
+  check('до закрытия пауза действует', store.humanHoldActive(reopened.id, 30));
+  store.setHandoff(reopened.id, threeMinutesAgo - 500);
+  store.setStatus(reopened.id, 'resolved');
+  store.recordInbound({ channel:'tg_dm', externalId:'held-closed', text:'новый вопрос', externalMsgId:'hc2', sentAt: Date.now() });
+  check('после закрытия диалога пауза оператора не действует', !store.humanHoldActive(reopened.id, 30));
+  check('закрытие снимает передачу человеку', store.getConversation(reopened.id)!.handoff_at === null);
 
   // Последний рубеж в Outbox защищает и те AI-пути, которые не проходят
   // через Responder.
