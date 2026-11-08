@@ -12,7 +12,7 @@ import { config, log } from '../config.js';
 import { UpdateManager } from '../core/update.js';
 import { SourceManager } from '../core/sources.js';
 import { Operations, type Actor, type Permission } from '../core/operations.js';
-import { decorate, registerStatusSyncs } from './helpers.js';
+import { decorate, etagMatches, registerStatusSyncs } from './helpers.js';
 import { createRouteContext, type WebDeps } from './context.js';
 import { register as registerConversations } from './routes/conversations.js';
 import { register as registerMedia } from './routes/media.js';
@@ -67,17 +67,6 @@ const panelHtml = Buffer.from(readFileSync(join(publicDir, 'index.html'), 'utf8'
   .replace(/(<script\b[^>]*\bsrc=")\/([A-Za-z0-9._-]+\.js)(")/g, (match, head: string, name: string, tail: string) =>
     panelScripts.has(name) ? `${head}/${name}?v=${PANEL_SCRIPT_VERSION}${tail}` : match));
 const PANEL_HTML_ETAG = `W/"${contentVersion(panelHtml)}"`;
-
-/** Совпадает ли ETag из If-None-Match; слабые и сильные варианты считаем равными. */
-function etagMatches(header: string | string[] | undefined, etag: string): boolean {
-  const value = Array.isArray(header) ? header.join(',') : header;
-  if (!value) return false;
-  const bare = etag.replace(/^W\//, '');
-  return value.split(',').some((item) => {
-    const candidate = item.trim();
-    return candidate === '*' || candidate.replace(/^W\//, '') === bare;
-  });
-}
 
 const MEDIA_COOKIE = 'ais_media';
 const TICKET_TTL_MS = 10 * 60_000;
