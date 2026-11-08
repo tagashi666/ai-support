@@ -8,6 +8,8 @@ export interface SendPayload {
   replyToExternalId?: string;
   /** Текст цитаты для истории: оригинал может быть не у нас. */
   replyExcerpt?: string;
+  /** Показать ответ «печатающимся» (черновик Telegram), если канал умеет. */
+  animate?: boolean;
 }
 
 export interface SendResult {
@@ -159,6 +161,7 @@ export class Outbox {
       text,
       replyToExternalId: payload.replyToExternalId,
       replyExcerpt: payload.replyExcerpt,
+      animate: payload.animate,
     });
 
     // Отправка уже произошла: запись обязана состояться, поэтому ошибки

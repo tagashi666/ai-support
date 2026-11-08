@@ -649,7 +649,7 @@ export class Responder {
       }
 
       try {
-        await this.outbox.send(conversation.id, { text: effectiveDraft.reply }, 'ai', suggestion.id);
+        await this.outbox.send(conversation.id, { text: effectiveDraft.reply, animate: true }, 'ai', suggestion.id);
       } catch (err) {
         if (err instanceof OperatorActiveError) {
           this.store.decideSuggestion(suggestion.id, 'superseded');

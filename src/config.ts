@@ -293,6 +293,8 @@ export const config = {
     historyChars: num('AI_HISTORY_CHARS', 2500),
     // «Печатает…» и короткая пауза перед автоответом в Telegram.
     typingIndicator: bool('AI_TYPING_INDICATOR', true),
+    // Ответ бота «печатается» черновиком Telegram (только чат с ботом, не Business).
+    streamReply: bool('AI_STREAM_REPLY', true),
     // Похожие ответы оператора из прошлых диалогов — образец манеры.
     // 0 — выключено. Бюджет маленький: лимит Groq ~8K токенов в минуту.
     examples: num('AI_EXAMPLES', 3),

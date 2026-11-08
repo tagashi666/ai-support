@@ -495,16 +495,41 @@ export class TelegramDmSender implements ChannelSender {
 }
 
 export class TelegramBotSender implements ChannelSender {
+  /** draft_id «думает…», чтобы ответ продолжил тот же черновик, а не новый. */
+  private readonly drafts = new Map<number, number>();
+
   constructor(private readonly bots: Bot | TelegramBotRegistry) {}
 
   async typing(conversation: Conversation): Promise<void> {
     const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;
-    await bot.api.sendChatAction(Number(conversation.remote_external_id ?? conversation.external_id), 'typing');
+    const chatId = Number(conversation.remote_external_id ?? conversation.external_id);
+    if (config.ai.streamReply) {
+      // Пустой черновик Telegram показывает как «Думает…» прямо в чате.
+      const draftId = newDraftId();
+      this.drafts.set(conversation.id, draftId);
+      try {
+        await bot.api.sendMessageDraft(chatId, draftId, '');
+        return;
+      } catch {
+        this.drafts.delete(conversation.id);
+      }
+    }
+    await bot.api.sendChatAction(chatId, 'typing');
   }
 
   async send(conversation: Conversation, payload: SendPayload): Promise<SendResult> {
     const bot = this.bots instanceof TelegramBotRegistry ? this.bots.botFor(conversation) : this.bots;
-    const sent = await bot.api.sendMessage(Number(conversation.remote_external_id ?? conversation.external_id), payload.text, {
+    const chatId = Number(conversation.remote_external_id ?? conversation.external_id);
+    const draftId = this.drafts.get(conversation.id);
+    this.drafts.delete(conversation.id);
+    // Ответ уже прошёл все проверки — проигрываем его черновиком, чтобы текст
+    // «печатался» на глазах. Сбой черновика не мешает отправить сообщение.
+    if (payload.animate && config.ai.streamReply) {
+      await streamDraft(bot, chatId, draftId ?? newDraftId(), payload.text).catch((err) => {
+        log.debug(`Черновик ответа в чат ${chatId} не показан`, err instanceof Error ? err.message : err);
+      });
+    }
+    const sent = await bot.api.sendMessage(chatId, payload.text, {
       ...(payload.replyToExternalId
         ? { reply_parameters: { message_id: Number(payload.replyToExternalId), allow_sending_without_reply: true } }
         : {}),
@@ -568,3 +593,28 @@ export async function markReadInTelegram(
 }
 
 export type { Context };
+
+const newDraftId = (): number => 1 + Math.floor(Math.random() * 2_000_000_000);
+
+/**
+ * Кадры черновика: текст растёт по словам за ~1,5–2,5 с. Это проигрывание уже
+ * одобренного ответа, а не трансляция генерации: клиент не должен увидеть
+ * текст, который потом не пройдёт проверки.
+ */
+export function draftFrames(text: string): string[] {
+  const words = text.split(/(\s+)/);
+  const count = Math.min(8, Math.max(3, Math.ceil(text.length / 60)));
+  const frames: string[] = [];
+  for (let i = 1; i < count; i += 1) {
+    const frame = words.slice(0, Math.ceil((words.length * i) / count)).join('').trimEnd();
+    if (frame && frame !== frames.at(-1)) frames.push(frame);
+  }
+  return frames;
+}
+
+async function streamDraft(bot: Bot, chatId: number, draftId: number, text: string): Promise<void> {
+  for (const frame of draftFrames(text)) {
+    await bot.api.sendMessageDraft(chatId, draftId, frame);
+    await new Promise((resolve) => setTimeout(resolve, 280));
+  }
+}

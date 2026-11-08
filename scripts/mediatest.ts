@@ -175,6 +175,13 @@ try {
     const brokenOutbox = new Outbox(store);
     brokenOutbox.register('tg_dm', { send: async () => ({ externalId: 'x' }), typing: async () => { throw new Error('403'); } } as any);
     ok('ошибка индикатора не бросается наружу', await brokenOutbox.typing(typingConversation) === false);
+    const { draftFrames } = await import('../src/channels/tgdm.js');
+    const reply = 'Откройте приложение, нажмите «Обновить подписку» и подключитесь заново — после этого всё заработает.';
+    const frames = draftFrames(reply);
+    ok('черновик растёт кадрами и не повторяет финальный текст',
+      frames.length >= 2 && frames.length <= 7 && frames.every((f, i) => i === 0 || f.length > frames[i - 1]!.length)
+        && frames.every((f) => reply.startsWith(f)) && frames.at(-1) !== reply, frames);
+    ok('короткий ответ — хотя бы один промежуточный кадр', draftFrames('Да, всё верно.').length >= 1);
     ok('пауза перед автоответом от 1,2 до 4 с',
       typingDelayMs('да') === 1200 && typingDelayMs('x'.repeat(1000)) === 4000 && typingDelayMs('x'.repeat(80)) === 2600);
   }
