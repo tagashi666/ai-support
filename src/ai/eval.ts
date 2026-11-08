@@ -138,7 +138,7 @@ export interface EvalRow {
 export function resultOf(text: string, draft: AiDraft | null, grounded: number): EvalResult | 'unparsed' {
   if (!draft) return 'unparsed';
   if (draft.noRequest) return clearlyNoRequest(text) ? 'silent' : 'human';
-  const store = { humanHoldActive: () => false, aiRepliesSince: () => 0 } as never;
+  const store = { humanHoldActive: () => false, aiRepliesSince: () => 0, listMessages: () => [] } as never;
   const conversation = {
     id: -1, channel: 'tg_dm', ai_mode: 'auto', escalated: 0, handoff_at: null,
     last_inbound_at: Date.now(), business_connection_id: 'eval',

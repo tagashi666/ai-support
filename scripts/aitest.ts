@@ -1705,6 +1705,159 @@ console.log('\n[ примеры ответов оператора ]');
   check('отклонённая предложка связана с ответом человека', rejRow.answer_message_id === human.message.id && rejRow.final_text?.includes('Тариф') === true, rejRow);
 }
 
+// ---------- жизненный цикл диалога: закрытие, режимы, передача ----------
+console.log('\n[ жизненный цикл диалога ]');
+{
+  const { Outbox } = await import('../src/core/outbox.js');
+  const { Responder } = await import('../src/ai/responder.js');
+  const { runtime: rtL } = await import('../src/core/settings.js');
+  const saved = { mode: rtL.aiMode, kb: rtL.requireKb, hold: rtL.humanHoldMinutes, perHour: rtL.autoPerHour, repeat: rtL.handoffRepeatMinutes };
+  rtL.aiMode = 'auto'; rtL.requireKb = false; rtL.humanHoldMinutes = 30; rtL.autoPerHour = 12; rtL.handoffRepeatMinutes = 60;
+
+  const sent: { id: number; text: string }[] = [];
+  const box = new Outbox(store);
+  box.register('tg_dm', { send: async (c, p) => { sent.push({ id: c.id, text: p.text }); return { externalMsgId: `lc${sent.length}` }; } });
+  const sentTo = (id: number) => sent.filter((item) => item.id === id).map((item) => item.text);
+  const customersStub = { get: async () => null } as never;
+  const sure = '{"reply":"Обновите подписку в приложении","confidence":0.97,"needs_human":false,"used":[]}';
+  const unsure = '{"reply":"надо смотреть руками","confidence":0.3,"needs_human":true}';
+  const fixed = (content: string) => ({ lastModel: 'm', complete: async () => content }) as never;
+  // Модель, которая отвечает по команде: так проверяются события «во время генерации».
+  const gated = (content: string) => {
+    let release!: () => void;
+    let started!: () => void;
+    const startedP = new Promise<void>((resolve) => { started = resolve; });
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const provider = { lastModel: 'm', complete: async () => { started(); await gate; return content; } } as never;
+    return { provider, started: startedP, release: () => release() };
+  };
+  let seq = 0;
+  const open = (text: string) => {
+    seq += 1;
+    const externalId = `lc-${seq}`;
+    const conv = store.upsertConversation({ channel: 'tg_dm', externalId, tgUserId: 9900 + seq, businessConnectionId: 'b1' });
+    let n = 0;
+    const write = (more: string) => {
+      n += 1;
+      store.recordInbound({ channel: 'tg_dm', externalId, text: more, externalMsgId: `${externalId}-${n}`, sentAt: Date.now() });
+    };
+    write(text);
+    return { id: conv.id, write, get: () => store.getConversation(conv.id)! };
+  };
+
+  // Оператор закрыл диалог, пока модель думала: автоответ не уходит и не
+  // открывает закрытый диалог заново.
+  {
+    const c = open('не подключается впн на телефоне');
+    const g = gated(sure);
+    const run = new Responder(store, box, customersStub, undefined, undefined, g.provider).handleInbound(c.get());
+    await g.started;
+    store.setStatus(c.id, 'resolved');
+    g.release();
+    await run;
+    check('закрытие во время генерации отменяет автоответ', sentTo(c.id).length === 0, sentTo(c.id));
+    check('AI не открывает закрытый диалог заново', c.get().status === 'resolved', c.get().status);
+  }
+
+  // AI выключили в карточке, пока модель думала: клиенту не уходит даже
+  // «передал специалисту».
+  {
+    const c = open('не подключается впн на ноутбуке');
+    const g = gated(unsure);
+    const run = new Responder(store, box, customersStub, undefined, undefined, g.provider).handleInbound(c.get());
+    await g.started;
+    store.setAiMode(c.id, 'off');
+    g.release();
+    await run;
+    check('AI, выключенный во время генерации, клиенту не пишет', sentTo(c.id).length === 0, sentTo(c.id));
+    check('выключенный AI не ставит передачу', c.get().handoff_at === null);
+  }
+
+  // Теневой режим: клиент не получает ничего, даже на аварийных ветках.
+  {
+    const c = open('ошибка подключения на роутере');
+    store.setAiMode(c.id, 'shadow');
+    await new Responder(store, box, customersStub, undefined, undefined, fixed('это не json')).handleInbound(c.get());
+    check('теневой режим: сбой разбора не шлёт клиенту «передал специалисту»', sentTo(c.id).length === 0, sentTo(c.id));
+    check('теневой режим: сбой разбора не ставит передачу', c.get().handoff_at === null);
+
+    const w = open('жду ответа по подключению');
+    store.setHandoff(w.id, Date.now() - 1000);
+    store.setAiMode(w.id, 'shadow');
+    w.write('ну что там');
+    await new Responder(store, box, customersStub, undefined, undefined, fixed(sure)).handleInbound(w.get());
+    check('теневой режим: напоминание «ждите» клиенту не уходит', sentTo(w.id).length === 0, sentTo(w.id));
+  }
+
+  // Диалог ждёт специалиста, клиент дописал: прежняя предложка устарела
+  // (новое входящее), оператору нужна свежая — по существу клиенту AI молчит.
+  {
+    const c = open('приложение пишет ошибка тайм-аут');
+    store.setHandoff(c.id, Date.now() - 60_000);
+    store.markHandoffNotified(c.id);
+    const old = store.createSuggestion({ conversationId: c.id, text: 'старый черновик' });
+    c.write('пробовал другой сервер, то же самое');
+    check('новое входящее гасит прежнюю предложку', store.getSuggestion(old.id)!.status === 'superseded');
+    await new Responder(store, box, customersStub, undefined, undefined, fixed(sure)).handleInbound(c.get());
+    const pending = store.pendingSuggestion(c.id);
+    check('в ожидании специалиста оператор получает свежую предложку', pending?.text.includes('Обновите') === true, pending);
+    check('в ожидании специалиста AI по существу клиенту не отвечает', sentTo(c.id).length === 0, sentTo(c.id));
+    check('передача человеку остаётся', c.get().handoff_at !== null);
+  }
+
+  // Предложка устаревает, когда человек ответил мимо неё или закрыл диалог.
+  {
+    const responder = new Responder(store, box, customersStub, undefined, undefined, fixed(sure));
+    responder.watch();
+    const c = open('вопрос про тариф и подписку');
+    const manual = store.createSuggestion({ conversationId: c.id, text: 'черновик' });
+    store.recordOutbound({ conversationId: c.id, author: 'agent', text: 'Ответил сам' });
+    check('ручной ответ оператора гасит предложку', store.getSuggestion(manual.id)!.status === 'superseded', store.getSuggestion(manual.id)!.status);
+    const used = store.createSuggestion({ conversationId: c.id, text: 'черновик 2' });
+    store.recordOutbound({ conversationId: c.id, author: 'agent', text: 'черновик 2', suggestionId: used.id });
+    check('отправка самой предложки её не гасит', store.getSuggestion(used.id)!.status === 'pending');
+    store.decideSuggestion(used.id, 'sent');
+    const kept = store.createSuggestion({ conversationId: c.id, text: 'черновик 3' });
+    store.recordOutbound({ conversationId: c.id, author: 'ai', text: 'передал специалисту' });
+    check('служебное сообщение AI предложку не гасит', store.getSuggestion(kept.id)!.status === 'pending');
+    store.setStatus(c.id, 'resolved');
+    check('закрытие диалога гасит предложку', store.getSuggestion(kept.id)!.status === 'superseded', store.getSuggestion(kept.id)!.status);
+    responder.stop();
+  }
+
+  // Счётчики AI (уточнение раз в 30 минут, предел в час) — в пределах
+  // одного разговора: закрытие начинает новый.
+  {
+    const ask = { reply: 'На каком устройстве не подключается?', confidence: 0.95, needsHuman: false, reason: '', noRequest: false, used: [], clarify: true };
+    const answer = { reply: 'Обновите подписку', confidence: 0.95, needsHuman: false, reason: '', noRequest: false, used: [1] };
+    const c = open('не работает');
+    store.recordOutbound({ conversationId: c.id, author: 'ai', text: 'Обновите подписку в приложении и переподключитесь.' });
+    c.write('всё равно не работает');
+    check('уточнение после обычного ответа AI — не «второй вопрос подряд»',
+      decide(store, c.get(), 'всё равно не работает', ask, 0).action === 'auto', decide(store, c.get(), 'всё равно не работает', ask, 0));
+    store.recordOutbound({ conversationId: c.id, author: 'ai', text: 'На каком устройстве?' });
+    c.write('айфон');
+    check('второе уточнение подряд — по-прежнему человеку', decide(store, c.get(), 'айфон', ask, 0).action === 'suggest');
+    store.setStatus(c.id, 'resolved');
+    c.write('не работает на ноутбуке');
+    check('после закрытия уточнение — новый разговор', decide(store, c.get(), 'не работает на ноутбуке', ask, 0).action === 'auto',
+      decide(store, c.get(), 'не работает на ноутбуке', ask, 0));
+
+    rtL.autoPerHour = 2;
+    const d = open('вопрос про подключение');
+    for (let i = 0; i < 2; i += 1) store.recordOutbound({ conversationId: d.id, author: 'ai', text: `ответ ${i}` });
+    d.write('ещё вопрос');
+    check('предел автоответов до закрытия действует', decide(store, d.get(), 'ещё вопрос', answer, 1).action === 'suggest');
+    store.setStatus(d.id, 'resolved');
+    d.write('новый вопрос после закрытия');
+    check('после закрытия предел автоответов считается заново', decide(store, d.get(), 'новый вопрос', answer, 1).action === 'auto',
+      decide(store, d.get(), 'новый вопрос', answer, 1));
+  }
+
+  rtL.aiMode = saved.mode; rtL.requireKb = saved.kb; rtL.humanHoldMinutes = saved.hold;
+  rtL.autoPerHour = saved.perHour; rtL.handoffRepeatMinutes = saved.repeat;
+}
+
 // ---------- автообучение пачками ----------
 {
   const { queueAutoLearn, requeueAutoLearn } = await import('../src/ai/mining.js');
@@ -1716,6 +1869,18 @@ console.log('\n[ примеры ответов оператора ]');
   check('после пачки очередь пуста', queueAutoLearn(store, 4, 3) === null);
   requeueAutoLearn(store, [1, 2]);
   check('несостоявшаяся пачка возвращается в очередь', (queueAutoLearn(store, 5, 4) ?? []).length === 4);
+
+  // Диалог закрыли повторно, а нового ответа человека в нём нет: учиться
+  // нечему, повторная пачка дала бы те же пары и дубли кандидатов в базу.
+  const relearn = store.upsertConversation({ channel: 'tg_dm', externalId: 'relearn', tgUserId: 9990 });
+  store.recordInbound({ channel: 'tg_dm', externalId: 'relearn', text: 'как сменить тариф подписки', externalMsgId: 'rl1', sentAt: Date.now() });
+  store.recordOutbound({ conversationId: relearn.id, author: 'agent', text: 'Тариф меняется в разделе подписки' });
+  check('закрытый диалог уходит в обучение', JSON.stringify(queueAutoLearn(store, relearn.id, 1, 0)) === `[${relearn.id}]`);
+  store.recordInbound({ channel: 'tg_dm', externalId: 'relearn', text: 'спасибо', externalMsgId: 'rl2', sentAt: Date.now() });
+  check('повторное закрытие без нового ответа человека не учит заново', queueAutoLearn(store, relearn.id, 1, 0) === null);
+  store.recordInbound({ channel: 'tg_dm', externalId: 'relearn', text: 'а как вернуть старый тариф', externalMsgId: 'rl3', sentAt: Date.now() });
+  store.recordOutbound({ conversationId: relearn.id, author: 'agent', text: 'Старый тариф можно выбрать при продлении' });
+  check('новый ответ человека снова идёт в обучение', JSON.stringify(queueAutoLearn(store, relearn.id, 1, 0)) === `[${relearn.id}]`);
 }
 
 server.close();
