@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
-import { mkdir, open, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
-import { join } from 'node:path';
+import { lstat, mkdir, open, readdir, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
+import { basename, join, resolve } from 'node:path';
 import type { Bot } from 'grammy';
 import { config, log } from '../config.js';
 import { TelegramBotRegistry } from '../channels/tgdm.js';
@@ -10,6 +10,7 @@ import type { BedolagaClient } from '../channels/bedolaga.js';
 import type { MinishopClient } from '../channels/minishop.js';
 import { AiProvider } from '../ai/provider.js';
 import { readLimitedBody } from './http.js';
+import { mediaFileName, mediaPath } from './store/media-files.js';
 
 const VOICE_TYPES = new Set(['voice', 'audio', 'video_note']);
 
@@ -29,15 +30,8 @@ function downloadedMediaMime(bytes: Buffer, mediaType: string | null): string | 
   return undefined;
 }
 
-/**
- * Имя на диске никогда не берётся из БД или удалённого API. Даже если запись
- * вложения будет повреждена, наружу можно открыть только один из файлов с
- * именем, вычисленным из file_ref, внутри MEDIA_DIR.
- */
-export function mediaPath(fileRef: string): string {
-  const name = createHash('sha256').update(fileRef).digest('hex').slice(0, 32);
-  return join(config.mediaDir, name);
-}
+// Имя файла вычисляется из file_ref — см. store/media-files.ts.
+export { mediaPath };
 
 /** Атомарная запись не следует по заранее подложенному симлинку назначения. */
 export async function saveMediaFile(fileRef: string, bytes: Buffer): Promise<string> {
@@ -223,6 +217,88 @@ export async function saveCachedAvatar(key: string, bytes: Buffer): Promise<void
   }
 }
 
+const ORPHAN_MIN_AGE_MS = 60 * 60_000;
+const AVATAR_UNUSED_MS = 30 * 24 * 60 * 60_000;
+const SWEEP_INTERVAL_MS = 24 * 60 * 60_000;
+const SWEEP_START_DELAY_MS = 10 * 60_000;
+// Сборщик трогает только файлы с нашими именами: если MEDIA_DIR по ошибке
+// указывает на общий каталог (например, рядом с БД), чужое не пострадает.
+const MEDIA_FILE_NAME = /^(?:[a-f0-9]{32}|\.(?:attachment|upload)-\d+-[a-f0-9]{24}\.tmp)$/;
+const AVATAR_FILE_NAME = /^(?:[a-f0-9]{32}|\.avatar-\d+-[a-f0-9]{24}\.tmp)$/;
+
+export interface OrphanSweepResult { media: number; avatars: number }
+
+/** Удаляет подходящие файлы каталога; ошибки отдельных файлов — в лог. */
+async function sweepDir(
+  dir: string,
+  pattern: RegExp,
+  shouldRemove: (name: string, mtimeMs: number) => boolean,
+): Promise<number> {
+  let names: string[];
+  try {
+    names = (await readdir(dir, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && pattern.test(entry.name))
+      .map((entry) => entry.name);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      log.warn(`Сборщик сирот: каталог ${dir} недоступен`, err instanceof Error ? err.message : err);
+    }
+    return 0;
+  }
+  let removed = 0;
+  for (const name of names) {
+    const path = join(dir, name);
+    try {
+      const info = await lstat(path);
+      if (!info.isFile() || !shouldRemove(name, info.mtimeMs)) continue;
+      await unlink(path);
+      removed += 1;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') continue;
+      log.warn(`Сборщик сирот: не удалось удалить ${name}`, err instanceof Error ? err.message : err);
+    }
+  }
+  return removed;
+}
+
+/**
+ * Сборщик сирот. В MEDIA_DIR удаляются файлы старше часа, на которые не
+ * ссылается ни одна запись attachment (сообщение удалено, загрузка оборвалась
+ * между записью файла и строкой в БД). Свежие не трогаем: между rename и
+ * INSERT есть окно. В кэше аватарок удаляются только файлы, которые не нужны
+ * ни одному диалогу и не обновлялись 30 дней.
+ */
+export async function sweepOrphanMedia(
+  store: Store,
+  now = Date.now(),
+  dirs: { media: string; avatars: string } = { media: config.mediaDir, avatars: config.avatarDir },
+): Promise<OrphanSweepResult> {
+  // Ссылки читаются до обхода каталога: файл, появившийся позже, моложе часа.
+  const media = new Set<string>();
+  for (const row of store.mediaFileReferences()) {
+    media.add(mediaFileName(row.file_ref));
+    if (row.local_path) media.add(basename(row.local_path));
+  }
+  const avatars = new Set<string>();
+  for (const row of store.avatarReferences()) {
+    const key = avatarKey(row.source_id, row.file_id);
+    if (key) avatars.add(key);
+  }
+  const sameDir = resolve(dirs.media) === resolve(dirs.avatars);
+  const result: OrphanSweepResult = {
+    media: await sweepDir(dirs.media, MEDIA_FILE_NAME, (name, mtimeMs) =>
+      now - mtimeMs > ORPHAN_MIN_AGE_MS && !media.has(name) && !(sameDir && avatars.has(name))),
+    avatars: 0,
+  };
+  if (!sameDir) {
+    result.avatars = await sweepDir(dirs.avatars, AVATAR_FILE_NAME, (name, mtimeMs) =>
+      name.startsWith('.')
+        ? now - mtimeMs > ORPHAN_MIN_AGE_MS
+        : now - mtimeMs > AVATAR_UNUSED_MS && !avatars.has(name));
+  }
+  return result;
+}
+
 /**
  * Скачивает вложения в фоне. Ссылки на файлы Telegram живут около часа, а у
  * бедолаги отдача закрыта токеном — в обоих случаях URL клиенту отдать нельзя,
@@ -234,6 +310,9 @@ export class MediaFetcher {
   private again = false;
   private stopped = false;
   private kickTimer: NodeJS.Timeout | undefined;
+  private sweepStartTimer: NodeJS.Timeout | undefined;
+  private sweepTimer: NodeJS.Timeout | undefined;
+  private sweeping = false;
   // Вложение может прийти и без media_type у сообщения (альбомы, внешние
   // каналы), поэтому будим очередь на любое сообщение: проход дешёвый.
   private readonly onMessage = (): void => this.kick();
@@ -255,6 +334,11 @@ export class MediaFetcher {
     this.stopped = false;
     void this.drain();
     this.timer = setInterval(() => void this.drain(), intervalMs);
+    // Сборщик сирот: через несколько минут после старта и затем раз в сутки.
+    this.sweepStartTimer = setTimeout(() => void this.sweep(), SWEEP_START_DELAY_MS);
+    this.sweepStartTimer.unref();
+    this.sweepTimer = setInterval(() => void this.sweep(), SWEEP_INTERVAL_MS);
+    this.sweepTimer.unref();
     this.store.on('message', this.onMessage);
     this.store.on('message_updated', this.onMessage);
     this.store.on('attachment_retry', this.onMessage);
@@ -265,9 +349,27 @@ export class MediaFetcher {
     if (this.timer) clearInterval(this.timer);
     if (this.kickTimer) clearTimeout(this.kickTimer);
     this.kickTimer = undefined;
+    if (this.sweepStartTimer) clearTimeout(this.sweepStartTimer);
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepStartTimer = this.sweepTimer = undefined;
     this.store.off('message', this.onMessage);
     this.store.off('message_updated', this.onMessage);
     this.store.off('attachment_retry', this.onMessage);
+  }
+
+  private async sweep(): Promise<void> {
+    if (this.stopped || this.sweeping) return;
+    this.sweeping = true;
+    try {
+      const removed = await sweepOrphanMedia(this.store);
+      if (removed.media || removed.avatars) {
+        log.info(`Сборщик сирот: удалено вложений ${removed.media}, аватарок ${removed.avatars}`);
+      }
+    } catch (err) {
+      log.warn('Сборщик сирот не отработал', err instanceof Error ? err.message : err);
+    } finally {
+      this.sweeping = false;
+    }
   }
 
   /**

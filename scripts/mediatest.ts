@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -29,7 +29,7 @@ const { openDatabase } = await import('../src/core/db.js');
 const { Outbox } = await import('../src/core/outbox.js');
 const { startWeb } = await import('../src/panel/server.js');
 const { limitConcurrency } = await import('../src/core/http.js');
-const { isPermanentMediaError, MediaFetchError } = await import('../src/core/media.js');
+const { avatarKey, isPermanentMediaError, MediaFetchError, mediaPath, sweepOrphanMedia } = await import('../src/core/media.js');
 
 const db = openDatabase();
 const store = new Store(db);
@@ -102,6 +102,61 @@ try {
   store.setConversationAvatar(conversation.id, 'stale-file');
   store.clearConversationAvatar(conversation.id);
   ok('пропавшее фото очищается, панель покажет инициалы', !store.getConversation(conversation.id)?.avatar_file_id);
+
+  // P2-7: файлы удалённых сообщений стираются после фиксации DELETE.
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 50));
+  const withFile = (externalId: string, externalMsgId: string, fileId: string) => {
+    const recorded = store.recordInbound({
+      channel: 'tg_dm', externalId, mediaType: 'photo', mediaFileId: fileId, externalMsgId, sentAt: Date.now(),
+    })!;
+    const attachment = store.attachmentsFor([recorded.message.id])[recorded.message.id]![0]!;
+    const fileRef = store.getAttachment(attachment.id)!.file_ref;
+    writeFileSync(mediaPath(fileRef), 'x');
+    store.markAttachmentDownloaded(attachment.id, mediaPath(fileRef), 1);
+    return { recorded, fileRef };
+  };
+  const lone = withFile('media-del', 'del-1', 'file-del-1');
+  store.deleteExternalMessages(lone.recorded.conversation.id, ['del-1']);
+  await tick();
+  ok('удаление сообщения стирает файл вложения', !existsSync(mediaPath(lone.fileRef)));
+  const shared = withFile('media-del2', 'del-2', 'file-del-2');
+  const keeper = store.recordInbound({ channel: 'tg_dm', externalId: 'media-del2', text: 'ещё', externalMsgId: 'del-3', sentAt: Date.now() })!;
+  store.addAttachment(keeper.message.id, 'photo', shared.fileRef);
+  store.deleteExternalMessages(shared.recorded.conversation.id, ['del-2']);
+  await tick();
+  ok('общий файл другого вложения не стирается', existsSync(mediaPath(shared.fileRef)));
+
+  // Сборщик сирот: только наши имена, только старые, только без ссылок.
+  const mediaDir = process.env.MEDIA_DIR!;
+  const avatarDir = join(dir, 'avatars');
+  mkdirSync(avatarDir, { recursive: true });
+  const hours = (n: number) => (Date.now() - n * 60 * 60_000) / 1000;
+  const plant = (path: string, ageHours: number) => {
+    writeFileSync(path, 'x');
+    utimesSync(path, hours(ageHours), hours(ageHours));
+    return path;
+  };
+  const referenced = plant(mediaPath(shared.fileRef), 5);
+  const orphanOld = plant(join(mediaDir, 'a'.repeat(32)), 2);
+  const orphanFresh = plant(join(mediaDir, 'b'.repeat(32)), 0);
+  const staleTmp = plant(join(mediaDir, `.upload-1-${'c'.repeat(24)}.tmp`), 2);
+  const foreign = plant(join(mediaDir, 'media.db'), 48);
+  const avatarConversation = store.recordInbound({ channel: 'tg_dm', externalId: 'media-avatar', text: 'привет', externalMsgId: 'av-1', sentAt: Date.now() })!;
+  store.setConversationAvatar(avatarConversation.conversation.id, 'avatar-file');
+  const withAvatar = store.getConversation(avatarConversation.conversation.id)!;
+  const liveKey = avatarKey(withAvatar.avatar_source_id ?? withAvatar.source_id, withAvatar.avatar_file_id)!;
+  const avatarLive = plant(join(avatarDir, liveKey), 24 * 60);
+  const avatarStale = plant(join(avatarDir, 'd'.repeat(32)), 24 * 31);
+  const avatarRecent = plant(join(avatarDir, 'e'.repeat(32)), 24 * 2);
+  const swept = await sweepOrphanMedia(store, Date.now(), { media: mediaDir, avatars: avatarDir });
+  ok('сборщик удаляет старые файлы без ссылки и брошенные .tmp',
+    !existsSync(orphanOld) && !existsSync(staleTmp) && swept.media === 2, swept);
+  ok('сборщик не трогает файлы со ссылкой, свежие и чужие',
+    existsSync(referenced) && existsSync(orphanFresh) && existsSync(foreign));
+  ok('кэш аватарок: удаляется только ненужная и старше 30 дней',
+    !existsSync(avatarStale) && existsSync(avatarLive) && existsSync(avatarRecent) && swept.avatars === 1, swept);
+  ok('сборщик переживает отсутствующий каталог',
+    (await sweepOrphanMedia(store, Date.now(), { media: join(dir, 'nope'), avatars: join(dir, 'nope2') })).media === 0);
 } finally {
   await app.close();
   db.close();

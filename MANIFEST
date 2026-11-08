@@ -62,6 +62,7 @@ src/core/settings.ts
 src/core/sla.ts
 src/core/sources.ts
 src/core/store.ts
+src/core/store/media-files.ts
 src/core/templates.ts
 src/core/update.ts
 src/index.ts

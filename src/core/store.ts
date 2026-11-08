@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 import { ftsExpression } from './fts.js';
 import { isMeaningfulAnswer } from '../ai/examples.js';
+import { releaseMediaFiles } from './store/media-files.js';
 
 /** next_attempt_at вложения, которое больше не повторяется автоматически. */
 export const ATTACHMENT_GAVE_UP = 8_640_000_000_000_000;
@@ -1103,6 +1104,7 @@ export class Store extends EventEmitter<StoreEvents> {
     const previous = this.findMessageByExternalId(input.conversationId, input.externalMsgId, input.direction);
     if (!previous) return null;
     const mediaChanged = Boolean(input.mediaFileId && input.mediaFileId !== previous.media_file_id);
+    let removedFileRefs: string[] = [];
     this.db.transaction(() => {
       this.db.prepare(
         `UPDATE message
@@ -1120,6 +1122,8 @@ export class Store extends EventEmitter<StoreEvents> {
         previous.id,
       );
       if (mediaChanged) {
+        removedFileRefs = (this.db.prepare('SELECT file_ref FROM attachment WHERE message_id = ?')
+          .all(previous.id) as Array<{ file_ref: string }>).map((row) => row.file_ref);
         this.db.prepare('DELETE FROM attachment WHERE message_id = ?').run(previous.id);
         const conversation = this.getConversation(input.conversationId);
         const fileRef = conversation?.channel === 'bedolaga'
@@ -1137,6 +1141,7 @@ export class Store extends EventEmitter<StoreEvents> {
     const conversation = this.getConversation(input.conversationId)!;
     const message = this.db.prepare('SELECT * FROM message WHERE id = ?').get(previous.id) as Message;
     this.emit('message_updated', { conversation, message });
+    releaseMediaFiles(this.db, removedFileRefs);
     return { conversation, message };
   }
 
@@ -1161,7 +1166,12 @@ export class Store extends EventEmitter<StoreEvents> {
       : new Set<number>();
     const deletedUnread = messages.filter((message) => unreadIds.has(message.id)).length;
     let conversationDeleted = false;
+    let removedFileRefs: string[] = [];
     this.db.transaction(() => {
+      // Вложения уходят каскадом вместе с сообщениями; их файлы стираем после фиксации.
+      removedFileRefs = (this.db.prepare(
+        `SELECT file_ref FROM attachment WHERE message_id IN (${messages.map(() => '?').join(',')})`,
+      ).all(...messages.map((message) => message.id)) as Array<{ file_ref: string }>).map((row) => row.file_ref);
       this.db.prepare(`DELETE FROM message WHERE id IN (${messages.map(() => '?').join(',')})`)
         .run(...messages.map((message) => message.id));
       this.db.prepare(
@@ -1190,6 +1200,7 @@ export class Store extends EventEmitter<StoreEvents> {
     })();
     for (const message of messages) this.emit('message_deleted', { conversation, message });
     if (conversationDeleted) this.emit('conversation_deleted', conversation);
+    releaseMediaFiles(this.db, removedFileRefs);
     return messages.length;
   }
 
@@ -1200,6 +1211,20 @@ export class Store extends EventEmitter<StoreEvents> {
                       next_attempt_at = 0, last_error = NULL
                 WHERE id = ?`)
       .run(localPath, bytes, Date.now(), mimeType ?? null, id);
+  }
+
+  /** Ссылки вложений на файлы — для сборщика сирот в MEDIA_DIR. */
+  mediaFileReferences(): Array<{ file_ref: string; local_path: string | null }> {
+    return this.db.prepare('SELECT file_ref, local_path FROM attachment')
+      .all() as Array<{ file_ref: string; local_path: string | null }>;
+  }
+
+  /** Источник и file_id аватарок диалогов — для чистки кэша аватарок. */
+  avatarReferences(): Array<{ source_id: string | null; file_id: string }> {
+    return this.db.prepare(
+      `SELECT COALESCE(avatar_source_id, source_id) AS source_id, avatar_file_id AS file_id
+         FROM conversation WHERE avatar_file_id IS NOT NULL AND avatar_file_id <> ''`,
+    ).all() as Array<{ source_id: string | null; file_id: string }>;
   }
 
   mediaBytes(): number {
