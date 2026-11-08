@@ -1111,6 +1111,42 @@ console.log('\n[ aieval ]');
   rtEval.aiMode = savedMode; rtEval.requireKb = savedKb;
 }
 
+// ---------- база знаний кусками ----------
+console.log('\n[ KB кусками ]');
+{
+  const { splitArticle, selectChunks } = await import('../src/ai/chunks.js');
+  const { buildReplyMessages, compactScreen } = await import('../src/ai/responder.js');
+  const filler = (word: string, n: number) => Array.from({ length: n }, (_, i) => `Предложение ${i} про ${word} и прочее.`).join(' ');
+  const article = `Вступление о сервисе.\n\n## Оплата картой\n${filler('оплату картой', 20)}\n\n## Продление подписки\n${filler('продление', 20)}\n\n### Лимит устройств\nУстройств столько, сколько в тарифе; лишнее удалите в боте.`;
+  const parts = splitArticle(article);
+  check('статья режется по заголовкам ##/###', parts.some((p) => p.section === 'Оплата картой') && parts.some((p) => p.section === 'Лимит устройств') && parts[0]!.section === undefined, parts.map((p) => p.section));
+  const plain = Array.from({ length: 8 }, (_, i) => `Абзац ${i}. ${filler('скорость', 4)}`).join('\n\n');
+  const plainParts = splitArticle(plain);
+  check('без заголовков — по абзацам до ~900 символов', plainParts.length > 1 && plainParts.every((p) => p.body.length <= 950), plainParts.map((p) => p.body.length));
+  const hits = [
+    { id: 1, source: 't', title: 'Подписка и оплата', body: article, score: -2 },
+    { id: 2, source: 't', title: 'Скорость', body: plain, score: -1 },
+  ];
+  const picked = selectChunks(hits as never, 'сколько устройств можно подключить', 1500);
+  check('выбирается раздел с ответом', picked[0]?.section === 'Лимит устройств', picked.map((c) => c.section));
+  const total = selectChunks(hits as never, 'оплата картой продление скорость', 2000).reduce((n, c) => n + c.title.length + (c.section?.length ?? 0) + c.body.length + 8, 0);
+  check('общий бюджет символов соблюдается', total <= 2000, total);
+  check('ничего не совпало — начало лучшей статьи', selectChunks(hits as never, 'ау', 1500)[0]?.title === 'Подписка и оплата');
+
+  const { messages, sources } = buildReplyMessages({
+    serviceName: 'S', hits: hits as never, customer: '—', clientText: 'не проходит оплата картой, и как продлить',
+    interfaceScreens: [1, 2, 3].map((n) => ({ id: `s${n}`, title: `Экран ${n}`, routeDescription: 'Меню → Раздел', keywords: [], instructions: ['Нажмите', 'Готово'] })),
+  });
+  const user = String(messages[1]!.content);
+  const kb = user.slice(0, user.indexOf('# Клиент'));
+  check('в промпте куски с заголовком «статья › раздел»', kb.includes('Подписка и оплата › Оплата картой'), kb.slice(0, 200));
+  check('источник куска — название статьи (used → статья)', sources[0] === 'Подписка и оплата' && sources.every((s) => !s.includes('›')), sources);
+  check('экранов интерфейса не больше двух', sources.filter((s) => s.startsWith('Интерфейс')).length === 2, sources);
+  check('экран — компактно одной строкой', compactScreen({ id: 'x', title: 'Продление', routeDescription: 'Подписка → Продлить', keywords: [], instructions: ['Выберите срок', 'Оплатите'] })
+    === 'Экран «Продление» (Подписка → Продлить): 1) Выберите срок; 2) Оплатите');
+  check('база в промпте укладывается в бюджет', kb.length < 3500 + 1200 + 200, kb.length);
+}
+
 // ---------- склейка сообщений ----------
 console.log('\n[ склейка сообщений ]');
 {

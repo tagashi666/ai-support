@@ -8,7 +8,8 @@ import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
 import { decide, personalTopics, resolveMode, type PersonalTopic } from './gate.js';
 import { AiProvider, completeDraft, DRAFT_EXAMPLE, type ChatMessage, type ContentPart } from './provider.js';
-import { activeInterfaceKnowledge, effectiveInterfaceMode, renderInterfaceKnowledge, type InterfaceScreen } from './interface-kb.js';
+import { activeInterfaceKnowledge, effectiveInterfaceMode, type InterfaceScreen } from './interface-kb.js';
+import { selectChunks } from './chunks.js';
 import { renderExamples, similarExamples, syncExamples } from './examples.js';
 
 /**
@@ -339,6 +340,14 @@ export async function tryDraft(question: string, hits: KbHit[], provider = new A
   return (await completeDraft(provider, messages, 'try')).draft;
 }
 
+const INTERFACE_LIMIT = 2;
+const INTERFACE_BUDGET = 1200;
+
+/** Экран кабинета одной строкой пути и шагами через «;» — без повторов заголовка. */
+export function compactScreen(screen: InterfaceScreen): string {
+  return `Экран «${screen.title}» (${screen.routeDescription}): ${screen.instructions.map((step, index) => `${index + 1}) ${step}`).join('; ')}`;
+}
+
 export interface ReplyInput {
   serviceName: string;
   hits: KbHit[];
@@ -360,19 +369,28 @@ export interface ReplyInput {
  * префикса у провайдеров), всё переменное — в сообщении пользователя.
  */
 export function buildReplyMessages(input: ReplyInput): { messages: ChatMessage[]; sources: string[] } {
-  const screens = input.interfaceScreens ?? [];
-  // Выдержки режем: на бесплатных тарифах вход считается в тот же
-  // дневной лимит, что и ответ, и длинная база съедает его за полдня.
-  const regularKnowledge = input.hits.map((hit, index) => {
-    const body = hit.body.length > config.ai.kbChars ? `${hit.body.slice(0, config.ai.kbChars)}…` : hit.body;
-    return `[${index + 1}] ${hit.title}\n${body}`;
-  }).join('\n\n');
-  const interfaceKnowledge = screens.map((screen, index) =>
-    `[${input.hits.length + index + 1}] ${screen.title}\n${renderInterfaceKnowledge([screen])}`).join('\n\n');
-  const knowledge = [regularKnowledge, interfaceKnowledge].filter(Boolean).join('\n\n') || NO_KNOWLEDGE;
+  // Экраны интерфейса — не больше двух лучших и в своём бюджете.
+  const screens = (input.interfaceScreens ?? []).slice(0, INTERFACE_LIMIT);
+  // База — лучшими кусками с общим бюджетом: целые статьи съедали лимит
+  // токенов. Номер куска сопоставляется с названием статьи, поэтому used,
+  // источники в панели и статистика статей работают как раньше.
+  const chunks = selectChunks(input.hits, input.clientText, config.ai.kbBudgetChars, config.ai.kbChars);
+  const regularKnowledge = chunks.map((chunk, index) =>
+    `[${index + 1}] ${chunk.title}${chunk.section ? ` › ${chunk.section}` : ''}\n${chunk.body}`).join('\n\n');
+  let interfaceUsed = 0;
+  const shownScreens: InterfaceScreen[] = [];
+  const interfaceParts: string[] = [];
+  for (const screen of screens) {
+    const text = `[${chunks.length + shownScreens.length + 1}] ${compactScreen(screen)}`;
+    if (shownScreens.length && interfaceUsed + text.length > INTERFACE_BUDGET) break;
+    shownScreens.push(screen);
+    interfaceParts.push(text.length > INTERFACE_BUDGET ? `${text.slice(0, INTERFACE_BUDGET)}…` : text);
+    interfaceUsed += text.length;
+  }
+  const knowledge = [regularKnowledge, interfaceParts.join('\n\n')].filter(Boolean).join('\n\n') || NO_KNOWLEDGE;
   const sources = [
-    ...input.hits.map((hit) => hit.title),
-    ...screens.map((screen) => `Интерфейс Bedolaga: ${screen.title}`),
+    ...chunks.map((chunk) => chunk.title),
+    ...shownScreens.map((screen) => `Интерфейс Bedolaga: ${screen.title}`),
   ];
 
   const prompt = [
@@ -659,10 +677,11 @@ export class Responder {
         reason: effectiveDraft.reason,
         operatorNote: effectiveDraft.operatorNote,
         model: this.provider.lastModel,
-        sources: [
+        // Несколько кусков одной статьи — один источник.
+        sources: [...new Set([
           ...(profileGrounded ? ['Карточка клиента'] : []),
           ...usedKb.map((n) => knowledgeSources[n - 1]!),
-        ],
+        ])],
       });
 
       // Считаем опорой только те выдержки, которые модель назвала сама.

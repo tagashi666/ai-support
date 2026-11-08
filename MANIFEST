@@ -60,6 +60,7 @@ scripts/source-updater.sh
 scripts/uitest.ts
 scripts/updatetest.ts
 scripts/webtest.ts
+src/ai/chunks.ts
 src/ai/cluster.ts
 src/ai/eval.ts
 src/ai/examples.ts

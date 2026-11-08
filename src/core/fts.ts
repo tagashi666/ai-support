@@ -47,7 +47,8 @@ const STOP = new Set([
  * Слова запроса → выражение MATCH через OR. Служебные символы FTS5 в
  * запрос не попадают: каждое слово берётся в кавычки.
  */
-export function ftsExpression(query: string, maxTerms = 12): string {
+/** Основы слов запроса — те же, что уходят в FTS (и в ранжирование кусков KB). */
+export function ftsTerms(query: string, maxTerms = 12): string[] {
   const terms: string[] = [];
   for (const word of query.toLocaleLowerCase('ru').split(/[^\p{L}\p{N}]+/u)) {
     if (word.length <= 2 || STOP.has(word)) continue;
@@ -55,5 +56,9 @@ export function ftsExpression(query: string, maxTerms = 12): string {
     if (stem && !terms.includes(stem)) terms.push(stem);
     if (terms.length >= maxTerms) break;
   }
-  return terms.map((term) => `"${term}"*`).join(' OR ');
+  return terms;
+}
+
+export function ftsExpression(query: string, maxTerms = 12): string {
+  return ftsTerms(query, maxTerms).map((term) => `"${term}"*`).join(' OR ');
 }
