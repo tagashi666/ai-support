@@ -421,8 +421,17 @@ export class BedolagaPoller {
     this.timer = setInterval(() => void this.tick(), this.intervalMs);
   }
 
-  stop(): void {
+  /**
+   * Останавливает опрос и ждёт текущий проход (не дольше 10 с), чтобы при
+   * завершении БД не закрылась посреди записи тикета.
+   */
+  async stop(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+    const deadline = Date.now() + 10_000;
+    while (this.running && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   }
 
   /** Один проход. Публичный, чтобы дёргать из selfcheck и тестов. */
