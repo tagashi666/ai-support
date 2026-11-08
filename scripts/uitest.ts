@@ -5,9 +5,30 @@
  * детьми, скрытие, перебитое классом, ссылки на несуществующие id. Браузера
  * здесь нет, поэтому проверяем инварианты структуры, а не пиксели.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 
-const pageHtml = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+const pageSource = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+// Скрипт панели — нативные ES-модули: public/app.js и public/js/*.js. Для
+// проверок подставляем их тексты на место тега точки входа в порядке
+// исполнения браузером (сначала зависимости, затем модуль), чтобы проверки
+// по-прежнему видели «разметку + скрипт + стили» одним текстом.
+const readPublic = (path: string): string => readFileSync(new URL(`../public/${path}`, import.meta.url), 'utf8');
+const moduleOrder: string[] = [];
+const visiting = new Set<string>();
+const visitModule = (path: string): void => {
+  if (moduleOrder.includes(path) || visiting.has(path)) return;
+  visiting.add(path);
+  const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+  const deps = [...readPublic(path).matchAll(/\b(?:from|import)\s*['"]\.\/([^'"\n]+?\.js)['"]/g)].map((m) => dir + m[1]!);
+  for (const dep of deps) visitModule(dep);
+  moduleOrder.push(path);
+};
+visitModule('app.js');
+const scriptTags = [...pageSource.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/g)];
+const panelJs = moduleOrder.map(readPublic).join('\n');
+const pageHtml = pageSource.replace(/<script type="module" src="\/app\.js"><\/script>/, () => `<script type="module">\n${panelJs}\n</script>`);
 // Проверки компонентов должны читать реально подключённые stylesheets. Иначе
 // неактивный файл может сохранять старое правило и маскировать регрессию UI.
 const activeStylesheets = [...pageHtml.matchAll(/<link\b[^>]*>/g)]
@@ -223,7 +244,7 @@ check('2K и 4K получают масштаб без двойного увел
 // 21. Цитаты: показываем, на что отвечает сообщение, и даём ответить
 // на конкретное — половина смысла переписки в Telegram именно в этом.
 check('цитата отрисовывается в переписке', /function quoteBlock\(/.test(html));
-check('можно ответить на конкретное сообщение', /function setQuote\(/.test(html) && /payload\.replyTo = quoting\.id/.test(html));
+check('можно ответить на конкретное сообщение', /function setQuote\(/.test(html) && /payload\.replyTo = state\.quoting\.id/.test(html));
 
 // 24. Вложение в переписке — превью, а не полотно. Вертикальный скриншот
 // с телефона без ограничения занимает весь экран.
@@ -434,7 +455,7 @@ check('карточка Bedolaga оформлена активным stylesheet,
 // conversation guard, либо отдельный монотонный request token.
 {
   const start = html.indexOf('async function openBedolagaCard');
-  const end = html.indexOf('\nfunction renderCollaboration', start);
+  const end = html.slice(start).search(/\n(?:export )?function renderCollaboration/) + start;
   const body = html.slice(start, end);
   const guardedByConversation = /bedolagaCardConversation\s*!==\s*conversationId/u.test(body);
   const tokenDeclaration = body.match(/(?:const|let)\s+([A-Za-z_$][\w$]*(?:token|ticket|request)[\w$]*)\s*=\s*\+\+([A-Za-z_$][\w$]*)/iu);
@@ -501,6 +522,56 @@ check('фоновая синхронизация переписки берёт �
   /\?after=\$\{lastId\}/.test(html));
 check('загруженные аватарки не пересоздаются при перерисовке списка',
   /loadedAvatars\.get\(/.test(html) && /freshAvatar\.replaceWith\(keptAvatar\)/.test(html));
+
+console.log('\n[ скрипты и CSP ]');
+// CSP разрешает только script-src 'self': встроенный код и обработчики в
+// атрибутах браузер молча заблокирует.
+check('в index.html нет встроенных скриптов, подключена только точка входа app.js',
+  scriptTags.length === 1 && scriptTags[0]![2]!.trim() === ''
+  && /^\s*type="module"\s+src="\/app\.js"\s*$/.test(scriptTags[0]![1]!), scriptTags.map((m) => m[1]));
+check('в разметке нет inline-обработчиков и javascript:-ссылок',
+  !/\son[a-z]+\s*=/i.test(pageSource.replace(/<!--[\s\S]*?-->/g, '')) && !/javascript:/i.test(pageSource));
+{
+  const jsDir = new URL('../public/js/', import.meta.url);
+  const onDisk = existsSync(jsDir) ? readdirSync(jsDir).filter((name) => name.endsWith('.js')).map((name) => `js/${name}`) : [];
+  const orphans = onDisk.filter((path) => !moduleOrder.includes(path));
+  check('каждый модуль public/js подключён из app.js', orphans.length === 0, orphans);
+}
+// Порядок исполнения модулей задаёт цепочка: первый import каждого модуля —
+// предыдущий раздел. Тогда обход от app.js исполняет разделы в исходном порядке.
+{
+  const firstImport = (path: string): string | undefined => {
+    const spec = readPublic(path).match(/^import\s+(?:[^'"]*?\sfrom\s+)?['"]\.\/([^'"]+)['"]/m)?.[1];
+    const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : '';
+    return spec === undefined ? undefined : dir + spec;
+  };
+  const broken = moduleOrder.slice(1).filter((path, index) => firstImport(path) !== moduleOrder[index]);
+  check('модули исполняются цепочкой: первый import — предыдущий раздел', moduleOrder[0] === 'js/state.js'
+    && !/^import\b/m.test(readPublic('js/state.js')) && broken.length === 0, broken);
+}
+// Браузера здесь нет, поэтому ошибки, которые иначе всплыли бы только в
+// рантайме, ловит компилятор TypeScript: синтаксис, неизвестные имена (забытый
+// import), несуществующий экспорт и присваивание импортированной переменной.
+{
+  const files = moduleOrder.map((path) => fileURLToPath(new URL(`../public/${path}`, import.meta.url)));
+  const program = ts.createProgram(files, {
+    allowJs:true, checkJs:true, noEmit:true, skipLibCheck:true, types:[],
+    target:ts.ScriptTarget.ES2022, module:ts.ModuleKind.ESNext, moduleResolution:ts.ModuleResolutionKind.Bundler,
+    lib:['lib.es2023.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
+  });
+  // 2304/2552 — неизвестное имя, 2305/2614/2724 — нет такого экспорта, 2307 — нет модуля,
+  // 2632 — присваивание импорту, 2300/2440/2451 — повторное объявление.
+  const fatal = new Set([2300, 2304, 2305, 2307, 2440, 2451, 2552, 2614, 2632, 2724]);
+  const problems = files.flatMap((file) => {
+    const source = program.getSourceFile(file)!;
+    return [...program.getSyntacticDiagnostics(source), ...program.getSemanticDiagnostics(source).filter((d) => fatal.has(d.code))]
+      .map((d) => `${file.slice(file.lastIndexOf('/public/') + 8)}:${source.getLineAndCharacterOfPosition(d.start ?? 0).line + 1} TS${d.code} ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+  });
+  check('модули панели: синтаксис, импорты и имена сходятся, импортам не присваивают', problems.length === 0, problems.slice(0, 20));
+}
+const serverSource = readFileSync(new URL('../src/panel/server.ts', import.meta.url), 'utf8');
+check('CSP: script-src только self, без unsafe-inline и хэшей',
+  /script-src 'self';/.test(serverSource) && !/script-src[^;]*(?:unsafe-inline|unsafe-eval|sha256-)/.test(serverSource));
 
 console.log(failures === 0 ? '\nВсе проверки прошли' : `\nПровалено: ${failures}`);
 process.exit(failures === 0 ? 0 : 1);
