@@ -332,6 +332,8 @@ export const config = {
     autoLearn: bool('AI_AUTO_LEARN', false),
     // Сколько закрытых диалогов копить перед одним проходом автообучения.
     autoLearnBatch: Math.max(1, Math.floor(num('AI_AUTO_LEARN_BATCH', 5))),
+    // Автообучение не чаще раза в N часов: накопленная очередь — одной пачкой.
+    autoLearnMinHours: Math.max(0, num('AI_AUTO_LEARN_MIN_HOURS', 6)),
   },
 
   transcribe: {

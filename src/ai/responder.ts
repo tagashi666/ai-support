@@ -268,6 +268,41 @@ function resolvedThanks(normalized: string): boolean {
   return new RegExp(`^(?:${thanks} )*${done}(?: ${thanks})*$`, 'u').test(normalized);
 }
 
+const normalizeLine = (text: string): string =>
+  text.toLocaleLowerCase('ru').replace(/[\p{P}\p{S}\s]+/gu, ' ').trim();
+
+/** Убирает пустые и идущие подряд одинаковые (с точностью до регистра и знаков) строки. */
+export function dedupeLines(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    if (!line) continue;
+    if (out.length && normalizeLine(out.at(-1)!) === normalizeLine(line)) continue;
+    out.push(line);
+  }
+  return out;
+}
+
+/** Окно, в котором повтор считается «отправлено, пока ответ был в пути». */
+export const REPEAT_WINDOW_MS = 2 * 60_000;
+
+/**
+ * Новая порция — повтор предыдущего сообщения клиента, на которое уже
+ * ответили (AI или оператор) за последние пару минут.
+ */
+export function answeredRepeat(history: Message[], pending: Message[], now = Date.now()): boolean {
+  const text = normalizeLine(dedupeLines(pending.map((item) => item.text?.trim() ?? '')).join(' '));
+  if (!text || !pending.length) return false;
+  const firstPending = pending[0]!.id;
+  const before = history.filter((item) => item.id < firstPending);
+  const answerIndex = before.findLastIndex((item) => item.direction === 'out' && (item.author === 'ai' || item.author === 'agent'));
+  if (answerIndex < 0) return false;
+  const answer = before[answerIndex]!;
+  if (now - answer.created_at > REPEAT_WINDOW_MS) return false;
+  // Последнее сообщение клиента перед этим ответом — то же самое.
+  const asked = before.slice(0, answerIndex).findLast((item) => item.direction === 'in' && item.text?.trim());
+  return !!asked && normalizeLine(asked.text!) === text && answer.created_at - asked.created_at <= REPEAT_WINDOW_MS;
+}
+
 /** MIME определяем по байтам: Telegram часто сохраняет фото без расширения. */
 export function imageMime(bytes: Buffer): string | null {
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
@@ -505,7 +540,9 @@ export class Responder {
 
     // Тон считаем всегда, даже когда AI молчит: оператор должен узнать,
     // что клиент на взводе, независимо от режима.
-    const plainText = pending.map((item) => item.text?.trim()).filter(Boolean).join('\n');
+    // Одинаковые подряд реплики («не работает», «не работает») — одна: это
+    // не новое содержание, а лишние токены.
+    const plainText = dedupeLines(pending.map((item) => item.text?.trim() ?? '')).join('\n');
     const pendingIds = pending.map((item) => item.id);
     const pendingAttachments = this.store.attachmentsFor(pendingIds);
     const hasImage = config.ai.vision && pending.some((item) =>
@@ -560,6 +597,14 @@ export class Responder {
     if (!hasImage && clearlyNoRequest(plainText)) {
       log.info(`Диалог ${conversation.id}: в сообщениях нет обращения — AI молчит`);
       this.store.logEvent('ai_no_request', conversation.id, { message: message.id, early: true });
+      return;
+    }
+
+    // Клиент повторил то же сообщение, пока ответ на него был в пути: ответ
+    // уже ушёл, второй запрос к модели дал бы тот же текст за те же токены.
+    if (!hasImage && answeredRepeat(this.store.listMessages(conversation.id, 12), pending)) {
+      log.info(`Диалог ${conversation.id}: повтор только что отвеченного сообщения — AI молчит`);
+      this.store.logEvent('ai_skip_repeat', conversation.id, { message: message.id });
       return;
     }
 

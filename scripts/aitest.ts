@@ -1148,6 +1148,39 @@ console.log('\n[ KB кусками ]');
   check('база в промпте укладывается в бюджет', kb.length < 3500 + 1200 + 200, kb.length);
 }
 
+// ---------- без лишних запросов к модели ----------
+console.log('\n[ лишние запросы ]');
+{
+  const { dedupeLines, answeredRepeat, clearlyNoRequest: noReq } = await import('../src/ai/responder.js');
+  const { queueAutoLearn: queue } = await import('../src/ai/mining.js');
+  check('одинаковые подряд реплики склеиваются', dedupeLines(['не работает', 'Не работает!', '', 'на айфоне']).join('|') === 'не работает|на айфоне');
+  const t0 = Date.now();
+  const msg = (id: number, direction: 'in' | 'out', text: string, at: number, author: string | null = null) =>
+    ({ id, direction, author, text, created_at: at, media_type: null }) as never;
+  const answered = [msg(1, 'in', 'не подключается на айфоне', t0 - 60_000), msg(2, 'out', 'Обновите подписку.', t0 - 30_000, 'ai')];
+  check('повтор только что отвеченного — без модели',
+    answeredRepeat([...answered, msg(3, 'in', 'Не подключается на айфоне!', t0)], [msg(3, 'in', 'Не подключается на айфоне!', t0)], t0));
+  check('новый текст после ответа — модель нужна',
+    !answeredRepeat([...answered, msg(3, 'in', 'не помогло', t0)], [msg(3, 'in', 'не помогло', t0)], t0));
+  check('ответ был давно — повтор обрабатывается',
+    !answeredRepeat(answered, [msg(3, 'in', 'не подключается на айфоне', t0 + 10 * 60_000)], t0 + 10 * 60_000));
+  check('без ответа повтор не отсекается',
+    !answeredRepeat([answered[0]!], [msg(3, 'in', 'не подключается на айфоне', t0)], t0));
+  check('только эмодзи или стикер-подпись — без модели', noReq('👍') && noReq('🙏🙏'));
+
+  // Автообучение не чаще раза в N часов, накопленное — одной пачкой.
+  const hour = 3_600_000;
+  const start = Date.now() + 1000 * hour;
+  for (const id of [101, 102]) queue(store, id, 3, 6 * hour, start);
+  check('первая пачка отдаётся сразу', (queue(store, 103, 3, 6 * hour, start) ?? []).length === 3);
+  for (const id of [104, 105]) queue(store, id, 3, 6 * hour, start + hour);
+  check('через час новая пачка ждёт паузы', queue(store, 106, 3, 6 * hour, start + hour) === null);
+  const later = queue(store, 107, 3, 6 * hour, start + 7 * hour);
+  check('после паузы — всё накопленное разом', later?.length === 4, later);
+  store.setState('auto-learn:last-run', '0');
+  store.setState('auto-learn:pending', '[]');
+}
+
 // ---------- склейка сообщений ----------
 console.log('\n[ склейка сообщений ]');
 {
