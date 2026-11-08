@@ -202,7 +202,7 @@ WebSocket рвётся, и панель перестаёт обновлятьс�
 BEDOLAGA_ENABLED=true
 BEDOLAGA_API_URL=https://bot.example.com/api
 BEDOLAGA_API_TOKEN=...
-BEDOLAGA_POLL_SECONDS=60
+BEDOLAGA_POLL_SECONDS=20
 ```
 
 Токен — ключ webapi бота, он уходит в заголовке `X-API-Key`. Проверьте до

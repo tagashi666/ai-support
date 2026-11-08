@@ -262,9 +262,15 @@ export const config = {
     // автоматически заменяет его на минимально допустимое значение 'low'.
     reasoningEffort: optional('AI_REASONING_EFFORT'),
     temperature: num('AI_TEMPERATURE', 0.3),
+    // Потолок ответа. Если у модели включены рассуждения (reasoning_effort
+    // не 'none'), provider поднимает его до 1000: размышление расходует тот
+    // же лимит, и на 700 JSON ответа обрывается на полуслове.
     maxTokens: num('AI_MAX_TOKENS', 700),
     timeoutMs: num('AI_TIMEOUT_MS', 45000),
-    minConfidence: num('AI_MIN_CONFIDENCE', 0.75),
+    // Порог самооценки модели для автоответа. По диалогам 0.8 отсекает
+    // слабо: у отклонённых черновиков ~0.65, у принятых ~0.9. Значение из
+    // панели (настройки) перекрывает этот default.
+    minConfidence: num('AI_MIN_CONFIDENCE', 0.9),
     // Предохранитель от зацикливания в одном диалоге, не общий лимит.
     // 0 — без предела.
     autoPerHour: num('AI_AUTO_PER_HOUR', 12),
@@ -279,7 +285,14 @@ export const config = {
     // но не на пачку статей — модель начинает ужимать их до огрызков.
     mineMaxTokens: num('AI_MINE_MAX_TOKENS', 3500),
     minePaceMs: num('AI_MINE_PACE_MS', 20000),
-    historyLimit: num('AI_HISTORY_LIMIT', 12),
+    // История диалога в промпте: не больше N сообщений и не больше M
+    // символов (свежие важнее, старые отрезаются первыми).
+    historyLimit: num('AI_HISTORY_LIMIT', 20),
+    historyChars: num('AI_HISTORY_CHARS', 2500),
+    // Похожие ответы оператора из прошлых диалогов — образец манеры.
+    // 0 — выключено. Бюджет маленький: лимит Groq ~8K токенов в минуту.
+    examples: num('AI_EXAMPLES', 3),
+    examplesChars: num('AI_EXAMPLES_CHARS', 900),
     maxAgeMinutes: num('AI_MAX_AGE_MINUTES', 60),
     // Пауза перед разбором: клиент дописывает мысль в несколько сообщений.
     debounceSeconds: num('AI_DEBOUNCE_SECONDS', 12),
@@ -306,6 +319,8 @@ export const config = {
     // Закрытые диалоги превращаются в черновики, а не публикуются сами:
     // оператор сохраняет контроль над тем, чему будет доверять модель.
     autoLearn: bool('AI_AUTO_LEARN', false),
+    // Сколько закрытых диалогов копить перед одним проходом автообучения.
+    autoLearnBatch: Math.max(1, Math.floor(num('AI_AUTO_LEARN_BATCH', 5))),
   },
 
   transcribe: {

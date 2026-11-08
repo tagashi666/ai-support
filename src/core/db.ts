@@ -567,6 +567,40 @@ const MIGRATIONS: string[] = [
       OR (action LIKE 'POST /api/conversations/%/engage' AND COALESCE(payload, '') NOT LIKE '%"force":true%')
       OR action LIKE 'POST /api/conversations/%/read';
   `,
+
+  // 022 — обучение на ответах оператора. В предложке сохраняем, чем она
+  // закончилась: итоговый текст оператора и сообщение, которым он ушёл
+  // (для отклонённой — следующий ответ человека). qa_pair — очищенные от
+  // персональных данных пары «вопрос клиента → ответ оператора»; похожие
+  // подмешиваются в промпт как образец манеры. Наполняется кодом
+  // (ai/examples.ts) инкрементально и бэкфиллом при старте: чистку от
+  // персональных данных в SQL не сделать.
+  `
+  ALTER TABLE ai_suggestion ADD COLUMN final_text        TEXT;
+  ALTER TABLE ai_suggestion ADD COLUMN answer_message_id INTEGER;
+
+  CREATE TABLE qa_pair (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id   INTEGER NOT NULL REFERENCES conversation(id) ON DELETE CASCADE,
+    answer_message_id INTEGER NOT NULL UNIQUE REFERENCES message(id) ON DELETE CASCADE,
+    question          TEXT    NOT NULL,
+    answer            TEXT    NOT NULL,
+    suggestion_status TEXT,
+    created_at        INTEGER NOT NULL
+  );
+  CREATE INDEX idx_qa_pair_conversation ON qa_pair (conversation_id);
+
+  CREATE VIRTUAL TABLE qa_fts USING fts5(
+    question, content='qa_pair', content_rowid='id',
+    tokenize='unicode61 remove_diacritics 2'
+  );
+  CREATE TRIGGER qa_pair_ai AFTER INSERT ON qa_pair BEGIN
+    INSERT INTO qa_fts (rowid, question) VALUES (new.id, new.question);
+  END;
+  CREATE TRIGGER qa_pair_ad AFTER DELETE ON qa_pair BEGIN
+    INSERT INTO qa_fts (qa_fts, rowid, question) VALUES ('delete', old.id, old.question);
+  END;
+  `,
 ];
 
 export function openDatabase(path = config.dbPath): Database.Database {

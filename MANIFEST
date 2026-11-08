@@ -33,6 +33,7 @@ scripts/uitest.ts
 scripts/updatetest.ts
 scripts/webtest.ts
 src/ai/cluster.ts
+src/ai/examples.ts
 src/ai/gate.ts
 src/ai/interface-kb.ts
 src/ai/kb.ts
@@ -50,6 +51,7 @@ src/cli/rwprobe.ts
 src/cli/selfcheck.ts
 src/config.ts
 src/core/db.ts
+src/core/fts.ts
 src/core/http.ts
 src/core/lifecycle.ts
 src/core/media.ts

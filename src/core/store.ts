@@ -1,5 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
+import { ftsExpression } from './fts.js';
+import { isMeaningfulAnswer } from '../ai/examples.js';
 
 /** next_attempt_at вложения, которое больше не повторяется автоматически. */
 export const ATTACHMENT_GAVE_UP = 8_640_000_000_000_000;
@@ -125,6 +127,10 @@ export interface Suggestion {
   status: SuggestionStatus;
   decided_at: number | null;
   created_at: number;
+  /** Чем закончилась предложка: итоговый текст оператора (миграция 022). */
+  final_text?: string | null;
+  /** Сообщение, которым ушёл итоговый ответ человека. */
+  answer_message_id?: number | null;
 }
 
 export interface Template {
@@ -962,19 +968,23 @@ export class Store extends EventEmitter<StoreEvents> {
       if (!conversation) continue;
       const messages = this.listMessages(id, 100);
 
-      let question: string | null = null;
+      // Клиент пишет мысль частями — склеиваем реплики до ответа человека.
+      let parts: string[] = [];
       for (const message of messages) {
         if (message.direction === 'in' && message.text?.trim()) {
-          question = message.text.trim();
+          parts.push(message.text.trim());
+          if (parts.length > 3) parts = parts.slice(-3);
           continue;
         }
-        if (message.direction === 'out' && message.author === 'agent' && message.text?.trim() && question) {
+        if (message.direction === 'out' && message.author === 'agent' && message.text?.trim() && parts.length) {
           const answer = message.text.trim();
-          // Односложные «ок» и «принял» ничему не учат.
-          if (answer.length >= 40 && question.length >= 10) {
+          const question = parts.join(' / ');
+          // Односложные «ок» и «принял» ничему не учат, но короткий ответ по
+          // делу («Обновите подписку в приложении») — учит. Отсекаем по смыслу.
+          if (isMeaningfulAnswer(answer) && question.length >= 10) {
             found.push({ conversationId: id, subject: conversation.subject, question, answer });
+            parts = [];
           }
-          question = null;
         }
       }
     }
@@ -1007,13 +1017,9 @@ export class Store extends EventEmitter<StoreEvents> {
    * поэтому текст клиента разбирается на слова и склеивается через OR.
    */
   searchKb(query: string, limit = 5): KbHit[] {
-    const terms = query
-      .toLowerCase()
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((word) => word.length > 2)
-      .slice(0, 12);
-    if (!terms.length) return [];
-    const expression = terms.map((word) => `"${word.replace(/"/g, '')}"*`).join(' OR ');
+    // Основа слова, а не слово целиком: «оплатила» находит «оплату».
+    const expression = ftsExpression(query);
+    if (!expression) return [];
     try {
       return this.db
         .prepare(
