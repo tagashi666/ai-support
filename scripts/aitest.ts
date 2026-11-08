@@ -1012,7 +1012,8 @@ console.log('\n[ operator_note и личные вопросы ]');
   const prompt = systemPrompt('Сервис', 'Коротко.');
   check('промпт: reply — только для клиента, operator_note — для оператора',
     prompt.includes('reply — ТОЛЬКО текст') && prompt.includes('operator_note') && !prompt.includes('в reply напиши'), prompt.slice(0, 200));
-  check('промпт не длиннее прежнего (4147 символов)', prompt.length <= 4147, prompt.length);
+  // Было 4147 символов шаблона; цель экономии — не больше 2800 (стиль — отдельно).
+  check('промпт не длиннее 2800 символов без стиля', prompt.length - 'Коротко.'.length <= 2800, prompt.length);
   check('в промпте один пример JSON', (prompt.match(/\{"reply"/g) ?? []).length === 1);
 
   // Сквозной прогон через Responder.
