@@ -120,9 +120,11 @@ const minishop = {
   },
 };
 const attachmentCalls: any[] = [];
+let failNextAttachment = false;
 outbox.register('tg_dm', {
   send: async () => ({ externalMsgId: '1' }),
   sendAttachment: async (_conversation: any, payload: any) => {
+    if (failNextAttachment) { failNextAttachment = false; throw new Error('channel down'); }
     attachmentCalls.push(payload); return { externalMsgId: `file-${attachmentCalls.length}` };
   },
 });
@@ -245,6 +247,36 @@ const confirmedExe = await fetch(`${B}/api/conversations/${id}/attachments`, {
 });
 ok('после подтверждения произвольный файл отправляется документом', confirmedExe.status === 200
   && attachmentCalls.at(-1)?.mediaType === 'document');
+// P3-1: индекс пачки считается принятым только после доставки.
+const retryHeaders = { ...uploadHeaders, 'x-upload-batch':'batch_retry_01' };
+failNextAttachment = true;
+const failedUpload = await fetch(`${B}/api/conversations/${id}/attachments`, { method:'POST', headers:retryHeaders, body:png });
+ok('сбой канала при отправке файла отвечает 502', failedUpload.status === 502, failedUpload.status);
+const callsBeforeRetry = attachmentCalls.length;
+const retriedUpload = await fetch(`${B}/api/conversations/${id}/attachments`, { method:'POST', headers:retryHeaders, body:png });
+ok('повтор того же индекса после 5xx доходит до отправки', retriedUpload.status === 200
+  && attachmentCalls.length === callsBeforeRetry + 1, retriedUpload.status);
+ok('повтор уже доставленного индекса отбивается 409', (await fetch(`${B}/api/conversations/${id}/attachments`, {
+  method:'POST', headers:retryHeaders, body:png,
+})).status === 409);
+const exeRetry = await fetch(`${B}/api/conversations/${id}/attachments`, {
+  method:'POST', headers:{...exeHeaders,'x-dangerous-confirmed':'yes'}, body:Buffer.from('MZdanger'),
+});
+ok('после отказа без подтверждения тот же индекс можно отправить с подтверждением', exeRetry.status === 200, exeRetry.status);
+const realLogEvent = store.logEvent.bind(store);
+store.logEvent = ((kind: string, ...rest: any[]) => {
+  if (kind === 'attachment_sent') throw new Error('journal down');
+  return (realLogEvent as any)(kind, ...rest);
+}) as typeof store.logEvent;
+const journalFailUpload = await fetch(`${B}/api/conversations/${id}/attachments`, {
+  method:'POST', headers:{ ...uploadHeaders, 'x-upload-batch':'batch_journal_01', 'x-file-name':encodeURIComponent('journal.png') }, body:png,
+});
+store.logEvent = realLogEvent;
+const journalHistory = await (await fetch(`${B}/api/conversations/${id}`, { headers:h })).json() as any;
+const journalAttachment = Object.values(journalHistory.attachments).flat().find((item:any) => item.original_name === 'journal.png') as any;
+ok('сбой журнала после доставки не превращается в 502 и не удаляет файл', journalFailUpload.status === 200
+  && journalAttachment && (await fetch(`${B}/api/attachments/${journalAttachment.id}`, { headers:h })).status === 200,
+  journalFailUpload.status);
 
 const WS = (await import('ws')).default;
 const ticket = await (await fetch(`${B}/api/ticket`,{headers:h})).json() as { ticket:string };
