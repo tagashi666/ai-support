@@ -207,7 +207,8 @@ ok('тред отдаётся', one.messages.length === 1 && one.messages[0].tex
 // Скрипт панели вынесен в app.js: страница — это разметка и подключение точки входа.
 const panelPage = await (await fetch(`${B}/`)).text();
 ok('панель отдаётся статикой', panelPage.includes('id="app"') && /<script type="module" src="\/app\.js\?v=[A-Za-z0-9_-]+">/.test(panelPage)
-  && (await (await fetch(`${B}/app.js`)).text()).includes('ai-support'));
+  && (await (await fetch(`${B}/app.js`)).text()).includes("import './js/boot.js?v=")
+  && (await (await fetch(`${B}/js/composer.js`)).text()).includes('ai-support'));
 ok('404 на несуществующий диалог', (await fetch(`${B}/api/conversations/9999`,{headers:h})).status === 404);
 ok('пустой текст отклонён', (await fetch(`${B}/api/conversations/${id}/reply`,{method:'POST',headers:{...h,'content-type':'application/json'},body:JSON.stringify({text:'  '})})).status === 400);
 const presence = await fetch(`${B}/api/conversations/${id}/presence`, {
