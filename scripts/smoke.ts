@@ -124,6 +124,23 @@ check('ID отправителя ручного ответа сохранён', 
 check('ручной ответ не перезаписал имя клиента', store.getConversation(conversation.id)?.display_name === 'Клиент');
 check('ручной ответ сбросил непрочитанные', store.getConversation(conversation.id)?.unread === 0);
 
+// Апдейт о собственном ответе бота (AI или оператор из панели) может
+// обогнать запись в Outbox. Он не должен записаться как ответ человека.
+const beforeOwnBot = store.listMessages(conversation.id).length;
+await bot.handleUpdate({
+  update_id: 497,
+  business_message: {
+    message_id: 77, date: now,
+    chat: { id: PEER, type: 'private' as const, first_name: 'Клиент', username: 'client' },
+    from: { id: OWNER, is_bot: false, first_name: 'Владелец поддержки' },
+    sender_business_bot: { id: 777, is_bot: true, first_name: 'support', username: 'support_bot' },
+    business_connection_id: CONNECTION,
+    text: 'Ответ AI через бота',
+  },
+} as never);
+check('сообщение, отправленное нашим ботом, не пишется как ответ человека',
+  store.listMessages(conversation.id).length === beforeOwnBot);
+
 const beforeSelfChat = store.listConversations().length;
 await bot.handleUpdate({
   update_id: 498,

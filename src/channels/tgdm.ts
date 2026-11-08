@@ -143,6 +143,11 @@ export async function fetchAvatarFileId(bot: Bot, userId: number): Promise<strin
   }
 }
 
+/** Сообщение в Business-чате отправил именно этот бот (а не владелец вручную). */
+export function sentByThisBot(message: { sender_business_bot?: { id: number } }, botId: number): boolean {
+  return message.sender_business_bot?.id === botId;
+}
+
 /**
  * Явный token нужен автономному старту: config больше не обязан его иметь.
  * Вариант с options оставлен для локальных интеграционных тестов и старых
@@ -214,6 +219,13 @@ export function createBot(store: Store, tokenOrOptions: string | BotOptions = {}
     const business = store.businessConnection(msg.business_connection_id);
     const outgoing = isBusinessMessageOutgoing(msg, business?.user_id);
     if (!outgoing && msg.from?.is_bot) return;
+    // Своё сообщение (ответ AI или оператора из панели через этого бота)
+    // записывает Outbox. Если апдейт обгонит запись, без этой проверки ответ
+    // AI записался бы как ответ человека: пауза AI, сброс передачи, дубль.
+    if (outgoing && sentByThisBot(msg, ctx.me.id)) {
+      log.debug(`Собственное сообщение бота ${msg.message_id} в Business-чате — записывает Outbox`);
+      return;
+    }
 
     // «Избранное»/самодиалог владельца не является обращением клиента. В
     // старом обработчике именно такие апдейты могли создать карточку, где
