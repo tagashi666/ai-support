@@ -182,7 +182,8 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     log.info(`${signal} — останавливаюсь`);
     clearInterval(kbTimer);
-    bedolagaPoller?.stop();
+    // Текущий опрос Bedolaga дописывает в БД — ждём его до закрытия базы.
+    await bedolagaPoller?.stop();
     stopInterfaceModeWatch();
     minishopPoller?.stop();
     media.stop();

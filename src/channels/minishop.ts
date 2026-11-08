@@ -5,7 +5,6 @@ import { readLimitedBody } from '../core/http.js';
 
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 100;
-const ACTIVE_STATUSES = new Set(['open', 'awaiting_user', 'awaiting_admin']);
 const SOURCE_ID = 'minishop-default';
 
 export type MinishopApiMode = 'plugin' | 'admin';
