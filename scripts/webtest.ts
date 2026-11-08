@@ -1051,6 +1051,57 @@ const renamedOperator = await fetch(`${B}/api/operators/${viewer.body.operator.i
 ok('меню оператора может менять имя и роль', renamedOperator.status === 200
   && (await renamedOperator.json() as any).operator.name === 'Наблюдатель 2');
 
+// Предложка AI и живые кадры при смене стадии диалога.
+{
+  const nextFrame = (match: (frame: any) => boolean, label: string) => new Promise<any>((resolve) => {
+    const timeout = setTimeout(() => { ws.off('message', receive); resolve({ error:`таймаут: ${label}` }); }, 3000);
+    const receive = (data: any) => {
+      const next = JSON.parse(data.toString());
+      if (!match(next)) return;
+      clearTimeout(timeout); ws.off('message', receive); resolve(next);
+    };
+    ws.on('message', receive);
+  });
+  const post = (path: string, body: unknown) => fetch(`${B}${path}`, {
+    method:'POST', headers:{ ...h, 'content-type':'application/json' }, body:JSON.stringify(body),
+  });
+  const thread = async (conversationId: number) => await (await fetch(`${B}/api/conversations/${conversationId}`, { headers:h })).json() as any;
+  const inbound = store.recordInbound({ channel:'tg_dm', externalId:'suggest-stage', sourceId:'telegram-default',
+    tgUserId:556, businessConnectionId:'b1', text:'вопрос клиента', externalMsgId:'stage-1', sentAt:Date.now() })!;
+  const cid = inbound.conversation.id;
+  const first = store.createSuggestion({ conversationId:cid, text:'черновик AI', confidence:0.5 });
+  ok('открытая предложка видна в диалоге', (await thread(cid)).suggestion?.id === first.id);
+  const manual = await post(`/api/conversations/${cid}/reply`, { text:'отвечаю сам' });
+  ok('ручной ответ оператора снимает устаревшую предложку', manual.status === 200
+    && (await thread(cid)).suggestion === null, await thread(cid));
+
+  store.recordInbound({ channel:'tg_dm', externalId:'suggest-stage', sourceId:'telegram-default',
+    tgUserId:556, businessConnectionId:'b1', text:'ещё вопрос', externalMsgId:'stage-2', sentAt:Date.now() + 5 });
+  const second = store.createSuggestion({ conversationId:cid, text:'второй черновик', confidence:0.5 });
+  ok('после нового вопроса клиента предложка снова видна', (await thread(cid)).suggestion?.id === second.id);
+  const closed = await post(`/api/conversations/${cid}/state`, { status:'resolved' });
+  ok('закрытие диалога снимает предложку', closed.status === 200 && (await thread(cid)).suggestion === null);
+
+  store.recordInbound({ channel:'tg_dm', externalId:'suggest-stage', sourceId:'telegram-default',
+    tgUserId:556, businessConnectionId:'b1', text:'третий вопрос', externalMsgId:'stage-3', sentAt:Date.now() + 10 });
+  const third = store.createSuggestion({ conversationId:cid, text:'третий черновик', confidence:0.5 });
+  const decidedFrame = nextFrame((frame) => frame.type === 'suggestion' && frame.suggestion?.id === third.id
+    && frame.suggestion.status !== 'pending', 'решение по предложке');
+  await post(`/api/suggestions/${third.id}/decide`, { status:'rejected' });
+  const decided = await decidedFrame;
+  ok('отклонение предложки приходит другим вкладкам кадром WS', decided.suggestion?.status === 'rejected'
+    && decided.conversation?.id === cid, decided);
+
+  const modeFrame = nextFrame((frame) => frame.type === 'conversation' && frame.conversation?.id === cid
+    && frame.conversation.ai_mode === 'auto', 'смена режима AI');
+  await post(`/api/conversations/${cid}/state`, { aiMode:'auto' });
+  ok('смена режима AI приходит другим вкладкам кадром WS', !(await modeFrame).error, await modeFrame);
+  const handoffFrame = nextFrame((frame) => frame.type === 'conversation' && frame.conversation?.id === cid
+    && frame.conversation.handoff_at && frame.conversation.escalated === 1, 'передача и важность');
+  await post(`/api/conversations/${cid}/state`, { handoff:true, escalated:true });
+  ok('передача человеку и важность приходят кадром WS', !(await handoffFrame).error, await handoffFrame);
+}
+
 // Подбор токена: без ограничения частоты панель защищена одним секретом,
 // который можно перебирать тысячами попыток в секунду.
 let lastStatus = 0;

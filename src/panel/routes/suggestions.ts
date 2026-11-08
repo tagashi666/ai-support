@@ -14,6 +14,11 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       if (!suggestion) return reply.code(404).send({ error: 'Предложка не найдена' });
       const status = request.body?.status === 'rejected' ? 'rejected' : 'superseded';
       store.decideSuggestion(suggestion.id, status);
+      // Решение видят и другие вкладки: иначе отклонённая предложка висела у
+      // них до переоткрытия диалога и её можно было отправить клиенту.
+      const conversation = store.getConversation(suggestion.conversation_id);
+      const decided = store.getSuggestion(suggestion.id);
+      if (conversation && decided) store.emit('suggestion', { conversation, suggestion: decided });
       return { ok: true };
     },
   );

@@ -4,7 +4,7 @@ import { log } from '../config.js';
 import { avatarKey } from '../core/media.js';
 import type { Operations } from '../core/operations.js';
 import { StatusSyncError, type Outbox } from '../core/outbox.js';
-import { replyWindow, type Channel, type Conversation, type Store } from '../core/store.js';
+import { replyWindow, type Channel, type Conversation, type Store, type Suggestion } from '../core/store.js';
 import { CHANNEL_IDS } from '../core/channels.js';
 
 /** Вложение по id не меняется: файл пишется один раз и по имени из file_ref. */
@@ -45,6 +45,21 @@ export function decorate(conversation: Conversation, store: Store, operations?: 
     },
     ...(operations ? { collaboration: operations.collaboration(conversation.id) } : {}),
   };
+}
+
+/**
+ * Предложка, которую ещё имеет смысл показывать оператору. В хранилище она
+ * остаётся pending, пока её не отклонят или не заменит новый вопрос клиента,
+ * поэтому после ручного ответа человека (из панели, Telegram или Bedolaga)
+ * или после закрытия диалога панель снова показывала отвеченный черновик.
+ */
+export function livePendingSuggestion(store: Store, conversation: Conversation): Suggestion | null {
+  const suggestion = store.pendingSuggestion(conversation.id);
+  if (!suggestion) return null;
+  const answeredAt = store.lastHumanReplyAt(conversation.id);
+  if (answeredAt !== null && answeredAt >= suggestion.created_at) return null;
+  if ((conversation.last_resolved_at ?? 0) >= suggestion.created_at) return null;
+  return suggestion;
 }
 
 /**
