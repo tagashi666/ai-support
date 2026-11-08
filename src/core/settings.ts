@@ -213,14 +213,6 @@ function persistSetting(store: Store, setting: PendingSetting): void {
   store.setSetting(setting.key, setting.value);
 }
 
-export function applySetting(store: Store, key: string, value: unknown): { ok: boolean; error?: string } {
-  const checked = validateSetting(key, value);
-  if (!checked.ok) return checked;
-  persistSetting(store, checked.setting);
-  log.info(`Настройка ${key} → ${String(checked.setting.value)}`);
-  return { ok: true };
-}
-
 /**
  * Пакет настроек либо применяется целиком, либо не меняет ничего. Раньше
  * валидное первое поле успевало сохраниться до ошибки во втором, хотя API

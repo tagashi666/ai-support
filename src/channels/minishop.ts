@@ -436,7 +436,3 @@ export class MinishopPoller {
     return ingested;
   }
 }
-
-export function isActiveMinishopStatus(status: string): boolean {
-  return ACTIVE_STATUSES.has(status);
-}

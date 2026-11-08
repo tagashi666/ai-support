@@ -754,20 +754,6 @@ export class Store extends EventEmitter<StoreEvents> {
     return true;
   }
 
-  /** Активные диалоги без единого сообщения за последние `cutoff` мс. */
-  inactiveConversations(cutoff: number, limit = 100): Conversation[] {
-    return this.db
-      .prepare(
-        `SELECT * FROM conversation
-          WHERE last_message_at IS NOT NULL
-            AND last_message_at <= ?
-            AND status NOT IN ('closed', 'resolved')
-          ORDER BY last_message_at ASC
-          LIMIT ?`,
-      )
-      .all(cutoff, limit) as Conversation[];
-  }
-
   /**
    * Диалог передан человеку. Пока метка стоит, AI не отвечает по существу —
    * только напоминает клиенту, что вопрос у специалиста.
@@ -1051,10 +1037,6 @@ export class Store extends EventEmitter<StoreEvents> {
 
   deleteTemplate(id: number): void {
     this.db.prepare('DELETE FROM template WHERE id = ?').run(id);
-  }
-
-  bumpTemplate(shortcut: string): void {
-    this.db.prepare('UPDATE template SET uses = uses + 1 WHERE shortcut = ?').run(shortcut);
   }
 
   // --- вложения --------------------------------------------------------
@@ -1359,10 +1341,6 @@ export class Store extends EventEmitter<StoreEvents> {
       result[sourceId] = { sourceId, serviceName, greetingMessage, handoffMessage };
     }
     return result;
-  }
-
-  serviceProfile(sourceId: string | null | undefined): ServiceProfile | undefined {
-    return sourceId ? this.serviceProfiles()[sourceId] : undefined;
   }
 
   saveServiceProfile(sourceId: string, input: {
@@ -1676,14 +1654,6 @@ export class Store extends EventEmitter<StoreEvents> {
         )
         .get() as { n: number }
     ).n;
-  }
-
-  businessOwnerChatId(): number | undefined {
-    return (
-      this.db
-        .prepare('SELECT user_chat_id AS id FROM business_connection WHERE user_chat_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1')
-        .get() as { id: number } | undefined
-    )?.id;
   }
 
   logEvent(kind: string, conversationId: number | null, payload?: unknown): void {

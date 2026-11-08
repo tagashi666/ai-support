@@ -339,13 +339,6 @@ async function resolveBedolagaUserIdentity(
   return user ? { user, source: 'username', verified: false } : null;
 }
 
-export async function resolveBedolagaUser(
-  client: BedolagaClient,
-  conversation: Conversation,
-): Promise<JsonRecord | null> {
-  return (await resolveBedolagaUserIdentity(client, conversation, true))?.user ?? null;
-}
-
 /** Username пригоден для read-only подсказки, но не для финансовой мутации. */
 export async function resolveVerifiedBedolagaUser(
   client: BedolagaClient,
