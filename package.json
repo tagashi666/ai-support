@@ -39,17 +39,17 @@
   "dependencies": {
     "@fastify/compress": "^9.2.1",
     "@fastify/static": "^10.1.3",
-    "@fastify/websocket": "^11.3.0",
+    "@fastify/websocket": "^11.3.1",
     "better-sqlite3": "^13.0.3",
     "fastify": "^5.12.1",
-    "grammy": "^1.45.1",
+    "grammy": "^1.46.0",
     "lottie-web": "^5.13.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
-    "tsx": "^4.23.12",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3"
   }
 }
