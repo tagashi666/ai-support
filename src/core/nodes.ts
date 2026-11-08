@@ -1,4 +1,5 @@
 import { config, log } from '../config.js';
+import { explainError } from './netdiag.js';
 import type { NodeState, RemnawaveClient } from '../integrations/remnawave.js';
 import type { Store } from './store.js';
 
@@ -76,7 +77,7 @@ export class NodeWatch {
         nodes.push(...result.value);
       } else {
         nodes.push(...(previousBySource.get(source.id) ?? []));
-        errors.push(`${source.name}: ${(result.reason as Error)?.message ?? String(result.reason)}`);
+        errors.push(`${source.name}: ${explainError(result.reason)}`);
       }
     });
 

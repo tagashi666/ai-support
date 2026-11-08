@@ -2,6 +2,7 @@ import { config, log } from '../config.js';
 import type { ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
 import type { Conversation, Store } from '../core/store.js';
 import { readLimitedBody } from '../core/http.js';
+import { explainError } from '../core/netdiag.js';
 
 /**
  * Клиент webapi бедолаги. Авторизация — заголовок X-API-Key.
@@ -110,6 +111,11 @@ export class BedolagaClient {
     private readonly token: string,
     private readonly timeoutMs = 30_000,
   ) {}
+
+  /** Адрес API для диагностики в логах (без токена). */
+  get apiUrl(): string {
+    return this.baseUrl;
+  }
 
   private url(path: string, params?: Record<string, string | number>): string {
     const url = new URL(this.baseUrl.replace(/\/+$/, '') + path);
@@ -458,7 +464,7 @@ export class BedolagaPoller {
       await this.repairKnownTickets(checkedIds);
       this.store.setState('bedolaga:last_poll', String(Date.now()));
     } catch (err) {
-      log.error('Опрос бедолаги не удался', err);
+      log.error(`Опрос бедолаги не удался: ${explainError(err, this.client.apiUrl)}`);
     } finally {
       this.running = false;
     }

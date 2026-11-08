@@ -81,6 +81,7 @@ src/core/db.ts
 src/core/fts.ts
 src/core/http.ts
 src/core/media.ts
+src/core/netdiag.ts
 src/core/nodes.ts
 src/core/notify.ts
 src/core/operations.ts
