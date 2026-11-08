@@ -2,6 +2,7 @@ import { config, log } from '../config.js';
 import type { ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
 import type { Conversation, Store } from '../core/store.js';
 import { readLimitedBody } from '../core/http.js';
+import type { MediaSource } from '../core/media.js';
 
 /**
  * Клиент webapi бедолаги. Авторизация — заголовок X-API-Key.
@@ -282,6 +283,11 @@ export class BedolagaClient {
     const response = await this.request(`/media/${encodeURIComponent(fileId)}`);
     if (!response.ok) return null;
     return readLimitedBody(response, config.mediaMaxFileBytes);
+  }
+
+  /** Источник вложений `bedolaga:<fileId>` для MediaFetcher. */
+  mediaSource(): MediaSource {
+    return { prefix: 'bedolaga', fetch: (fileId) => this.downloadMedia(fileId) };
   }
 
   async userByTelegramId(telegramId: number): Promise<Record<string, unknown> | null> {

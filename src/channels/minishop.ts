@@ -2,6 +2,7 @@ import { config, log } from '../config.js';
 import type { AttachmentPayload, ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
 import type { Conversation, Store } from '../core/store.js';
 import { readLimitedBody } from '../core/http.js';
+import type { MediaSource } from '../core/media.js';
 
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 100;
@@ -262,6 +263,11 @@ export class MinishopClient {
     const response = await this.request(`/message-images/${encodeURIComponent(imageId)}`);
     if (!response.ok) return null;
     return readLimitedBody(response, config.mediaMaxFileBytes);
+  }
+
+  /** Источник вложений `minishop:<imageId>` для MediaFetcher. */
+  mediaSource(): MediaSource {
+    return { prefix: 'minishop', fetch: (imageId) => this.downloadImage(imageId) };
   }
 }
 

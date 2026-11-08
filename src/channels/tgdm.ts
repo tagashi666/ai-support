@@ -1,8 +1,10 @@
 import { Bot, InputFile, type Context } from 'grammy';
 import type { Message as TgMessage, UserFromGetMe } from 'grammy/types';
-import { log } from '../config.js';
+import { config, log } from '../config.js';
 import type { Conversation, Store } from '../core/store.js';
 import type { AttachmentPayload, ChannelSender, SendPayload, SendResult } from '../core/outbox.js';
+import { MediaFetchError, type MediaSource } from '../core/media.js';
+import { readLimitedBody } from '../core/http.js';
 
 /** Достаёт из сообщения тип вложения и file_id. Скачивание — этап P2. */
 function extractMedia(msg: TgMessage): { mediaType?: string; mediaFileId?: string; mediaWidth?: number; mediaHeight?: number } {
@@ -429,6 +431,32 @@ export class TelegramBotRegistry {
     const botId = sourceId?.includes(':business:') ? sourceId.split(':business:')[0] : undefined;
     return (botId ? this.entries.get(botId) : undefined)?.token ?? this.entries.values().next().value?.token;
   }
+}
+
+/**
+ * Вложения Telegram: ref вида `<sourceId>:<fileId>` (sourceId закодирован) или
+ * старый `<fileId>`. Ссылка на файл живёт около часа, поэтому качаем сразу.
+ */
+export function telegramMediaSource(bots: Bot | TelegramBotRegistry): MediaSource {
+  return {
+    prefix: 'tg',
+    async fetch(payload: string): Promise<Buffer | null> {
+      const separator = payload.indexOf(':');
+      const sourceId = separator >= 0 ? decodeURIComponent(payload.slice(0, separator)) : undefined;
+      const fileId = separator >= 0 ? payload.slice(separator + 1) : payload;
+      const bot = bots instanceof TelegramBotRegistry ? bots.botBySource(sourceId) : bots;
+      const token = bots instanceof TelegramBotRegistry ? bots.tokenFor(sourceId) : config.botToken;
+      if (!bot || !token) return null;
+      const file = await bot.api.getFile(fileId);
+      if (!file.file_path) return null;
+      const response = await fetch(
+        `https://api.telegram.org/file/bot${token}/${file.file_path}`,
+        { signal: AbortSignal.timeout(60_000) },
+      );
+      if (!response.ok) throw new MediaFetchError(`Telegram отдал HTTP ${response.status}`, response.status === 404 || response.status === 410);
+      return readLimitedBody(response, config.mediaMaxFileBytes);
+    },
+  };
 }
 
 export class TelegramDmSender implements ChannelSender {

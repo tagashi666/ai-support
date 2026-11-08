@@ -1019,19 +1019,19 @@ restartedStore.finishJob(replacementJob, { ok:true });
   const voice = store.recordInbound({ channel:'bedolaga', externalId:'voice-retry', text:undefined,
     mediaType:'voice', mediaFileId:'voice-file', externalMsgId:'voice-1', sentAt:Date.now() })!;
   const voiceAttachment = store.addAttachment(voice.message.id, 'voice', 'bedolaga:voice-file');
-  const mediaSource = { downloadMedia: async (ref: string) => {
+  const mediaSource = { prefix: 'bedolaga', fetch: async (ref: string) => {
     if (ref !== 'voice-file') return null;
     mediaDownloads += 1;
     return Buffer.from('OggSvoice');
-  } } as never;
+  } };
   const transcriptionProvider = {
     transcribe: async () => {
       transcriptionCalls += 1;
       if (transcriptionCalls === 1) throw new Error('temporary whisper outage');
       return 'расшифрованный вопрос клиента';
     },
-  } as never;
-  const fetcher = new MediaFetcher(store, undefined, mediaSource, transcriptionProvider);
+  };
+  const fetcher = new MediaFetcher(store, { sources: [mediaSource], transcriber: transcriptionProvider });
   await fetcher.drain();
   check('ошибка расшифровки оставляет файл доступным, но ставит текст в повторную очередь',
     store.getAttachment(voiceAttachment)?.local_path != null

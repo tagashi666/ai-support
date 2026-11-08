@@ -4,12 +4,13 @@ import { Responder } from './ai/responder.js';
 import { backfillExamples } from './ai/examples.js';
 import { BedolagaClient, BedolagaPoller, BedolagaSender } from './channels/bedolaga.js';
 import { MinishopClient, MinishopPoller, MinishopSender, minishopTicketId } from './channels/minishop.js';
-import { createBot, markReadInTelegram, refreshTelegramProfiles, TelegramBotRegistry, TelegramBotSender, TelegramDmSender } from './channels/tgdm.js';
+import { createBot, markReadInTelegram, refreshTelegramProfiles, TelegramBotRegistry, TelegramBotSender, TelegramDmSender, telegramMediaSource } from './channels/tgdm.js';
 import { Store } from './core/store.js';
 import { detectSubLink } from './ai/sublink.js';
 import { openDatabase } from './core/db.js';
 import { checkWritable } from './panel/kbfiles.js';
 import { MediaFetcher } from './core/media.js';
+import { AiProvider } from './ai/provider.js';
 import { Outbox } from './core/outbox.js';
 import { SlaWatcher } from './core/sla.js';
 import { Notifier } from './core/notify.js';
@@ -80,7 +81,11 @@ async function main(): Promise<void> {
     remnawaves,
     minishop ? minishopCustomerReader(minishop) : undefined,
   );
-  const media = new MediaFetcher(store, bot ? bots : undefined, bedolaga, undefined, minishop);
+  // Источники вложений даёт каждый канал, расшифровку голосовых — AI-провайдер.
+  const media = new MediaFetcher(store, { transcriber: new AiProvider() });
+  if (bot) media.register(telegramMediaSource(bots));
+  if (bedolaga) media.register(bedolaga.mediaSource());
+  if (minishop) media.register(minishop.mediaSource());
   const notifier = bot ? new Notifier(store, bot) : undefined;
   const sla = notifier ? new SlaWatcher(store, notifier) : undefined;
   const nodes = config.nodes.enabled && remnawaves.length ? new NodeWatch(store, remnawaves) : undefined;

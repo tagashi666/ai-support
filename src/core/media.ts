@@ -2,14 +2,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readdir, rename, unlink, writeFile, type FileHandle } from 'node:fs/promises';
 import { basename, join, resolve } from 'node:path';
-import type { Bot } from 'grammy';
 import { config, log } from '../config.js';
-import { TelegramBotRegistry } from '../channels/tgdm.js';
 import { ATTACHMENT_SHOW_FAILED_AFTER, type Store } from './store.js';
-import type { BedolagaClient } from '../channels/bedolaga.js';
-import type { MinishopClient } from '../channels/minishop.js';
-import { AiProvider } from '../ai/provider.js';
-import { readLimitedBody } from './http.js';
 import { mediaFileName, mediaPath } from './store/media-files.js';
 
 const VOICE_TYPES = new Set(['voice', 'audio', 'video_note']);
@@ -300,6 +294,22 @@ export async function sweepOrphanMedia(
 }
 
 /**
+ * Откуда брать байты вложения. Каналы предоставляют свои источники, ядро про
+ * конкретные каналы не знает: file_ref имеет вид `<prefix>:<ref>`, источник
+ * получает ref уже без префикса. `null` — источник сейчас недоступен (повтор
+ * позже), окончательный отказ — `MediaFetchError` с `permanent`.
+ */
+export interface MediaSource {
+  readonly prefix: string;
+  fetch(ref: string): Promise<Buffer | null>;
+}
+
+/** Расшифровка голосовых: реализует AI-провайдер, ядро зависит только от интерфейса. */
+export interface Transcriber {
+  transcribe(audio: Buffer, filename: string): Promise<string>;
+}
+
+/**
  * Скачивает вложения в фоне. Ссылки на файлы Telegram живут около часа, а у
  * бедолаги отдача закрыта токеном — в обоих случаях URL клиенту отдать нельзя,
  * поэтому файлы кладём к себе и раздаём через панель.
@@ -317,13 +327,22 @@ export class MediaFetcher {
   // каналы), поэтому будим очередь на любое сообщение: проход дешёвый.
   private readonly onMessage = (): void => this.kick();
 
+  private readonly sources = new Map<string, MediaSource>();
+  private readonly transcriber?: Transcriber;
+
   constructor(
     private readonly store: Store,
-    private readonly bot?: Bot | TelegramBotRegistry,
-    private readonly bedolaga?: BedolagaClient,
-    private readonly provider = new AiProvider(),
-    private readonly minishop?: MinishopClient,
-  ) {}
+    options: { sources?: MediaSource[]; transcriber?: Transcriber } = {},
+  ) {
+    for (const source of options.sources ?? []) this.register(source);
+    this.transcriber = options.transcriber;
+  }
+
+  /** Источник отвечает за file_ref вида `<prefix>:<ref>`; повторная регистрация заменяет прежний. */
+  register(source: MediaSource): this {
+    this.sources.set(source.prefix, source);
+    return this;
+  }
 
   /**
    * Новое вложение качаем сразу по событию сообщения: иначе панель получала
@@ -462,38 +481,18 @@ export class MediaFetcher {
    */
   private async transcribe(attachmentId: number, messageId: number, bytes: Buffer, kind: string): Promise<void> {
     const extension = kind === 'video_note' ? 'mp4' : 'ogg';
-    const text = await this.provider.transcribe(bytes, `voice-${attachmentId}.${extension}`);
+    if (!this.transcriber) throw new Error('Расшифровка голосовых не подключена');
+    const text = await this.transcriber.transcribe(bytes, `voice-${attachmentId}.${extension}`);
     if (!text?.trim()) throw new Error('Провайдер вернул пустую расшифровку голосового');
     this.store.attachTranscript(messageId, text);
     log.info(`Голосовое ${attachmentId} расшифровано: ${text.slice(0, 60)}…`);
   }
 
   private async fetch(ref: string): Promise<Buffer | null> {
-    if (ref.startsWith('bedolaga:')) {
-      return this.bedolaga ? this.bedolaga.downloadMedia(ref.slice('bedolaga:'.length)) : null;
-    }
-    if (ref.startsWith('minishop:')) {
-      return this.minishop ? this.minishop.downloadImage(ref.slice('minishop:'.length)) : null;
-    }
-    if (ref.startsWith('tg:')) {
-      if (!this.bot) return null;
-      const payload = ref.slice('tg:'.length);
-      const separator = payload.indexOf(':');
-      const sourceId = separator >= 0 ? decodeURIComponent(payload.slice(0, separator)) : undefined;
-      const fileId = separator >= 0 ? payload.slice(separator + 1) : payload;
-      const bot = this.bot instanceof TelegramBotRegistry ? this.bot.botBySource(sourceId) : this.bot;
-      const token = this.bot instanceof TelegramBotRegistry ? this.bot.tokenFor(sourceId) : config.botToken;
-      if (!bot || !token) return null;
-      const file = await bot.api.getFile(fileId);
-      if (!file.file_path) return null;
-      const response = await fetch(
-        `https://api.telegram.org/file/bot${token}/${file.file_path}`,
-        { signal: AbortSignal.timeout(60_000) },
-      );
-      if (!response.ok) throw new MediaFetchError(`Telegram отдал HTTP ${response.status}`, response.status === 404 || response.status === 410);
-      return readLimitedBody(response, config.mediaMaxFileBytes);
-    }
-    return null;
+    const separator = ref.indexOf(':');
+    if (separator < 0) return null;
+    const source = this.sources.get(ref.slice(0, separator));
+    return source ? source.fetch(ref.slice(separator + 1)) : null;
   }
 }
 
