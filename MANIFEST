@@ -70,5 +70,6 @@ src/integrations/bedolaga-customer.ts
 src/integrations/customers.ts
 src/integrations/remnawave.ts
 src/integrations/tgexport.ts
+src/panel/helpers.ts
 src/panel/kbfiles.ts
 src/panel/server.ts

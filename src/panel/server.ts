@@ -14,7 +14,7 @@ import type { WebSocket } from 'ws';
 import { config, log } from '../config.js';
 import { limitConcurrency, readLimitedBody } from '../core/http.js';
 import { ATTACHMENT_GAVE_UP, ATTACHMENT_SHOW_FAILED_AFTER, replyWindow, type Conversation, type Store, type StoredAttachment } from '../core/store.js';
-import { NoSenderError, Outbox, WindowClosedError } from '../core/outbox.js';
+import { NoSenderError, Outbox, StatusSyncError, WindowClosedError, type ConversationStatus } from '../core/outbox.js';
 import type { CustomerDirectory } from '../integrations/customers.js';
 import {
   bedolagaSubscriptionRecords,
@@ -46,6 +46,7 @@ import { Operations, PERMISSION_CATALOG, type Actor, type Permission } from '../
 import {
   avatarKey, inspectUpload, openMediaFile, readCachedAvatar, readMediaFile, removeMediaFile, saveCachedAvatar, saveUploadedMedia,
 } from '../core/media.js';
+import { limitUploadBytes, UploadTooLargeError } from './helpers.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Панель лежит в корне проекта, а этот файл — в src/panel и dist/panel.
@@ -213,7 +214,36 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   const updates = new UpdateManager();
   const sources = new SourceManager();
   const operations = new Operations(store);
-  const uploadBatches = new Map<string, { seen: Set<number>; at: number }>();
+  // Статус тикета во внешних каналах меняется через Outbox, до локальной записи.
+  outbox.registerStatusSync('bedolaga', async (conversation, status) => {
+    if (!bedolaga) throw new StatusSyncError('Интеграция Bedolaga отключена', 503);
+    // В Bedolaga `answered` означает «администратор ответил, ждём
+    // клиента»; `pending` там — отдельное состояние «в обработке».
+    const remoteStatus: BedolagaTicketStatus = status === 'resolved' ? 'closed' : status === 'pending' ? 'answered' : 'open';
+    const remoteTicketId = Number(conversation.remote_external_id ?? conversation.external_id);
+    if (!Number.isSafeInteger(remoteTicketId) || remoteTicketId <= 0) {
+      throw new StatusSyncError('У диалога нет корректного ID тикета Bedolaga', 409);
+    }
+    try {
+      await bedolaga.setStatus(remoteTicketId, remoteStatus);
+    } catch (err) {
+      log.error('Не удалось изменить статус тикета Bedolaga', err);
+      throw new StatusSyncError(`Bedolaga не приняла статус: ${(err as Error).message}`, 502);
+    }
+  });
+  outbox.registerStatusSync('minishop', async (conversation, status) => {
+    if (!minishop) throw new StatusSyncError('Интеграция MiniShop отключена', 503);
+    try {
+      await minishop.setStatus(minishopTicketId(conversation), minishopStatusForLocal(status));
+    } catch (err) {
+      log.error('Не удалось изменить статус тикета MiniShop', err);
+      throw new StatusSyncError(`MiniShop не принял статус: ${(err as Error).message}`, 502);
+    }
+  });
+  // Пачки загрузок оператора: `seen` — индексы, уже доставленные клиенту,
+  // `pending` — те, что отправляются прямо сейчас. Повтор индекса после
+  // ошибки разрешён, повтор доставленного или летящего — нет.
+  const uploadBatches = new Map<string, { seen: Set<number>; pending: Set<number>; at: number }>();
   const bedolagaExtensionLocks = new Set<string>();
   // Журнал операций продления живёт в БД, а не в памяти: продление
   // необратимо, и повтор того же operationId после рестарта процесса не
@@ -916,9 +946,11 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       if (uploadBatches.size > 500) {
         for (const [key, value] of uploadBatches) if (now - value.at > 30 * 60_000) uploadBatches.delete(key);
       }
-      const batch = uploadBatches.get(batchKey) ?? { seen: new Set<number>(), at: now };
-      if (batch.seen.has(batchIndex)) return reply.code(409).send({ error: 'Этот файл уже был принят' });
-      batch.seen.add(batchIndex); batch.at = now; uploadBatches.set(batchKey, batch);
+      const batch = uploadBatches.get(batchKey) ?? { seen: new Set<number>(), pending: new Set<number>(), at: now };
+      if (batch.seen.has(batchIndex) || batch.pending.has(batchIndex)) {
+        return reply.code(409).send({ error: 'Этот файл уже был принят' });
+      }
+      batch.at = now; uploadBatches.set(batchKey, batch);
 
       const declaredBytes = Number(request.headers['content-length']);
       if (Number.isFinite(declaredBytes) && declaredBytes > config.mediaMaxFileBytes) {
@@ -929,8 +961,9 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       }
 
       let saved: Awaited<ReturnType<typeof saveUploadedMedia>> | undefined;
+      batch.pending.add(batchIndex);
       try {
-        saved = await saveUploadedMedia(request.body, config.mediaMaxFileBytes);
+        saved = await saveUploadedMedia(limitUploadBytes(request.body, config.mediaMaxFileBytes), config.mediaMaxFileBytes);
         if (store.mediaBytes() + saved.bytes > config.mediaMaxTotalBytes) {
           await removeMediaFile(saved.fileRef);
           return reply.code(507).send({ error: 'Хранилище вложений заполнено' });
@@ -947,18 +980,29 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
             caption, replyToExternalId: decodeHeader('x-reply-to') || undefined },
           saved,
         );
-        store.logEvent('attachment_sent', conversationId, {
-          actor: actor.name, name: original, bytes: saved.bytes, mime: inspected.mimeType,
-          sha256: saved.sha256, dangerous: inspected.dangerous,
-        });
-        operations.recordActivity(actor, 'reply', conversationId, responseMs);
+        // Индекс считается принятым только после доставки: повтор после
+        // 409/413/507/502 должен дойти до отправки, а не упереться в «уже принят».
+        batch.seen.add(batchIndex);
+        // Файл уже у клиента: сбой журнала не должен удалять вложение и
+        // превращаться в 502, иначе оператор отправит дубль.
+        try {
+          store.logEvent('attachment_sent', conversationId, {
+            actor: actor.name, name: original, bytes: saved.bytes, mime: inspected.mimeType,
+            sha256: saved.sha256, dangerous: inspected.dangerous,
+          });
+          operations.recordActivity(actor, 'reply', conversationId, responseMs);
+        } catch (err) {
+          log.error('Вложение отправлено, но журнал не записан', err);
+        }
         return { ok: true, message: sent.message };
       } catch (err) {
         if (saved) await removeMediaFile(saved.fileRef);
         if (err instanceof WindowClosedError) return reply.code(409).send({ error: err.message });
-        if ((err as Error).message.includes('больше')) return reply.code(413).send({ error: (err as Error).message });
+        if (err instanceof UploadTooLargeError) return reply.code(413).send({ error: err.message });
         log.error('Отправка вложения не удалась', err);
         return reply.code(502).send({ error: `Файл не отправлен: ${(err as Error).message}` });
+      } finally {
+        batch.pending.delete(batchIndex);
       }
     },
   );
@@ -991,29 +1035,12 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       if (aiMode !== undefined && !['inherit', 'off', 'shadow', 'suggest', 'auto'].includes(aiMode)) {
         return reply.code(400).send({ error: 'Неизвестный режим AI' });
       }
-      if (status && before.channel === 'bedolaga') {
-        if (!bedolaga) return reply.code(503).send({ error: 'Интеграция Bedolaga отключена' });
-        // В Bedolaga `answered` означает «администратор ответил, ждём
-        // клиента»; `pending` там — отдельное состояние «в обработке».
-        const remoteStatus: BedolagaTicketStatus = status === 'resolved' ? 'closed' : status === 'pending' ? 'answered' : 'open';
-        const remoteTicketId = Number(before.remote_external_id ?? before.external_id);
-        if (!Number.isSafeInteger(remoteTicketId) || remoteTicketId <= 0) {
-          return reply.code(409).send({ error: 'У диалога нет корректного ID тикета Bedolaga' });
-        }
+      if (status) {
         try {
-          await bedolaga.setStatus(remoteTicketId, remoteStatus);
+          await outbox.syncStatus(before, status as ConversationStatus);
         } catch (err) {
-          log.error('Не удалось изменить статус тикета Bedolaga', err);
-          return reply.code(502).send({ error: `Bedolaga не приняла статус: ${(err as Error).message}` });
-        }
-      }
-      if (status && before.channel === 'minishop') {
-        if (!minishop) return reply.code(503).send({ error: 'Интеграция MiniShop отключена' });
-        try {
-          await minishop.setStatus(minishopTicketId(before), minishopStatusForLocal(status));
-        } catch (err) {
-          log.error('Не удалось изменить статус тикета MiniShop', err);
-          return reply.code(502).send({ error: `MiniShop не принял статус: ${(err as Error).message}` });
+          if (err instanceof StatusSyncError) return reply.code(err.statusCode).send({ error: err.message });
+          throw err;
         }
       }
       if (typeof handoff === 'boolean') store.setHandoff(id, handoff ? Date.now() : null);

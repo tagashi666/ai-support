@@ -54,6 +54,24 @@ export class OperatorActiveError extends Error {
   }
 }
 
+/** Локальный статус диалога, который панель синхронизирует с внешним тикетом. */
+export type ConversationStatus = 'open' | 'pending' | 'resolved';
+
+/**
+ * Внешний канал не принял смену статуса. `statusCode` — HTTP-код, которым
+ * панель отвечает оператору: 503 — интеграция отключена, 409 — у диалога нет
+ * корректного тикета, 502 — канал вернул ошибку.
+ */
+export class StatusSyncError extends Error {
+  constructor(message: string, readonly statusCode: 409 | 502 | 503) {
+    super(message);
+    this.name = 'StatusSyncError';
+  }
+}
+
+/** Передаёт статус диалога во внешний тикет канала. */
+export type StatusSync = (conversation: Conversation, status: ConversationStatus) => Promise<void>;
+
 /**
  * Единственная точка выхода наружу. Панель, AI и автоматика ходят только сюда
  * и никогда не дёргают Telegram или API бедолаги напрямую — иначе появятся
@@ -61,6 +79,7 @@ export class OperatorActiveError extends Error {
  */
 export class Outbox {
   private readonly senders = new Map<Channel, ChannelSender>();
+  private readonly statusSyncs = new Map<Channel, StatusSync>();
 
   constructor(private readonly store: Store) {}
 
@@ -71,6 +90,20 @@ export class Outbox {
 
   has(channel: Channel): boolean {
     return this.senders.has(channel);
+  }
+
+  /** Подключает синхронизацию статуса тикета для канала с внешними тикетами. */
+  registerStatusSync(channel: Channel, sync: StatusSync): void {
+    this.statusSyncs.set(channel, sync);
+  }
+
+  /**
+   * Передаёт новый статус во внешний тикет до локальной записи: если канал
+   * отказал, локальный статус не меняется. Каналы без тикетов пропускаются.
+   */
+  async syncStatus(conversation: Conversation, status: ConversationStatus): Promise<void> {
+    const sync = this.statusSyncs.get(conversation.channel);
+    if (sync) await sync(conversation, status);
   }
 
   supportsAttachments(channel: Channel): boolean {
