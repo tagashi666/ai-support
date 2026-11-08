@@ -106,6 +106,41 @@ export function isBusinessMessageOutgoing(message: {
 }
 
 /**
+ * Пользователи, у которых аватар недоступен (нет фото, приватность, бот их
+ * не видел). Повторять запрос на каждом сообщении и каждом показе карточки
+ * бессмысленно: Telegram ответит так же. Через TTL пробуем снова.
+ */
+const AVATAR_MISS_TTL_MS = 6 * 60 * 60_000;
+const avatarMisses = new Map<number, number>();
+
+export function avatarRecentlyMissed(userId: number, now = Date.now()): boolean {
+  const until = avatarMisses.get(userId);
+  if (until === undefined) return false;
+  if (until > now) return true;
+  avatarMisses.delete(userId);
+  return false;
+}
+
+/**
+ * Свежий file_id аватара: `null` — фото нет или недоступно (запоминается на
+ * TTL), строка — актуальный id. Старый file_id после смены фото Telegram
+ * перестаёт принимать («wrong file_id»), поэтому его перезапрашивают здесь.
+ */
+export async function fetchAvatarFileId(bot: Bot, userId: number): Promise<string | null> {
+  if (avatarRecentlyMissed(userId)) return null;
+  try {
+    const photos = await bot.api.getUserProfilePhotos(userId, { limit: 1 });
+    const fileId = photos.photos[0]?.at(-1)?.file_id ?? null;
+    if (!fileId) avatarMisses.set(userId, Date.now() + AVATAR_MISS_TTL_MS);
+    return fileId;
+  } catch (err) {
+    avatarMisses.set(userId, Date.now() + AVATAR_MISS_TTL_MS);
+    log.info(`Аватар Telegram ${userId} недоступен: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+/**
  * Явный token нужен автономному старту: config больше не обязан его иметь.
  * Вариант с options оставлен для локальных интеграционных тестов и старых
  * импортов, где токен уже лежал в BOT_TOKEN.
@@ -122,13 +157,8 @@ export function createBot(store: Store, tokenOrOptions: string | BotOptions = {}
   store.syncSource({ id: botSourceId, kind: 'telegram_bot', name: botSourceName });
 
   const syncAvatar = async (conversationId: number, userId: number): Promise<void> => {
-    try {
-      const photos = await bot.api.getUserProfilePhotos(userId, { limit: 1 });
-      const fileId = photos.photos[0]?.at(-1)?.file_id;
-      if (fileId) store.setConversationAvatar(conversationId, fileId, botSourceId);
-    } catch (err) {
-      log.debug(`Не удалось получить аватар Telegram ${userId}`, err);
-    }
+    const fileId = await fetchAvatarFileId(bot, userId);
+    if (fileId) store.setConversationAvatar(conversationId, fileId, botSourceId);
   };
 
   // Подключение/отключение бота к бизнес-аккаунту.
@@ -338,6 +368,8 @@ export async function refreshTelegramProfiles(store: Store, bot: Bot, sourceId: 
   for (const conversation of store.telegramProfilesForRefresh(sourceId)) {
     const userId = conversation.tg_user_id;
     if (!userId) continue;
+    // Имя уже есть, а аватар недавно не нашёлся — не тратим лимиты Telegram.
+    if (conversation.username && conversation.display_name && avatarRecentlyMissed(userId)) continue;
     let username: string | undefined;
     let name: string | undefined;
     let avatarFileId: string | undefined;
@@ -355,12 +387,9 @@ export async function refreshTelegramProfiles(store: Store, bot: Bot, sourceId: 
     } catch (err) {
       log.debug(`Не удалось обновить имя Telegram ${userId}`, err);
     }
-    try {
-      const photos = await bot.api.getUserProfilePhotos(userId, { limit: 1 });
-      avatarFileId = photos.photos[0]?.at(-1)?.file_id;
-    } catch (err) {
-      log.debug(`Не удалось обновить аватар Telegram ${userId}`, err);
-    }
+    if (!conversation.avatar_file_id) avatarFileId = await fetchAvatarFileId(bot, userId) ?? undefined;
+    // Telegram ограничивает частоту запросов: не шлём сотни подряд.
+    await new Promise((resolve) => setTimeout(resolve, 250));
     if (username || name || avatarFileId) {
       store.setTelegramProfile(conversation.id, {
         tgUserId: userId,

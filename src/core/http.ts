@@ -25,3 +25,23 @@ export async function readLimitedBody(response: Response, maxBytes: number): Pro
   }
   return Buffer.concat(chunks, total);
 }
+
+/**
+ * Ограничитель параллельности: не больше `max` задач одновременно, остальные
+ * ждут в очереди по порядку. Нужен там, где внешний API режет частые запросы.
+ */
+export function limitConcurrency(max: number): <T>(task: () => Promise<T>) => Promise<T> {
+  let active = 0;
+  const queue: Array<() => void> = [];
+  const next = () => {
+    if (active >= max) return;
+    const start = queue.shift();
+    if (start) { active += 1; start(); }
+  };
+  return <T>(task: () => Promise<T>) => new Promise<T>((resolve, reject) => {
+    queue.push(() => {
+      task().then(resolve, reject).finally(() => { active -= 1; next(); });
+    });
+    next();
+  });
+}

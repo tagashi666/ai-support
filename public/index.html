@@ -964,12 +964,13 @@ async function mutate(path, options, okText) {
 // видео и аватаркам, поэтому их URL не меняются и живут в кэше браузера.
 let ticket = '';
 let ticketPromise = null;
+let ticketAt = 0;
 async function refreshTicket() {
   if (ticketPromise) return ticketPromise;
   ticketPromise = (async () => {
     const data = await json('/api/ticket');
     if (data?.ticket) {
-      ticket = data.ticket;
+      ticket = data.ticket; ticketAt = Date.now();
       refreshMediaTicketUrls();
     }
     return ticket;
@@ -1019,6 +1020,41 @@ async function mediaRetryDelay(url, attempt) {
   return Math.min(1500 * attempt, 15_000);
 }
 
+/**
+ * Окончательная ошибка вложения: причина с сервера, «Повторить» и ссылка на
+ * скачивание. Файл с форматом, который браузер не рисует (HEIC и т.п.), сервер
+ * отдаёт как скачивание — тогда показываем карточку файла, а не ошибку.
+ */
+async function showMediaFailure(box, url, reload) {
+  box.classList.remove('media-pending');
+  let status = 0, reason = '';
+  try {
+    const response = await fetch(url, { method:'HEAD', cache:'no-store' });
+    status = response.status;
+    reason = decodeURIComponent(response.headers.get('x-attachment-error') ?? '');
+  } catch { /* сеть */ }
+  if (!box.isConnected) return;
+  const card = document.createElement('div');
+  card.className = 'media-failed';
+  const text = document.createElement('span');
+  text.textContent = status >= 200 && status < 300 ? 'Формат не отображается в браузере' : (reason || 'Файл не удалось загрузить');
+  card.append(text);
+  if (status >= 200 && status < 300) {
+    const link = Object.assign(document.createElement('a'), { href:url, target:'_blank', rel:'noopener', textContent:'Скачать' });
+    card.append(link);
+  } else {
+    const retry = Object.assign(document.createElement('button'), { type:'button', className:'ghost', textContent:'Повторить' });
+    retry.onclick = async () => {
+      retry.disabled = true;
+      const id = url.match(/\/api\/attachments\/(\d+)/)?.[1];
+      if (id && status === 424) await api(`/api/attachments/${id}/retry`, { method:'POST' }).catch(() => undefined);
+      if (card.isConnected) { card.replaceWith(box); reload(); }
+    };
+    card.append(retry);
+  }
+  box.replaceWith(card);
+}
+
 /** Картинка вложения: скелетон, пока файл качается, и повторы по статусу. */
 function loadAttachmentImage(img, box, url) {
   let attempts = 0;
@@ -1028,11 +1064,7 @@ function loadAttachmentImage(img, box, url) {
     if (!box.isConnected) return;
     const wait = await mediaRetryDelay(url, ++attempts);
     if (!box.isConnected) return;
-    if (wait === null) {
-      box.replaceWith(Object.assign(document.createElement('div'),
-        { className:'mono', textContent:'[файл не удалось загрузить]' }));
-      return;
-    }
+    if (wait === null) { void showMediaFailure(box, url, () => { loadAttachmentImage(img, box, url); reloadMedia(img); }); return; }
     img.dataset.mediaFailed = '1';
     setTimeout(() => { if (box.isConnected) { delete img.dataset.mediaFailed; reloadMedia(img); } }, wait);
   };
@@ -1845,7 +1877,11 @@ function bubble(m, attachments = {}) {
       video.addEventListener('error', async () => {
         if (!video.isConnected) return;
         const wait = await mediaRetryDelay(mediaUrl, ++videoAttempts);
-        if (wait === null) { video.classList.remove('media-pending'); return; }
+        if (wait === null) {
+          videoAttempts = 0;
+          void showMediaFailure(video, mediaUrl, () => reloadMedia(video));
+          return;
+        }
         setTimeout(() => { if (video.isConnected) reloadMedia(video); }, wait);
       });
       video.preload = 'metadata'; video.src = mediaUrl; el.append(video);
@@ -4647,7 +4683,7 @@ function connect() {
     opened = true;
     if (pendingSocket === ws) pendingSocket = null;
     const previous = liveSocket;
-    liveSocket = ws; liveFailures = 0;
+    liveSocket = ws; liveFailures = 0; liveFrameAt = Date.now();
     if (previous && previous !== ws) { previous.onclose = null; previous.close(1000, 'Ticket rotated'); }
     $('pulse').classList.add('live'); $('pulse').title = 'Связь с сервером установлена';
     if (liveNeedsResync) { liveNeedsResync = false; void refresh({ fullThread:true }); }
@@ -4664,8 +4700,45 @@ function connect() {
     $('pulse').classList.remove('live'); $('pulse').title = 'Переподключаемся…';
     scheduleReconnect(event.code);
   };
-  ws.onmessage = (event) => handleLiveFrame(event);
+  ws.onmessage = (event) => { if (liveSocket === ws) liveFrameAt = Date.now(); handleLiveFrame(event); };
 }
+
+/**
+ * Сокет может умереть без события close (сон ноутбука, смена сети, вкладка
+ * iOS в фоне): liveOpen() остаётся true, запасной опрос не включается, и
+ * новые сообщения не приходят, хотя уведомление в Telegram уже есть. Сервер
+ * шлёт tick раз в 20 с — нет кадров дольше 50 с, значит сокет мёртв.
+ */
+let liveFrameAt = Date.now(), hiddenAt = 0;
+function dropDeadSocket() {
+  const dead = liveSocket;
+  if (!dead) return;
+  dead.onclose = null; dead.onmessage = null;
+  try { dead.close(); } catch { /* уже закрыт */ }
+  liveSocket = null; liveNeedsResync = true;
+  $('pulse').classList.remove('live'); $('pulse').title = 'Переподключаемся…';
+  scheduleReconnect(1006);
+}
+setInterval(() => {
+  if (liveOpen() && Date.now() - liveFrameAt > 50_000) dropDeadSocket();
+}, 10_000);
+
+/** Возврат во вкладку или в сеть: проверить сокет, билет и догрузить пропущенное. */
+async function resumeLive() {
+  if (document.visibilityState !== 'visible' || !currentActor) return;
+  const away = hiddenAt ? Date.now() - hiddenAt : 0;
+  hiddenAt = 0;
+  // Билет живёт 10 минут; таймеры фоновой вкладки браузер замораживает.
+  if (Date.now() - ticketAt > 6 * 60_000) await refreshTicket().catch(() => undefined);
+  if (liveOpen() && Date.now() - liveFrameAt > 30_000) dropDeadSocket();
+  else if (!liveOpen() && !pendingSocket) connect();
+  if (away > 5_000 || !liveOpen()) void refresh({ fullThread:true });
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') hiddenAt = Date.now(); else void resumeLive();
+});
+window.addEventListener('pageshow', (event) => { if (event.persisted) void resumeLive(); });
+window.addEventListener('online', () => void resumeLive());
 
 function scheduleReconnect(code) {
   clearTimeout(liveRetryTimer);
@@ -4686,6 +4759,7 @@ async function rotateTicket() {
 
 function handleLiveFrame(event) {
   const frame = JSON.parse(event.data);
+  if (frame.type === 'tick') return;
   if (frame.type === 'job') {
     const box = $('logBox');
     if (box) {

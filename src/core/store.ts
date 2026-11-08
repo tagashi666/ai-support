@@ -1,6 +1,17 @@
 import { EventEmitter } from 'node:events';
 import type Database from 'better-sqlite3';
 
+/** next_attempt_at вложения, которое больше не повторяется автоматически. */
+export const ATTACHMENT_GAVE_UP = 8_640_000_000_000_000;
+/** После стольких неудачных попыток панель показывает ошибку, а не скелетон. */
+export const ATTACHMENT_SHOW_FAILED_AFTER = 5;
+
+export interface StoredAttachment {
+  id: number; local_path: string | null; media_type: string | null; file_ref: string;
+  original_name: string | null; mime_type: string | null; bytes: number | null; next_attempt_at: number;
+  attempts: number; last_error: string | null;
+}
+
 export type Channel = 'tg_dm' | 'tg_bot' | 'bedolaga' | 'minishop';
 export type Direction = 'in' | 'out' | 'note';
 export type Author = 'client' | 'agent' | 'ai' | 'system';
@@ -186,6 +197,7 @@ export function replyWindow(conv: Conversation, now = Date.now()): WindowState {
 export type StoreEvents = {
   message: [{ conversation: Conversation; message: Message; backfill: boolean }];
   message_updated: [{ conversation: Conversation; message: Message }];
+  attachment_retry: [{ id: number }];
   message_deleted: [{ conversation: Conversation; message: Message }];
   conversation_deleted: [Conversation];
   suggestion: [{ conversation: Conversation; suggestion: Suggestion }];
@@ -373,69 +385,76 @@ export class Store extends EventEmitter<StoreEvents> {
    * защита от ретраев поллинга и переигранных апдейтов Telegram.
    */
   recordInbound(input: InboundMessage): { conversation: Conversation; message: Message } | null {
-    const conversation = this.upsertConversation(input);
-    const backfill = input.backfill === true ? 1 : 0;
-    const result = this.db
-      .prepare(
-        `INSERT OR IGNORE INTO message
-           (conversation_id, direction, author, text, media_type, media_file_id, external_msg_id, sender_tg_user_id,
-            reply_to_external_id, reply_excerpt, created_at, is_backfill)
-         VALUES (?, 'in', 'client', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        conversation.id,
-        input.text ?? null,
-        input.mediaType ?? null,
-        input.mediaFileId ?? null,
-        input.externalMsgId ?? null,
-        input.senderTgUserId ?? null,
-        input.replyToExternalId ?? null,
-        input.replyExcerpt ?? null,
-        input.sentAt,
-        backfill,
-      );
-    if (result.changes === 0) return null;
-    const messageId = Number(result.lastInsertRowid);
+    // Сообщение, вложение и счётчики диалога пишутся одной транзакцией: сбой
+    // между ними оставлял сообщение без файла, а повторная доставка того же
+    // update отсекается INSERT OR IGNORE — восстановить вложение было нечем.
+    const saved = this.db.transaction(() => {
+      const conversation = this.upsertConversation(input);
+      const backfill = input.backfill === true ? 1 : 0;
+      const result = this.db
+        .prepare(
+          `INSERT OR IGNORE INTO message
+             (conversation_id, direction, author, text, media_type, media_file_id, external_msg_id, sender_tg_user_id,
+              reply_to_external_id, reply_excerpt, created_at, is_backfill)
+           VALUES (?, 'in', 'client', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .run(
+          conversation.id,
+          input.text ?? null,
+          input.mediaType ?? null,
+          input.mediaFileId ?? null,
+          input.externalMsgId ?? null,
+          input.senderTgUserId ?? null,
+          input.replyToExternalId ?? null,
+          input.replyExcerpt ?? null,
+          input.sentAt,
+          backfill,
+        );
+      if (result.changes === 0) return null;
+      const messageId = Number(result.lastInsertRowid);
 
-    // Вложение регистрируем до рассылки события: подписчики получают кадр
-    // синхронно, и если сделать это после, в панель уедет сообщение без
-    // картинки — пустой пузырь без единого признака, что там был файл.
-    if (input.mediaFileId) {
-      const fileRef = input.channel === 'bedolaga'
-        ? `bedolaga:${input.mediaFileId}`
-        : input.channel === 'minishop'
-          ? `minishop:${input.mediaFileId}`
-          : `tg:${encodeURIComponent(input.avatarSourceId ?? input.sourceId ?? 'telegram-default')}:${input.mediaFileId}`;
-      this.addAttachment(messageId, input.mediaType, fileRef, {
-        width: input.mediaWidth,
-        height: input.mediaHeight,
-      });
-    }
+      // Вложение регистрируем до рассылки события: подписчики получают кадр
+      // синхронно, и если сделать это после, в панель уедет сообщение без
+      // картинки — пустой пузырь без единого признака, что там был файл.
+      if (input.mediaFileId) {
+        const fileRef = input.channel === 'bedolaga'
+          ? `bedolaga:${input.mediaFileId}`
+          : input.channel === 'minishop'
+            ? `minishop:${input.mediaFileId}`
+            : `tg:${encodeURIComponent(input.avatarSourceId ?? input.sourceId ?? 'telegram-default')}:${input.mediaFileId}`;
+        this.addAttachment(messageId, input.mediaType, fileRef, {
+          width: input.mediaWidth,
+          height: input.mediaHeight,
+        });
+      }
 
-    this.db
-      .prepare(
-        `UPDATE conversation
-            SET first_inbound_at = COALESCE(first_inbound_at, ?),
-                last_inbound_at = MAX(COALESCE(last_inbound_at, 0), ?),
-                last_message_at = MAX(COALESCE(last_message_at, 0), ?),
-                unread          = unread + CASE WHEN ? = 1 THEN 0 ELSE 1 END,
-                resolved_at     = CASE WHEN ? = 1 THEN resolved_at ELSE NULL END,
-                status          = CASE WHEN ? = 1 THEN status
-                                       ELSE 'open' END,
-                hidden_at       = CASE WHEN ? = 1 THEN hidden_at ELSE NULL END,
-                updated_at      = ?
-          WHERE id = ?`,
-      )
-      .run(input.sentAt, input.sentAt, input.sentAt, backfill, backfill, backfill, backfill, Date.now(), conversation.id);
-
-    // Клиент написал снова — незакрытая предложка устарела.
-    if (!backfill) {
       this.db
-        .prepare(`UPDATE ai_suggestion SET status='superseded', decided_at=? WHERE conversation_id=? AND status='pending'`)
-        .run(Date.now(), conversation.id);
-    }
+        .prepare(
+          `UPDATE conversation
+              SET first_inbound_at = COALESCE(first_inbound_at, ?),
+                  last_inbound_at = MAX(COALESCE(last_inbound_at, 0), ?),
+                  last_message_at = MAX(COALESCE(last_message_at, 0), ?),
+                  unread          = unread + CASE WHEN ? = 1 THEN 0 ELSE 1 END,
+                  resolved_at     = CASE WHEN ? = 1 THEN resolved_at ELSE NULL END,
+                  status          = CASE WHEN ? = 1 THEN status
+                                         ELSE 'open' END,
+                  hidden_at       = CASE WHEN ? = 1 THEN hidden_at ELSE NULL END,
+                  updated_at      = ?
+            WHERE id = ?`,
+        )
+        .run(input.sentAt, input.sentAt, input.sentAt, backfill, backfill, backfill, backfill, Date.now(), conversation.id);
 
-    return this.emitMessage(conversation.id, messageId, input.backfill === true);
+      // Клиент написал снова — незакрытая предложка устарела.
+      if (!backfill) {
+        this.db
+          .prepare(`UPDATE ai_suggestion SET status='superseded', decided_at=? WHERE conversation_id=? AND status='pending'`)
+          .run(Date.now(), conversation.id);
+      }
+
+      return { conversationId: conversation.id, messageId };
+    })();
+    if (!saved) return null;
+    return this.emitMessage(saved.conversationId, saved.messageId, input.backfill === true);
   }
 
   /**
@@ -692,6 +711,13 @@ export class Store extends EventEmitter<StoreEvents> {
     this.db
       .prepare('UPDATE conversation SET avatar_file_id = ?, avatar_source_id = COALESCE(?, avatar_source_id), updated_at = ? WHERE id = ?')
       .run(fileId, sourceId ?? null, Date.now(), conversationId);
+    const conversation = this.getConversation(conversationId);
+    if (conversation) this.emit('conversation', conversation);
+  }
+
+  /** Фото у клиента больше нет: панель покажет инициалы вместо битой картинки. */
+  clearConversationAvatar(conversationId: number): void {
+    this.db.prepare('UPDATE conversation SET avatar_file_id = NULL, updated_at = ? WHERE id = ?').run(Date.now(), conversationId);
     const conversation = this.getConversation(conversationId);
     if (conversation) this.emit('conversation', conversation);
   }
@@ -1203,26 +1229,36 @@ export class Store extends EventEmitter<StoreEvents> {
       .all(now, retryVoice ? 1 : 0, limit) as { id: number; message_id: number; media_type: string | null; file_ref: string; attempts: number }[];
   }
 
-  deferAttachment(id: number, error: unknown, now = Date.now()): number {
+  /**
+   * Откладывает вложение. Постоянная ошибка (файл больше лимита Bot API,
+   * удалён у источника) больше не повторяется: next_attempt_at уходит в
+   * «никогда», а панель показывает причину и кнопку повтора.
+   */
+  deferAttachment(id: number, error: unknown, now = Date.now(), permanent = false): number {
     const row = this.db.prepare('SELECT attempts FROM attachment WHERE id = ?').get(id) as { attempts: number } | undefined;
     if (!row) return 0;
     const attempts = row.attempts + 1;
     const delay = Math.min(6 * 60 * 60_000, 5_000 * 2 ** Math.min(12, attempts - 1));
-    const nextAttemptAt = now + delay;
+    const nextAttemptAt = permanent ? ATTACHMENT_GAVE_UP : now + delay;
     const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
     this.db.prepare('UPDATE attachment SET attempts = ?, next_attempt_at = ?, last_error = ? WHERE id = ?')
       .run(attempts, nextAttemptAt, message, id);
     return nextAttemptAt;
   }
 
-  getAttachment(id: number): { id: number; local_path: string | null; media_type: string | null; file_ref: string;
-    original_name: string | null; mime_type: string | null; bytes: number | null; next_attempt_at: number } | undefined {
+  getAttachment(id: number): StoredAttachment | undefined {
     return this.db.prepare(
-      'SELECT id, local_path, media_type, file_ref, original_name, mime_type, bytes, next_attempt_at FROM attachment WHERE id = ?',
-    ).get(id) as
-      | { id: number; local_path: string | null; media_type: string | null; file_ref: string;
-          original_name: string | null; mime_type: string | null; bytes: number | null; next_attempt_at: number }
-      | undefined;
+      `SELECT id, local_path, media_type, file_ref, original_name, mime_type, bytes, next_attempt_at, attempts, last_error
+         FROM attachment WHERE id = ?`,
+    ).get(id) as StoredAttachment | undefined;
+  }
+
+  /** Ручной повтор из панели: вложение снова встаёт в очередь сейчас. */
+  retryAttachment(id: number, now = Date.now()): boolean {
+    const changed = this.db.prepare('UPDATE attachment SET next_attempt_at = ?, attempts = 0 WHERE id = ? AND local_path IS NULL')
+      .run(now, id).changes > 0;
+    if (changed) this.emit('attachment_retry', { id });
+    return changed;
   }
 
   attachmentsFor(messageIds: number[]): Record<number, Attachment[]> {

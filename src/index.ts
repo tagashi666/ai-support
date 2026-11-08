@@ -184,6 +184,11 @@ async function main(): Promise<void> {
     db.close();
     process.exit(0);
   };
+  // Фоновая задача без .catch не должна ронять весь сервис: Node 22 по
+  // умолчанию завершает процесс на необработанном отказе промиса.
+  process.on('unhandledRejection', (reason) => {
+    log.error('Необработанная ошибка фоновой задачи', reason instanceof Error ? reason : String(reason));
+  });
   process.once('SIGINT', () => void shutdown('SIGINT'));
   process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
@@ -206,7 +211,14 @@ async function main(): Promise<void> {
       onStart: (me) => {
         const source = config.telegramBots[index];
         log.info(`ai-support ${version}: ${source?.name ?? 'бот'} @${me.username} запущен, AI в режиме ${runtime.aiMode}`);
-        if (source) void refreshTelegramProfiles(store, configuredBot, source.id);
+        if (source) {
+          // Профили обновляются и без новых сообщений: при старте и раз в 6 часов
+          // (сменённое фото, клиенты, которых бот раньше не видел).
+          const refresh = () => refreshTelegramProfiles(store, configuredBot, source.id)
+            .catch((err) => log.warn('Не удалось обновить профили Telegram', err));
+          void refresh();
+          setInterval(() => void refresh(), 6 * 60 * 60_000).unref();
+        }
         const active = store.activeBusinessConnectionId();
         if (active) {
           log.info(`Активное бизнес-подключение: ${active}`);

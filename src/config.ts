@@ -194,7 +194,7 @@ export const config = {
     enabled: bool('BEDOLAGA_ENABLED', false),
     url: optional('BEDOLAGA_API_URL'),
     token: optional('BEDOLAGA_API_TOKEN'),
-    pollSeconds: num('BEDOLAGA_POLL_SECONDS', 60),
+    pollSeconds: num('BEDOLAGA_POLL_SECONDS', 20),
     language: env('BEDOLAGA_FAQ_LANGUAGE', 'ru'),
   },
 

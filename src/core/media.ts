@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { Bot } from 'grammy';
 import { config, log } from '../config.js';
 import { TelegramBotRegistry } from '../channels/tgdm.js';
-import type { Store } from './store.js';
+import { ATTACHMENT_SHOW_FAILED_AFTER, type Store } from './store.js';
 import type { BedolagaClient } from '../channels/bedolaga.js';
 import type { MinishopClient } from '../channels/minishop.js';
 import { AiProvider } from '../ai/provider.js';
@@ -257,6 +257,7 @@ export class MediaFetcher {
     this.timer = setInterval(() => void this.drain(), intervalMs);
     this.store.on('message', this.onMessage);
     this.store.on('message_updated', this.onMessage);
+    this.store.on('attachment_retry', this.onMessage);
   }
 
   stop(): void {
@@ -266,6 +267,7 @@ export class MediaFetcher {
     this.kickTimer = undefined;
     this.store.off('message', this.onMessage);
     this.store.off('message_updated', this.onMessage);
+    this.store.off('attachment_retry', this.onMessage);
   }
 
   /**
@@ -290,7 +292,12 @@ export class MediaFetcher {
     this.again = false;
     let saved = 0;
     try {
-      await mkdir(config.mediaDir, { recursive: true });
+      try {
+        await mkdir(config.mediaDir, { recursive: true });
+      } catch (err) {
+        log.warn('Каталог вложений недоступен на запись', err instanceof Error ? err.message : err);
+        return 0;
+      }
       for (const item of this.store.pendingAttachments(20, Date.now(), config.transcribe.enabled)) {
         try {
           let bytes: Buffer;
@@ -328,9 +335,16 @@ export class MediaFetcher {
             await this.transcribe(item.id, item.message_id, bytes, item.media_type ?? 'voice');
           }
         } catch (err) {
-          const nextAttemptAt = this.store.deferAttachment(item.id, err);
-          log.debug(`Вложение ${item.file_ref} не скачалось`, err);
-          log.debug(`Следующая попытка вложения ${item.id}: ${new Date(nextAttemptAt).toISOString()}`);
+          const permanent = isPermanentMediaError(err);
+          const nextAttemptAt = this.store.deferAttachment(item.id, err, Date.now(), permanent);
+          const reason = err instanceof Error ? err.message : String(err);
+          // Первую неудачу и окончательный отказ видно в журнале без debug:
+          // иначе «картинка не грузится» не с чем сопоставить.
+          if (permanent || item.attempts === 0 || item.attempts + 1 === ATTACHMENT_SHOW_FAILED_AFTER) {
+            log.warn(`Вложение ${item.id} не скачалось${permanent ? ' (окончательно)' : ''}: ${reason}`);
+          } else {
+            log.debug(`Вложение ${item.id} не скачалось, следующая попытка ${new Date(nextAttemptAt).toISOString()}: ${reason}`);
+          }
         }
       }
     } finally {
@@ -374,9 +388,24 @@ export class MediaFetcher {
         `https://api.telegram.org/file/bot${token}/${file.file_path}`,
         { signal: AbortSignal.timeout(60_000) },
       );
-      if (!response.ok) return null;
+      if (!response.ok) throw new MediaFetchError(`Telegram отдал HTTP ${response.status}`, response.status === 404 || response.status === 410);
       return readLimitedBody(response, config.mediaMaxFileBytes);
     }
     return null;
   }
+}
+
+/** Ошибка источника, после которой повтор бессмыслен (файл удалён или слишком большой). */
+export class MediaFetchError extends Error {
+  constructor(message: string, readonly permanent: boolean) { super(message); }
+}
+
+/**
+ * Bot API не отдаёт файлы больше 20 МБ, а лимит размера не изменится от повтора —
+ * такие вложения повторять по 6 часов вечно незачем.
+ */
+export function isPermanentMediaError(err: unknown): boolean {
+  if (err instanceof MediaFetchError) return err.permanent;
+  const message = err instanceof Error ? err.message : String(err);
+  return /file is too big|превысил предел|слишком большой/i.test(message);
 }

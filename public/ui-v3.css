@@ -463,6 +463,8 @@ button:active:not(:disabled) { transform:translateY(1px); }
 .bubble .shot.media-pending::after, .media-video.media-pending { background:linear-gradient(100deg, transparent 25%, rgba(127,127,127,.16) 50%, transparent 75%) var(--canvas-muted); background-size:220% 100%; animation:media-shimmer 1.3s linear infinite; }
 .bubble .shot.media-pending::after { content:''; position:absolute; inset:0; pointer-events:none; }
 .media-video.media-pending { min-height:120px; border-radius:8px; }
+.media-failed { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:10px 12px; border:1px dashed var(--separator-strong); border-radius:8px; color:var(--text-secondary); font-size:13px; }
+.media-failed button, .media-failed a { font-size:13px; }
 @keyframes media-shimmer { from { background-position:120% 0; } to { background-position:-120% 0; } }
 @media (prefers-reduced-motion: reduce) { .bubble .shot.media-pending::after, .media-video.media-pending { animation:none; } }
 .shot-actions { position:absolute; top:6px; right:6px; }

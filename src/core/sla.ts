@@ -19,7 +19,15 @@ export class SlaWatcher {
     // Срок из настроек и .env раньше жил отдельно от sla_policy. Переносим
     // его один раз, чтобы уведомления после обновления приходили как прежде.
     this.store.seedSlaFirstResponse(runtime.slaFirstResponseMinutes);
-    this.timer = setInterval(() => void this.check(), config.sla.checkSeconds * 1000);
+    // Проход не должен накладываться на предыдущий и ронять процесс ошибкой SQLite.
+    let busy = false;
+    this.timer = setInterval(() => {
+      if (busy) return;
+      busy = true;
+      this.check()
+        .catch((err) => log.warn('Проверка SLA не удалась', err instanceof Error ? err.message : err))
+        .finally(() => { busy = false; });
+    }, config.sla.checkSeconds * 1000);
   }
 
   stop(): void {

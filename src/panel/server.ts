@@ -8,12 +8,12 @@ import { constants as zlibConstants, gunzipSync } from 'node:zlib';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Bot } from 'grammy';
-import { TelegramBotRegistry } from '../channels/tgdm.js';
+import { fetchAvatarFileId, TelegramBotRegistry } from '../channels/tgdm.js';
 import type { Notifier } from '../core/notify.js';
 import type { WebSocket } from 'ws';
 import { config, log } from '../config.js';
-import { readLimitedBody } from '../core/http.js';
-import { replyWindow, type Conversation, type Store } from '../core/store.js';
+import { limitConcurrency, readLimitedBody } from '../core/http.js';
+import { ATTACHMENT_GAVE_UP, ATTACHMENT_SHOW_FAILED_AFTER, replyWindow, type Conversation, type Store, type StoredAttachment } from '../core/store.js';
 import { NoSenderError, Outbox, WindowClosedError } from '../core/outbox.js';
 import type { CustomerDirectory } from '../integrations/customers.js';
 import {
@@ -509,6 +509,7 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     if (url.startsWith('/api/roles')) return 'roles:manage';
     if (url.startsWith('/api/operators')) return method === 'GET' ? 'team:read' : 'operators:manage';
     if (url.startsWith('/api/operator-stats')) return 'operator_stats:read';
+    if (method === 'POST' && /^\/api\/attachments\/\d+\/retry(?:\?|$)/.test(url)) return 'conversation:read';
     if (url.startsWith('/api/audit')) return 'audit:read';
     if (url.startsWith('/api/diagnostics')) return 'diagnostics:read';
     if (url.startsWith('/api/update')) return 'settings:update';
@@ -759,30 +760,69 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
     const cachedMime = cached ? imageMime(cached, null) : null;
     if (cached && cachedMime) return send(cached, cachedMime);
     if (!bot) return reply.code(404).send();
+    const miss = avatarMisses.get(key);
+    if (miss && miss.until > Date.now()) {
+      return reply.code(miss.status).header('cache-control', `private, max-age=${miss.status === 404 ? 300 : 30}`).send();
+    }
+    // Один запрос к Telegram на ключ, сколько бы карточек ни ждали этот аватар,
+    // и не больше трёх скачиваний одновременно: холодный кэш на 50 диалогов
+    // иначе упирается в лимиты Bot API и часть аватарок не приходит.
+    let job = avatarJobs.get(key);
+    if (!job) {
+      job = avatarSlots(() => downloadAvatar(conversation, key)).finally(() => avatarJobs.delete(key));
+      avatarJobs.set(key, job);
+    }
+    const result = await job;
+    if ('body' in result) return send(result.body, result.mime);
+    avatarMisses.set(key, { status: result.status, until: Date.now() + (result.status === 404 ? 300_000 : 30_000) });
+    return reply.code(result.status).header('cache-control', `private, max-age=${result.status === 404 ? 300 : 30}`).send();
+  });
+
+  type AvatarResult = { body: Buffer; mime: string } | { status: 404 | 502 };
+  const avatarJobs = new Map<string, Promise<AvatarResult>>();
+  const avatarMisses = new Map<string, { status: 404 | 502; until: number }>();
+  const avatarSlots = limitConcurrency(3);
+
+  async function downloadAvatar(conversation: Conversation, key: string): Promise<AvatarResult> {
+    if (!bot || !conversation.avatar_file_id) return { status: 404 };
+    const selectedBot = bot instanceof TelegramBotRegistry ? bot.botFor(conversation) : bot;
+    const token = bot instanceof TelegramBotRegistry
+      ? bot.tokenFor(conversation.avatar_source_id ?? conversation.source_id)
+      : config.botToken;
+    if (!token) return { status: 404 };
     try {
-      const selectedBot = bot instanceof TelegramBotRegistry ? bot.botFor(conversation) : bot;
-      const token = bot instanceof TelegramBotRegistry
-        ? bot.tokenFor(conversation.avatar_source_id ?? conversation.source_id)
-        : config.botToken;
-      if (!token) return reply.code(404).send();
-      const file = await selectedBot.api.getFile(conversation.avatar_file_id);
-      if (!file.file_path) return reply.code(404).send();
+      let file;
+      try {
+        file = await selectedBot.api.getFile(conversation.avatar_file_id);
+      } catch (err) {
+        // Клиент сменил или удалил фото: старый file_id больше не принимается.
+        // Берём актуальный id; новая версия аватара уйдёт в панель событием.
+        if (!/wrong file_id|file is temporarily unavailable/i.test(String((err as Error)?.message)) || !conversation.tg_user_id) throw err;
+        const fresh = await fetchAvatarFileId(selectedBot, conversation.tg_user_id);
+        if (fresh && fresh !== conversation.avatar_file_id) {
+          store.setConversationAvatar(conversation.id, fresh, conversation.avatar_source_id ?? conversation.source_id ?? undefined);
+        } else if (!fresh) {
+          store.clearConversationAvatar(conversation.id);
+        }
+        return { status: 404 };
+      }
+      if (!file.file_path) return { status: 404 };
       const response = await fetch(`https://api.telegram.org/file/bot${token}/${file.file_path}`, {
         signal: AbortSignal.timeout(15_000),
       });
-      if (!response.ok) return reply.code(502).send();
+      if (!response.ok) return { status: 502 };
       const body = await readLimitedBody(response, Math.min(config.mediaMaxFileBytes, 5 * 1024 * 1024));
       const mime = imageMime(body, response.headers.get('content-type'));
-      if (!mime) return reply.code(502).send();
+      if (!mime) return { status: 502 };
       // В кэш кладём только то, что прошло проверку типа. Ошибка записи не
       // мешает показать аватар: в худшем случае скачаем его ещё раз.
       await saveCachedAvatar(key, body).catch((err) => log.warn('Не удалось сохранить аватар в кэш', err));
-      return send(body, mime);
+      return { body, mime };
     } catch (err) {
-      log.warn('Не удалось загрузить аватар Telegram', err);
-      return reply.code(502).send();
+      log.warn(`Не удалось загрузить аватар диалога ${conversation.id}`, err instanceof Error ? err.message : err);
+      return { status: 502 };
     }
-  });
+  }
 
   app.post<{ Params: { id: string }; Body: { text?: string; suggestionId?: number; edited?: boolean; replyTo?: string; replyExcerpt?: string } }>(
     '/api/conversations/:id/reply',
@@ -1366,11 +1406,25 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
    * диск. 202 + Retry-After отличает «подождите» от «нет такого», и панель
    * показывает скелетон вместо пустой рамки.
    */
-  const pendingAttachment = (reply: FastifyReply, attachment: { next_attempt_at?: number | null }) => {
+  const pendingAttachment = (reply: FastifyReply, attachment: StoredAttachment) => {
+    // Окончательный отказ или много неудач подряд: вместо вечного скелетона
+    // панель получает причину и предлагает повторить вручную.
+    if (attachment.next_attempt_at >= ATTACHMENT_GAVE_UP || attachment.attempts >= ATTACHMENT_SHOW_FAILED_AFTER) {
+      return reply.code(424).header('cache-control', 'no-store')
+        .header('x-attachment-error', encodeURIComponent(attachmentFailureText(attachment.last_error)))
+        .send({ failed: true, error: attachmentFailureText(attachment.last_error) });
+    }
     const wait = Math.max(1, Math.min(60, Math.ceil(((attachment.next_attempt_at ?? 0) - Date.now()) / 1000)));
     return reply.code(202).header('retry-after', String(wait)).header('cache-control', 'no-store')
       .send({ pending: true, retryAfter: wait });
   };
+
+  app.post<{ Params: { id: string } }>('/api/attachments/:id/retry', async (request, reply) => {
+    const id = Number(request.params.id);
+    // Очередь вложений слушает событие attachment_retry и проходит сразу.
+    if (!store.retryAttachment(id)) return reply.code(404).send({ error: 'Вложение уже скачано или не найдено' });
+    return { ok: true };
+  });
 
   app.get<{ Params: { id: string } }>('/api/attachments/:id', async (request, reply) => {
     const attachment = store.getAttachment(Number(request.params.id));
@@ -2081,10 +2135,14 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
       if ((socketExpires.get(socket) ?? 0) < Date.now()
           || !actor || !operations.can(actor, 'conversation:read')) {
         socket.close(1008, 'Ticket expired or permission revoked');
-      } else if (socket.readyState === socket.OPEN) socket.ping();
-      else removeSocket(socket);
+      } else if (socket.readyState === socket.OPEN) {
+        socket.ping();
+        // Protocol ping браузеру не виден. Кадр tick позволяет панели заметить
+        // тихо умерший сокет (сон, смена сети, iOS в фоне) и переподключиться.
+        socket.send(tickFrame());
+      } else removeSocket(socket);
     }
-  }, 25_000);
+  }, 20_000);
   socketHeartbeat.unref();
   app.addHook('onClose', async () => {
     clearInterval(socketHeartbeat);
@@ -2130,3 +2188,15 @@ export async function startWeb({ store, outbox, bot, notifier, customers, remnaw
   log.info(`Панель слушает http://${config.panelHost}:${config.panelPort}`);
   return app;
 }
+
+/** Понятная оператору причина, без путей и file_id источника. */
+function attachmentFailureText(error: string | null): string {
+  const text = error ?? '';
+  if (/file is too big|превысил предел|слишком большой/i.test(text)) return 'Файл больше лимита Telegram Bot API (20 МБ)';
+  if (/лимита/i.test(text)) return 'Закончилось место для вложений (MEDIA_MAX_TOTAL_MB)';
+  if (/HTTP 40[14]|wrong file_id|not found/i.test(text)) return 'Источник больше не отдаёт файл';
+  if (/временно недоступен|timeout|aborted|fetch failed/i.test(text)) return 'Источник не отвечает';
+  return 'Файл не удалось скачать';
+}
+
+const tickFrame = () => JSON.stringify({ type: 'tick', at: Date.now() });
