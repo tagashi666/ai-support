@@ -1,0 +1,33 @@
+.wrap {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--s3);
+  max-width: 34rem;
+  margin: 0 auto;
+  padding: var(--s8) var(--s4);
+  flex: 1;
+}
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; }
+.text { color: var(--text-2); font-size: var(--fs-name); line-height: 1.5rem; }
+.more { padding: var(--s5) var(--s4); overflow-y: auto; flex: 1; }
+.list { list-style: none; margin: var(--s4) 0 0; padding: var(--s1); display: grid; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  width: 100%;
+  min-height: 52px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r-control);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-name);
+  text-decoration: none;
+  text-align: left;
+}
+.item:hover { background: var(--surface-hover); }
+.item > svg:first-child { color: var(--text-2); }
+.item > svg:last-child { color: var(--text-3); }
+.itemText { flex: 1; }

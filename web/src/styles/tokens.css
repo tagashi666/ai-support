@@ -1,0 +1,230 @@
+/*
+ * Токены новой панели (план, раздел 8). Цвета задаются только здесь.
+ * Слои: смысловые токены темы → компоненты используют только их.
+ * Тема: :root[data-theme="light|dark"]; без атрибута — по системе.
+ * Контраст пар «токен — поверхность» проверяет web/src/styles/contrast.test.ts.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Поверхности */
+  --bg: #F6F5F2;
+  --surface: #FFFFFF;
+  --surface-sunken: #EFEDE8;
+  --surface-hover: #F1EFEA;
+  --border: #E4E1DA;
+  --control-border: #7D8591;
+
+  /* Текст */
+  --text: #1C1F24;
+  --text-2: #4B515B;
+  --text-3: #5E6570;
+
+  /* Акцент: кнопка, ваш пузырь, ссылки, выбор */
+  --accent: #2563EB;
+  --accent-hover: #1D4ED8;
+  --on-accent: #FFFFFF;
+  --accent-text: #1D4ED8;
+  --accent-soft: #E8EFFD;
+  --selected: #E8EFFD;
+  --focus: #2563EB;
+
+  /* Голоса ленты */
+  --bubble-in: #E8E6E1;
+  --bubble-colleague: #DCE8FF;
+
+  /* Помощник — фиолетовый только у него */
+  --ai-bg: #EFE9FB;
+  --ai-ink: #5B3FC0;
+  --ai-text: #2B1B5E;
+
+  /* Заметка для команды */
+  --note-bg: #FFF4CC;
+  --note-text: #4A3B00;
+
+  /* «Нужно вам» — янтарный только здесь */
+  --attention: #92400E;
+  --attention-bg: #FEF3C7;
+
+  /* Порядок и ошибки */
+  --ok: #166534;
+  --danger: #B42318;
+  --danger-btn: #B42318;
+  --on-danger: #FFFFFF;
+
+  /* Аватары: приглушённые тона, текст — --avatar-ink */
+  --avatar-ink: #1C1F24;
+  --avatar-1: #E3DCCF;
+  --avatar-2: #D6E2D8;
+  --avatar-3: #D9DFEC;
+  --avatar-4: #EADADA;
+  --avatar-5: #E1DBEC;
+  --avatar-6: #D8E4E6;
+
+  --scrim: rgba(16, 24, 40, 0.32);
+  --shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.08);
+  --pop-ring: 0 0 0 0 transparent;
+
+  /* Типографика (rem: настройка «Размер текста» масштабирует всё) */
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --fs-title: 1.375rem;   /* 22 */
+  --lh-title: 1.75rem;
+  --fs-card: 1.0625rem;   /* 17 */
+  --lh-card: 1.5rem;
+  --fs-name: 0.9375rem;   /* 15 */
+  --lh-name: 1.25rem;
+  --fs-body: 0.875rem;    /* 14 */
+  --lh-body: 1.25rem;
+  --fs-msg: 1rem;         /* 16 */
+  --lh-msg: 1.5rem;
+  --fs-button: 0.9375rem; /* 15 */
+  --fs-small: 0.75rem;    /* 12 */
+  --lh-small: 1rem;
+
+  /* Сетка 4 px */
+  --s1: 0.25rem;
+  --s2: 0.5rem;
+  --s3: 0.75rem;
+  --s4: 1rem;
+  --s5: 1.25rem;
+  --s6: 1.5rem;
+  --s8: 2rem;
+  --s12: 3rem;
+
+  /* Формы */
+  --r-tag: 6px;
+  --r-control: 10px;
+  --r-card: 12px;
+  --r-bubble: 16px;
+  --r-bubble-tail: 6px;
+  --r-sheet: 20px;
+  --r-pill: 999px;
+
+  /* Размеры */
+  --rail: 96px;
+  --row-h: 76px;
+  --control-h: 40px;
+  --tabbar-h: 56px;
+  --avatar: 44px;
+
+  /* Движение */
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  --t-press: 120ms;
+  --t-state: 160ms;
+  --t-move: 200ms;
+  --t-sheet: 240ms;
+
+  --kb-inset: 0px;
+}
+
+@media (pointer: coarse) {
+  :root {
+    --control-h: 44px;
+    --fs-name: 1rem;
+    --lh-name: 1.375rem;
+    --fs-button: 1rem;
+  }
+}
+
+@media (min-width: 1800px) {
+  :root {
+    --fs-msg: 1.0625rem; /* 17 */
+    --lh-msg: 1.625rem;
+  }
+}
+
+/* Тёмная тема: слои светлоты, без чистого чёрного */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12141A;
+  --surface: #1A1D24;
+  --surface-sunken: #222630;
+  --surface-hover: #20242C;
+  --border: #2A2E38;
+  --control-border: #6B7380;
+  --text: #E7E9EE;
+  --text-2: #B4BAC6;
+  --text-3: #9AA2B0;
+  --accent: #2F5BD8;
+  --accent-hover: #3A66E0;
+  --on-accent: #FFFFFF;
+  --accent-text: #8FB2FF;
+  --accent-soft: #1E2A47;
+  --selected: #1E2A47;
+  --focus: #8FB2FF;
+  --bubble-in: #262A33;
+  --bubble-colleague: #24355C;
+  --ai-bg: #2A2346;
+  --ai-ink: #B9A6FF;
+  --ai-text: #E9E3FF;
+  --note-bg: #3A3216;
+  --note-text: #F3E6B3;
+  --attention: #F5B45A;
+  --attention-bg: #33260F;
+  --ok: #6FD08C;
+  --danger: #FF8A80;
+  --danger-btn: #C2362B;
+  --on-danger: #FFFFFF;
+  --avatar-ink: #E7E9EE;
+  --avatar-1: #3A3429;
+  --avatar-2: #2B3A30;
+  --avatar-3: #2C3447;
+  --avatar-4: #42302F;
+  --avatar-5: #372F47;
+  --avatar-6: #2A3B3E;
+  --scrim: rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+  --pop-ring: 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #12141A;
+    --surface: #1A1D24;
+    --surface-sunken: #222630;
+    --surface-hover: #20242C;
+    --border: #2A2E38;
+    --control-border: #6B7380;
+    --text: #E7E9EE;
+    --text-2: #B4BAC6;
+    --text-3: #9AA2B0;
+    --accent: #2F5BD8;
+    --accent-hover: #3A66E0;
+    --on-accent: #FFFFFF;
+    --accent-text: #8FB2FF;
+    --accent-soft: #1E2A47;
+    --selected: #1E2A47;
+    --focus: #8FB2FF;
+    --bubble-in: #262A33;
+    --bubble-colleague: #24355C;
+    --ai-bg: #2A2346;
+    --ai-ink: #B9A6FF;
+    --ai-text: #E9E3FF;
+    --note-bg: #3A3216;
+    --note-text: #F3E6B3;
+    --attention: #F5B45A;
+    --attention-bg: #33260F;
+    --ok: #6FD08C;
+    --danger: #FF8A80;
+    --danger-btn: #C2362B;
+    --on-danger: #FFFFFF;
+    --avatar-ink: #E7E9EE;
+    --avatar-1: #3A3429;
+    --avatar-2: #2B3A30;
+    --avatar-3: #2C3447;
+    --avatar-4: #42302F;
+    --avatar-5: #372F47;
+    --avatar-6: #2A3B3E;
+    --scrim: rgba(0, 0, 0, 0.5);
+    --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
+    --pop-ring: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: var(--control-border);
+  }
+}

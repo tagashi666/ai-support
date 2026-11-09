@@ -1,0 +1,23 @@
+.panel { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: var(--s4); padding: var(--s4) var(--s5) var(--s6); }
+.panel[data-embedded="true"] { padding: 0; overflow: visible; }
+.head { display: flex; align-items: center; justify-content: space-between; }
+.title { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
+.who { display: flex; align-items: center; gap: var(--s3); }
+.name { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 650; }
+.meta { color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }
+.facts { display: grid; gap: 0; margin: 0; border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; }
+.fact { display: grid; grid-template-columns: 6.5rem minmax(0, 1fr); gap: var(--s3); padding: var(--s3) var(--s4); background: var(--surface); }
+.fact + .fact { border-top: 1px solid var(--border); }
+.fact dt { color: var(--text-3); font-size: var(--fs-body); }
+.fact dd { margin: 0; display: grid; gap: 4px; font-size: var(--fs-body); font-weight: 500; }
+.factSub { color: var(--text-3); font-weight: 400; font-size: var(--fs-small); }
+.okDot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--ok); }
+.fact dd:has(.okDot) { display: block; }
+.fact dd:has(.okDot) .factSub { display: block; margin-top: 2px; }
+.meter { display: block; height: 6px; border-radius: var(--r-pill); background: var(--surface-sunken); overflow: hidden; }
+.meterFill { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--accent); }
+.meterFill[data-p="10"] { width: 10%; } .meterFill[data-p="20"] { width: 20%; } .meterFill[data-p="30"] { width: 30%; }
+.meterFill[data-p="40"] { width: 40%; } .meterFill[data-p="50"] { width: 50%; } .meterFill[data-p="60"] { width: 60%; }
+.meterFill[data-p="70"] { width: 70%; } .meterFill[data-p="80"] { width: 80%; } .meterFill[data-p="90"] { width: 90%; }
+.meterFill[data-p="100"] { width: 100%; }
+.later { color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }

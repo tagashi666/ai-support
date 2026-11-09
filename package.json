@@ -25,12 +25,16 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && npm run -s build:web",
+    "build:web": "vite build --config web/vite.config.ts && tsx scripts/webbudget.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "preview:web": "vite preview --config web/vite.config.ts",
     "start": "node dist/index.js",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
     "smoke": "tsx scripts/smoke.ts",
     "selfcheck": "tsx src/cli/selfcheck.ts",
-    "test": "node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/baretest.ts && node --import tsx scripts/mediatest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minishoptest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/lifecycletest.ts && node --import tsx scripts/sectest.ts && node --import tsx scripts/updatetest.ts && node --import tsx scripts/setuptest.ts",
+    "test": "npm run -s test:web && node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/baretest.ts && node --import tsx scripts/mediatest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minishoptest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/lifecycletest.ts && node --import tsx scripts/sectest.ts && node --import tsx scripts/nexttest.ts && node --import tsx scripts/updatetest.ts && node --import tsx scripts/setuptest.ts",
+    "test:web": "vitest run --config web/vite.config.ts",
     "kb:mine": "tsx src/cli/kbmine.ts",
     "rwprobe": "tsx src/cli/rwprobe.ts",
     "pack": "bash scripts/pack.sh",
@@ -46,10 +50,14 @@
     "lottie-web": "^5.13.0"
   },
   "devDependencies": {
+    "@preact/signals": "^2.11.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
+    "preact": "^10.29.8",
     "tsx": "^4.23.15",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vite": "^7.3.8",
+    "vitest": "^4.1.12"
   }
 }
