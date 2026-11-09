@@ -154,6 +154,13 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
   const used = store.createSuggestion({ conversationId: answered, text: 'Можно подключить до трёх устройств.', confidence: 0.88,
     sources: ['Устройства'], reason: 'статья короткая' });
   store.recordOutbound({ conversationId: answered, author: 'ai', text: 'Можно подключить до трёх устройств.', suggestionId: used.id });
+  // Журнал помощника для «Что делал помощник» и «Сегодня» (этап 4): решения ворот и передачи.
+  store.logEvent('ai_draft', answered, { suggestion: used.id, action: 'auto', reason: 'уверенность 0.88' });
+  for (const row of db.prepare('SELECT id, conversation_id, confidence FROM ai_suggestion WHERE id != ?').all(used.id) as Array<{ id: number; conversation_id: number; confidence: number | null }>) {
+    store.logEvent('ai_draft', row.conversation_id, { suggestion: row.id, action: 'suggest',
+      reason: (row.confidence ?? 0) < 0.7 ? 'уверенность 0.50 ниже порога' : 'режим suggest' });
+  }
+  for (const [i, id] of byIndex) if (i % 6 === 3) store.logEvent('ai_handoff', id, { reason: 'модель сама просит человека' });
   // Business-диалог: клиент писал больше суток назад — окно ответа закрыто.
   store.recordInbound({ channel: 'tg_dm', externalId: 'dev-biz', displayName: 'Дина С.', text: 'Верните деньги за месяц',
     externalMsgId: 'dev-biz-1', sentAt: now - 26 * 60 * 60_000, tgUserId: 900001, businessConnectionId: 'dev-bc' });

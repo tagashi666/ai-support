@@ -46,6 +46,7 @@ public/js/theme.js
 public/js/thread.js
 public/ui-v3.css
 scripts/aitest.ts
+scripts/assistanttest.ts
 scripts/baretest.ts
 scripts/devlive.ts
 scripts/devseed.ts
@@ -106,6 +107,7 @@ src/core/nodes.ts
 src/core/notify.ts
 src/core/operations.ts
 src/core/outbox.ts
+src/core/pause.ts
 src/core/settings.ts
 src/core/sla.ts
 src/core/sources.ts
@@ -131,6 +133,7 @@ src/integrations/bedolaga-customer.ts
 src/integrations/customers.ts
 src/integrations/remnawave.ts
 src/integrations/tgexport.ts
+src/panel/assistant.ts
 src/panel/context.ts
 src/panel/errors.ts
 src/panel/helpers.ts
@@ -139,6 +142,7 @@ src/panel/kbfiles.ts
 src/panel/live.ts
 src/panel/permissions.ts
 src/panel/routes/ai.ts
+src/panel/routes/assistant.ts
 src/panel/routes/conversations.ts
 src/panel/routes/customers.ts
 src/panel/routes/inbox.ts
@@ -162,6 +166,7 @@ src/shared/confidence.ts
 src/shared/conversation-order.ts
 tsconfig.web.json
 web/e2e/a11y.e2e.ts
+web/e2e/assistant.e2e.ts
 web/e2e/client.e2e.ts
 web/e2e/core.e2e.ts
 web/e2e/helpers.ts
@@ -178,6 +183,17 @@ web/src/app/shell.module.css
 web/src/app/useGlobalKeys.ts
 web/src/demo/seed.ts
 web/src/demo/sim.ts
+web/src/features/assistant/ActivityPanel.tsx
+web/src/features/assistant/AnswersPanel.tsx
+web/src/features/assistant/AssistantScreen.tsx
+web/src/features/assistant/ExpertPanel.tsx
+web/src/features/assistant/ModeSheet.tsx
+web/src/features/assistant/PauseControls.tsx
+web/src/features/assistant/TryPanel.tsx
+web/src/features/assistant/VoicePanel.tsx
+web/src/features/assistant/WrongSheet.tsx
+web/src/features/assistant/assistant.module.css
+web/src/features/assistant/fields.tsx
 web/src/features/chats/ChatList.tsx
 web/src/features/chats/ChatRow.tsx
 web/src/features/chats/ChatsScreen.tsx
@@ -191,7 +207,6 @@ web/src/features/device/DeviceScreen.tsx
 web/src/features/device/device.module.css
 web/src/features/live/ConnectionLine.tsx
 web/src/features/live/LiveBar.tsx
-web/src/features/live/LiveSummary.tsx
 web/src/features/live/SignIn.tsx
 web/src/features/live/live.module.css
 web/src/features/media/ImageEditor.tsx
@@ -207,6 +222,7 @@ web/src/features/thread/DraftCard.tsx
 web/src/features/thread/Feed.tsx
 web/src/features/thread/Thread.tsx
 web/src/features/thread/thread.module.css
+web/src/features/today/LiveToday.tsx
 web/src/features/today/Today.tsx
 web/src/features/today/today.module.css
 web/src/features/workspace/FilterSheet.tsx
@@ -221,6 +237,10 @@ web/src/i18n/ru.test.ts
 web/src/i18n/ru.ts
 web/src/lib/actions/chat.ts
 web/src/lib/actions/toasts.ts
+web/src/lib/assistant/assistant.test.ts
+web/src/lib/assistant/draft.ts
+web/src/lib/assistant/model.ts
+web/src/lib/assistant/store.ts
 web/src/lib/client/client.test.ts
 web/src/lib/client/data.ts
 web/src/lib/client/extend.ts
