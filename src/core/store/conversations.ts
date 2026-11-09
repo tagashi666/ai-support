@@ -1,6 +1,7 @@
 import type { Store } from '../store.js';
 import type { Channel, Conversation, SourceAccount } from './types.js';
 import { CHANNEL_IDS, CHANNELS } from '../channels.js';
+import { countNeedsHuman } from '../attention.js';
 
 // Идентификаторы каналов — константы справочника, не ввод: можно вставить в SQL.
 const TELEGRAM_CHANNELS_SQL = CHANNEL_IDS.filter((id) => CHANNELS[id].telegram).map((id) => `'${id}'`).join(',');
@@ -399,16 +400,12 @@ export class ConversationRepo {
     this.setState(key, String(Date.now()));
   }
 
-  /** Диалоги без единого ответа — для сводки в уведомлениях. */
+  /**
+   * «Ждут человека» (план редизайна, 7.1 п.9): все диалоги в состоянии
+   * needs_human — и свои, и у коллег, одинаково для всех; скрытые не входят.
+   * То же число — totals.waiting в /api/stats и counts.waiting в /api/inbox.
+   */
   waitingCount(this: Store): number {
-    return (
-      this.db
-        .prepare(
-          `SELECT COUNT(*) AS n FROM conversation
-            WHERE first_response_at IS NULL AND last_inbound_at IS NOT NULL
-              AND status NOT IN ('closed','resolved') AND hidden_at IS NULL`,
-        )
-        .get() as { n: number }
-    ).n;
+    return countNeedsHuman(this.db);
   }
 }

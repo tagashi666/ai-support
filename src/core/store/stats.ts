@@ -1,4 +1,5 @@
 import type { Store } from '../store.js';
+import { countNeedsHuman } from '../attention.js';
 
 /** Статистика панели и статистические периоды. */
 export class StatsRepo {
@@ -29,26 +30,18 @@ export class StatsRepo {
     const one = <T>(sql: string, ...params: unknown[]): T => this.db.prepare(sql).get(...(params as [])) as T;
     const all = <T>(sql: string, ...params: unknown[]): T[] => this.db.prepare(sql).all(...(params as [])) as T[];
 
-    const totals = one<{ total: number; open: number; escalated: number; suspicious: number; waiting: number; handoff: number }>(
+    // Итоги — без скрытых диалогов: их оператор убрал из работы сам.
+    // waiting — «Ждут человека»: все needs_human по общей функции src/shared/attention.ts.
+    const counted = one<{ total: number; open: number; escalated: number; suspicious: number; handoff: number }>(
       `SELECT COUNT(*) AS total,
               COALESCE(SUM(CASE WHEN status NOT IN ('closed','resolved') THEN 1 ELSE 0 END), 0) AS open,
               COALESCE(SUM(escalated), 0) AS escalated,
               COALESCE(SUM(suspicious), 0) AS suspicious,
-              COALESCE(SUM(CASE WHEN status NOT IN ('closed','resolved') AND last_inbound_at IS NOT NULL AND (
-                NOT EXISTS (
-                  SELECT 1 FROM message m
-                   WHERE m.conversation_id = conversation.id AND m.direction = 'out'
-                     AND m.created_at >= conversation.last_inbound_at
-                )
-                OR (handoff_at IS NOT NULL AND NOT EXISTS (
-                  SELECT 1 FROM message human
-                   WHERE human.conversation_id = conversation.id AND human.direction = 'out'
-                     AND human.author = 'agent' AND human.created_at > conversation.handoff_at
-                ))
-              ) THEN 1 ELSE 0 END), 0) AS waiting,
               COALESCE(SUM(CASE WHEN handoff_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS handoff
-         FROM conversation`,
+         FROM conversation
+        WHERE hidden_at IS NULL`,
     );
+    const totals = { ...counted, waiting: countNeedsHuman(this.db) };
 
     const liveCte = `WITH live AS (
       SELECT conversation_id, MIN(created_at) AS started_at

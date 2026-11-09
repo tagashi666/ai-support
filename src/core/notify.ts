@@ -133,7 +133,7 @@ export class Notifier {
     if (details.draft) lines.push('', `<b>AI предлагает:</b> ${escapeHtml(cut(details.draft, 400))}`);
 
     const waiting = this.store.waitingCount();
-    if (waiting > 1) lines.push('', `Всего без ответа: ${waiting}`);
+    if (waiting > 1) lines.push('', `Ждут человека: ${waiting}`);
 
     const url = this.link(conversation);
     if (url) lines.push('', `<a href="${url}">Открыть диалог</a>`);

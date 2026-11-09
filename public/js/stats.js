@@ -111,7 +111,7 @@ export async function loadStats() {
     <section class="stats-overview" aria-label="Ключевые показатели">
       <div class="metric-lead"><span>Медиана первого ответа</span><strong>${fmtDur(s.medianFirstResponseMs)}</strong><small>p90 ${fmtDur(s.p90FirstResponseMs)} · ${s.answered} диалогов с ответом</small></div>
       <div class="metric-list">
-        <div><span>Ждут ответа</span><b>${s.totals.waiting ?? 0}</b><small>${s.totals.open ?? 0} открыто</small></div>
+        <div><span>Ждут человека</span><b>${s.totals.waiting ?? 0}</b><small>${s.totals.open ?? 0} открыто</small></div>
         <div><span>Сообщения клиентов</span><b>${incoming}</b><small>${perDay} в день · ${outgoing} ответов</small></div>
         <div><span>Автоматизация</span><b>${share}</b><small>AI ${s.aiReplies ?? 0} · оператор ${s.humanReplies ?? 0}</small></div>
         <div><span>Решено</span><b>${s.period.resolved ?? 0}</b><small>из ${s.period.conversations ?? 0} новых диалогов</small></div>
