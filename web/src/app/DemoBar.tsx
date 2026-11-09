@@ -7,6 +7,9 @@ import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import { Option, Sheet, sheetStyles } from '@/ui/Sheet';
 import { Tabs } from '@/ui/Tabs';
+import { SignIn } from '@/features/live/SignIn';
+import { readToken } from '@/lib/live/api';
+import { setMode } from '@/lib/live/store';
 import s from './shell.module.css';
 
 const STATES: readonly { value: DemoState; label: Key }[] = [
@@ -23,6 +26,8 @@ const STATES: readonly { value: DemoState; label: Key }[] = [
  */
 export function DemoBar(): JSX.Element {
   const [open, setOpen] = useState(false);
+  const [signIn, setSignIn] = useState(false);
+  const toLive = (): void => { if (readToken()) setMode('live'); else setSignIn(true); };
   const chat = openChat.value;
   return (
     <div class={s.demo}>
@@ -32,8 +37,14 @@ export function DemoBar(): JSX.Element {
         <Button size="sm" variant="secondary" icon="plus" onClick={demoIncoming}>
           <span class={s.long}>{t('demo.incoming')}</span><span class={s.short}>{t('demo.incomingShort')}</span>
         </Button>
+        <Button size="sm" variant="quiet" icon="lock" onClick={toLive}>
+          <span class={s.long}>{t('live.toLive')}</span><span class={s.short}>{t('live.toLiveShort')}</span>
+        </Button>
         <Button size="sm" variant="quiet" icon="more" label={t('demo.open')} aria-haspopup="dialog" onClick={() => setOpen(true)} />
       </span>
+      <Sheet open={signIn} onClose={() => setSignIn(false)} title={t('login.title')}>
+        <SignIn inSheet onDone={() => setSignIn(false)} />
+      </Sheet>
       <Sheet open={open} onClose={() => setOpen(false)} title={t('demo.title')}>
         <p class={sheetStyles.text}>{t('demo.text')} {t('demo.incomingHint')}</p>
         <Button variant="primary" icon="plus" onClick={() => { demoIncoming(); setOpen(false); }}>{t('demo.incoming')}</Button>

@@ -2,6 +2,7 @@ import type { JSX } from 'preact';
 import { ME } from '@/demo/seed';
 import { t, type Key } from '@/i18n/ru';
 import { href, navigate, type Route, type SectionKey } from '@/lib/router';
+import { bootstrap, liveMine, mode } from '@/lib/live/store';
 import { pausedUntil, waitingYou } from '@/lib/store/state';
 import { Avatar } from '@/ui/Avatar';
 import { Icon, type IconName } from '@/ui/Icon';
@@ -43,8 +44,11 @@ const isCurrent = (target: Target, current: Route): boolean =>
 /** Ссылка-раздел: настоящая ссылка (открыть в новой вкладке можно), переход — без перезагрузки. */
 function NavLink({ item, current, class: cls, iconSize }: { item: Item; current: Route; class?: string; iconSize: number }): JSX.Element {
   const route = routeOf(item.target);
-  const waiting = waitingYou.value.length;
-  const paused = pausedUntil.value !== null;
+  const live = mode.value === 'live';
+  // Бейдж «Диалогов» — всегда «Ждут вас» (7.1 п.9): в живом режиме — число сервера.
+  const waiting = live ? liveMine.value : waitingYou.value.length;
+  const ideas = live ? bootstrap.value?.counts.ideas ?? 0 : 7;
+  const paused = !live && pausedUntil.value !== null;
   return (
     <a
       class={cls}
@@ -59,7 +63,7 @@ function NavLink({ item, current, class: cls, iconSize }: { item: Item; current:
       <span class={s.railIcon}>
         <Icon name={item.icon} size={iconSize} />
         {item.target === 'chats' && waiting > 0 && <span class={s.badge}>{waiting}</span>}
-        {item.target === 'knowledge' && <span class={s.badge} data-tone="quiet">7</span>}
+        {item.target === 'knowledge' && ideas > 0 && <span class={s.badge} data-tone="quiet">{ideas}</span>}
         {item.target === 'assistant' && paused && <span class={s.dot} />}
       </span>
       <span>{t(item.label)}</span>

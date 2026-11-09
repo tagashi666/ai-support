@@ -47,6 +47,7 @@ public/js/thread.js
 public/ui-v3.css
 scripts/aitest.ts
 scripts/baretest.ts
+scripts/devlive.ts
 scripts/host-updater.sh
 scripts/inboxtest.ts
 scripts/install-host-updater.sh
@@ -170,6 +171,12 @@ web/src/features/chats/StatusLine.tsx
 web/src/features/chats/chats.module.css
 web/src/features/client/ClientPanel.tsx
 web/src/features/client/client.module.css
+web/src/features/live/ConnectionLine.tsx
+web/src/features/live/LiveBar.tsx
+web/src/features/live/LiveChats.tsx
+web/src/features/live/LiveSummary.tsx
+web/src/features/live/SignIn.tsx
+web/src/features/live/live.module.css
 web/src/features/placeholder/Placeholder.tsx
 web/src/features/placeholder/placeholder.module.css
 web/src/features/thread/Composer.tsx
@@ -187,6 +194,14 @@ web/src/lib/confidence.test.ts
 web/src/lib/format/format.test.ts
 web/src/lib/format/format.ts
 web/src/lib/labels.ts
+web/src/lib/live/api.ts
+web/src/lib/live/client.test.ts
+web/src/lib/live/client.ts
+web/src/lib/live/inbox.test.ts
+web/src/lib/live/inbox.ts
+web/src/lib/live/labels.test.ts
+web/src/lib/live/labels.ts
+web/src/lib/live/store.ts
 web/src/lib/media.ts
 web/src/lib/router.ts
 web/src/lib/store/order.test.ts

@@ -108,11 +108,53 @@ export const ru = {
   'reason.windowClosed': 'Ответить в Telegram уже нельзя',
   'reason.resolved': 'Решён {when}',
   'reason.waitsFor': 'ждёт {for}',
+  'reason.handoff': 'Передан человеку',
+  'reason.urgent': 'Срочная заявка',
+  'reason.check': 'Проверьте диалог',
 
   // Превью: кто писал последним
   'preview.you': 'Вы:',
   'preview.assistant': 'Помощник:',
   'preview.draft': 'Черновик:',
+  'preview.operator': 'Оператор:',
+  'preview.system': 'Служебное:',
+  'preview.attachment': 'Вложение',
+
+  // Живой список (этап 2): данные сервера, только чтение
+  'live.badge': 'Только чтение',
+  'live.text': 'Живой список с сервера. Диалог открывается в классической панели.',
+  'live.toDemo': 'Прототип',
+  'live.toLive': 'Войти по ключу',
+  'live.toLiveShort': 'Войти',
+  'live.signOut': 'Выйти',
+  'live.openClassic': 'Открыть в классической',
+  'live.threadHint': 'Диалог откроется в классической панели. Здесь пока только список.',
+  'live.noName': 'Без имени · №{id}',
+  'live.loading': 'Загружаем список…',
+  'live.error': 'Список не загрузился',
+  'live.errorHint': 'Сервер не ответил. Попробуйте ещё раз.',
+  'live.code': 'Код: {code}',
+  'live.retry': 'Повторить',
+  'live.waitingHuman': 'Ждут человека',
+  'live.rightsChanged': 'Ваши права изменились',
+  'live.todayLater': '«Сегодня» на живых данных появится позже. Пока — сводка списка.',
+
+  // Связь с сервером (6.14): в норме строки нет
+  'connection.restoring': 'Восстанавливаем связь…',
+  'connection.offline': 'Нет связи · данные на {time}',
+  'connection.syncing': 'Связь есть, обновляем…',
+  'connection.retry': 'Повторить',
+
+  // Вход по ключу
+  'login.title': 'Вход по ключу',
+  'login.again': 'Войдите снова',
+  'login.expired': 'Ключ входа перестал действовать (его сменили или отключили).',
+  'login.hint': 'Тот же ключ, что и для классической панели.',
+  'login.key': 'Ключ входа',
+  'login.submit': 'Войти',
+  'login.wrong': 'Ключ не подошёл. Проверьте его и попробуйте снова.',
+  'login.network': 'Нет связи с сервером. Попробуйте ещё раз.',
+  'login.toDemo': 'Посмотреть прототип',
 
   // Каналы
   'channel.telegram': 'Telegram',
