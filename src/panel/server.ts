@@ -27,7 +27,11 @@ import { register as registerSettings } from './routes/settings.js';
 import { register as registerNodes } from './routes/nodes.js';
 import { register as registerKnowledge } from './routes/knowledge.js';
 import { register as registerInterfaceKb } from './routes/interface-kb.js';
+import { register as registerInbox } from './routes/inbox.js';
+import { createLiveHub, frameFor } from './live.js';
+import { apiError } from './errors.js';
 import { registerWebApp } from './webapp.js';
+import { DENY_BY_DEFAULT, permissionFor, registeredApiRoutes, routeSample } from './permissions.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Панель лежит в корне проекта, а этот файл — в src/panel и dist/panel.
@@ -143,7 +147,7 @@ export async function startWeb(deps: WebDeps) {
     entry.n += 1;
     hits.set(request.ip, entry);
     if (entry.n > 600) {
-      return reply.code(429).header('retry-after', '60').send({ error: 'Слишком много запросов' });
+      return reply.code(429).header('retry-after', '60').send(apiError('rate_limited', 'Слишком много запросов'));
     }
   });
 
@@ -241,9 +245,14 @@ export async function startWeb(deps: WebDeps) {
     if (count <= 1) socketIps.delete(ip);
     else socketIps.set(ip, count - 1);
   };
+  // Сокеты новой панели (?v=2): только кадры с seq и явной проекцией строки.
+  // Классика на любой кадр без поля conversation перечитывает весь список
+  // (public/js/live.js), поэтому новые кадры ей не шлём, а старые — новой.
+  const socketsV2 = new WeakSet<WebSocket>();
   const broadcast = (frame: unknown, permission: Permission = 'conversation:read'): void => {
     const payload = JSON.stringify(frame);
     for (const socket of sockets) {
+      if (socketsV2.has(socket)) continue;
       const actor = operations.actorByKey(socketActors.get(socket) ?? '');
       if (!actor || !operations.can(actor, 'conversation:read')) {
         socket.close(1008, 'Permission revoked');
@@ -255,6 +264,19 @@ export async function startWeb(deps: WebDeps) {
       if (socket.readyState === socket.OPEN) socket.send(payload);
     }
   };
+
+  const live = createLiveHub(store.db, (entry, epoch) => {
+    for (const socket of sockets) {
+      if (!socketsV2.has(socket)) continue;
+      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
+      if (!actor || !operations.can(actor, 'conversation:read')) {
+        socket.close(1008, 'Permission revoked');
+        continue;
+      }
+      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frameFor(entry, epoch, actor.key)));
+    }
+  });
+  live.watcher.start();
 
   const expected = Buffer.from(config.panelToken);
   // Сравнение за постоянное время: обычное === утекает длину общего префикса.
@@ -343,72 +365,15 @@ export async function startWeb(deps: WebDeps) {
     return operations.authenticate(token);
   };
 
-  // Чтение, доступное любому оператору с conversation:read. Раньше это было
-  // правилом по умолчанию для всех GET, а любой неописанный POST получал
-  // conversation:status — новый маршрут молча открывался агенту.
-  const CONVERSATION_READ_ROUTES = /^\/api\/(?:conversations(?:\/\d+(?:\/(?:avatar|customer|profile))?)?|inbox\/meta|me|search|attachments\/\d+(?:\/lottie)?|health|ticket)(?:\?|$)/;
 
-  const permissionFor = (method: string, url: string): Permission | undefined => {
-    if (url.startsWith('/api/roles')) return 'roles:manage';
-    if (url.startsWith('/api/operators')) return method === 'GET' ? 'team:read' : 'operators:manage';
-    if (url.startsWith('/api/operator-stats')) return 'operator_stats:read';
-    if (method === 'POST' && /^\/api\/attachments\/\d+\/retry(?:\?|$)/.test(url)) return 'conversation:read';
-    if (url.startsWith('/api/audit')) return 'audit:read';
-    if (url.startsWith('/api/diagnostics')) return 'diagnostics:read';
-    if (url.startsWith('/api/update')) return 'settings:update';
-    if (url.startsWith('/api/sources')) return 'settings:sources';
-    if (url.startsWith('/api/learning')) return 'knowledge:review';
-    if (url.startsWith('/api/ai/keys') || url.startsWith('/api/ai/models') || url.startsWith('/api/ai/ping')) {
-      return 'settings:ai_tools';
-    }
-    if (url.startsWith('/api/ai/try')) return 'settings:ai_tools';
-    if (url.startsWith('/api/stats/reset')) return 'stats:reset';
-    if (url.startsWith('/api/stats')) return 'stats:read';
-    if (url.startsWith('/api/inbox/folders') && method !== 'GET') return 'settings:sources';
-    if (url.startsWith('/api/sla') && method !== 'GET') return 'queue:manage';
-    if (url.startsWith('/api/queue') || url.startsWith('/api/sla')) return 'queue:read';
-    if (url.startsWith('/api/filters')) return 'queue:read';
-    if (url.startsWith('/api/templates') && method !== 'GET') return 'templates:manage';
-    if (url.startsWith('/api/templates')) return 'templates:read';
-    if (url.startsWith('/api/suggestions')) return 'conversation:reply';
-    if (url.startsWith('/api/interface-kb')) return method === 'GET' || method === 'HEAD' ? 'knowledge:read' : 'knowledge:manage';
-    if (url.startsWith('/api/kb/mine')) return 'knowledge:mine';
-    if (method === 'GET' && /^\/api\/kb\/draft(?:\/|\?|$)/.test(url)) return 'knowledge:review';
-    if (url.startsWith('/api/kb') && method !== 'GET') return 'knowledge:manage';
-    if (url.startsWith('/api/kb')) return 'knowledge:read';
-    if (/^\/api\/conversations\/\d+\/bedolaga\/subscriptions\/\d+\/extend(?:\?|$)/.test(url)) {
-      return 'bedolaga:extend';
-    }
-    if (/^\/api\/conversations\/\d+\/bedolaga\/customer(?:\?|$)/.test(url)) {
-      return 'bedolaga:view';
-    }
-    if (url.includes('/subscription/action')) return 'bedolaga:devices';
-    if (url.includes('/subscription')) return 'bedolaga:view';
-    if (/\/conversations\/\d+\/attachments(?:\?|$)/.test(url)) return 'conversation:attachments';
-    if (/\/conversations\/\d+\/reply(?:\?|$)/.test(url)) return 'conversation:reply';
-    if (/\/conversations\/\d+\/(?:note|profile\/notes)(?:\?|$)/.test(url)) return 'conversation:notes';
-    if (/\/conversations\/\d+\/(?:read|presence)(?:\?|$)/.test(url)) return 'conversation:read';
-    if (/\/conversations\/\d+\/customer\/refresh(?:\?|$)/.test(url)) return 'conversation:profile';
-    if (/\/conversations\/\d+\/profile(?:\?|$)/.test(url) && method !== 'GET') return 'conversation:profile';
-    if (/\/conversations\/\d+\/(?:state|engage|release)(?:\?|$)/.test(url)) return 'conversation:status';
-    if (url.startsWith('/api/settings/services/')) return 'settings:services';
-    if (url.startsWith('/api/settings/test-alert')) return 'settings:alerts';
-    if (url.startsWith('/api/nodes')) return 'settings:nodes';
-    if (url === '/api/settings' || url.startsWith('/api/settings?')) return 'settings:read';
-    if ((method === 'GET' || method === 'HEAD') && CONVERSATION_READ_ROUTES.test(url)) return 'conversation:read';
-    return undefined;
-  };
-
-  // Маршрут без правила выше доступен только тому, кто может менять роли.
-  // Ошибка в эту сторону видна сразу (403 у оператора), а не через утечку.
-  const DENY_BY_DEFAULT: Permission = 'roles:manage';
-
+  // Каждый маршрут /api записывается: scripts/sectest.ts падает на тех, что не
+  // описаны в permissionFor (предупреждение в журнале осталось для запуска).
   app.addHook('onRoute', (route) => {
     if (!route.url.startsWith('/api')) return;
-    const sample = route.url.replace(/:[A-Za-z]+/g, '1');
     for (const method of [route.method].flat()) {
       if (method === 'HEAD' || method === 'OPTIONS') continue;
-      if (!permissionFor(method, sample)) {
+      registeredApiRoutes.push({ method, url: route.url });
+      if (!permissionFor(method, routeSample(route.url))) {
         log.warn(`Маршрут ${method} ${route.url} не описан в permissionFor — доступен только с правом ${DENY_BY_DEFAULT}`);
       }
     }
@@ -424,7 +389,7 @@ export async function startWeb(deps: WebDeps) {
       return reply
         .code(429)
         .header('retry-after', String(Math.ceil((until - Date.now()) / 1000)))
-        .send({ error: 'Слишком много неудачных попыток. Подождите.' });
+        .send(apiError('rate_limited', 'Слишком много неудачных попыток. Подождите.'));
     }
 
     // Билет годится только для чтения вложений и подписки на события. Провал
@@ -450,24 +415,24 @@ export async function startWeb(deps: WebDeps) {
       if (grant) { actors.set(request, grant.actor); return; }
       const actor = identify(header);
       if (actor) { actors.set(request, actor); return; }
-      return reply.code(401).send({ error: 'Нужен действующий билет' });
+      return reply.code(401).send(apiError('unauthorized', 'Нужен действующий билет'));
     }
 
     const actor = identify(header);
     if (!actor) {
       noteFailure(ip);
-      return reply.code(401).send({ error: 'Нужен токен панели' });
+      return reply.code(401).send(apiError('unauthorized', 'Нужен токен панели'));
     }
     noteSuccess(ip);
     actors.set(request, actor);
     if (!operations.can(actor, permissionFor(request.method, request.url) ?? DENY_BY_DEFAULT)) {
-      return reply.code(403).send({ error: 'Недостаточно прав для этого действия' });
+      return reply.code(403).send(apiError('permission', 'Недостаточно прав для этого действия'));
     }
   });
 
   // Маршруты по областям. Все регистрируются после хуков авторизации выше:
   // onRoute проверяет карту прав, onRequest — токен и право на маршрут.
-  const ctx = createRouteContext(deps, { operations, updates, sources, actorOf, broadcast });
+  const ctx = createRouteContext(deps, { operations, updates, sources, actorOf, broadcast, live });
   registerConversations(app, ctx);
   registerMedia(app, ctx);
   registerReplies(app, ctx);
@@ -481,6 +446,7 @@ export async function startWeb(deps: WebDeps) {
   registerNodes(app, ctx);
   registerKnowledge(app, ctx);
   registerInterfaceKb(app, ctx);
+  registerInbox(app, ctx);
 
   // --- билет для медиа и WS -----------------------------------------
 
@@ -522,6 +488,11 @@ export async function startWeb(deps: WebDeps) {
       return;
     }
     sockets.add(socket);
+    if ((request.query as Record<string, unknown> | undefined)?.v === '2') {
+      socketsV2.add(socket);
+      // Текущий номер кадра: по нему панель решает, нужен ли догон /api/events.
+      socket.send(JSON.stringify({ type: 'hello', seq: live.events.seq, epoch: live.events.epoch }));
+    }
     socketOwners.set(socket, request.ip);
     socketActors.set(socket, grant.actor.key);
     socketExpires.set(socket, grant.until);
@@ -541,17 +512,29 @@ export async function startWeb(deps: WebDeps) {
         socket.ping();
         // Protocol ping браузеру не виден. Кадр tick позволяет панели заметить
         // тихо умерший сокет (сон, смена сети, iOS в фоне) и переподключиться.
-        socket.send(tickFrame());
+        socket.send(socketsV2.has(socket)
+          ? JSON.stringify({ type: 'tick', at: Date.now(), seq: live.events.seq, epoch: live.events.epoch })
+          : tickFrame());
       } else removeSocket(socket);
     }
   }, 20_000);
   socketHeartbeat.unref();
   app.addHook('onClose', async () => {
     clearInterval(socketHeartbeat);
+    live.watcher.stop();
     for (const socket of sockets) socket.close();
     sockets.clear();
     socketIps.clear();
   });
+
+  // Любое изменение диалога — повод пересчитать его строку в новой панели.
+  const touch = (conversation: { id: number }): void => live.touch([conversation.id]);
+  store.on('message', ({ conversation }) => touch(conversation));
+  store.on('message_updated', ({ conversation }) => touch(conversation));
+  store.on('message_deleted', ({ conversation }) => touch(conversation));
+  store.on('conversation_deleted', touch);
+  store.on('conversation', touch);
+  store.on('suggestion', ({ conversation }) => touch(conversation));
 
   store.on('message', ({ conversation, message }) =>
     broadcast({

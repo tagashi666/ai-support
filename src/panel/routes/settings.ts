@@ -8,7 +8,7 @@ import { channelAvailability } from '../helpers.js';
 
 /** Настройки, внешние сервисы, источники и центр обновлений. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
-  const { store, outbox, notifier, nodes, remnawave, remnawaves, operations, updates, sources, actorOf, businessConnectionState } = ctx;
+  const { store, outbox, notifier, nodes, remnawave, remnawaves, operations, updates, sources, actorOf, businessConnectionState, live } = ctx;
 
   // --- настройки ---------------------------------------------------------
 
@@ -63,6 +63,8 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     }
     const result = applySettings(store, values);
     if (!result.ok) return reply.code(400).send({ error: result.error });
+    // Смена режима помощника меняет состояние сразу всех строк списка.
+    live.settingsChanged(Object.keys(values), { aiMode: runtime.aiMode, minConfidence: runtime.minConfidence });
     return { ok: true, runtime };
   });
 

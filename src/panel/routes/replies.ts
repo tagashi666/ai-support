@@ -5,6 +5,7 @@ import { linkSuggestionAnswer, syncExamples } from '../../ai/examples.js';
 import { inspectUpload, readMediaFile, removeMediaFile, saveUploadedMedia } from '../../core/media.js';
 import { limitUploadBytes, UploadTooLargeError } from '../helpers.js';
 import type { RouteContext } from '../context.js';
+import { apiError } from '../errors.js';
 
 /** Ответ оператора: текст и загрузка файлов. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
@@ -18,17 +19,17 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     '/api/conversations/:id/reply',
     async (request, reply) => {
       const text = request.body?.text?.trim();
-      if (!text) return reply.code(400).send({ error: 'Пустое сообщение' });
+      if (!text) return reply.code(400).send(apiError('bad_request', 'Пустое сообщение'));
       const conversationId = Number(request.params.id);
       const actor = actorOf(request);
       const claimed = operations.claim(conversationId, actor);
-      if (!claimed.ok) return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}` });
+      if (!claimed.ok) return reply.code(409).send(apiError('locked_by_other', `Диалог уже ведёт ${claimed.owner}`));
       const responseMs = operations.pendingResponseMs(conversationId);
       const suggestionId = request.body?.suggestionId;
       if (suggestionId !== undefined) {
         const suggestion = store.getSuggestion(suggestionId);
         if (!suggestion || suggestion.conversation_id !== conversationId) {
-          return reply.code(400).send({ error: 'Предложка не относится к этому диалогу' });
+          return reply.code(400).send(apiError('bad_request', 'Предложка не относится к этому диалогу'));
         }
       }
       try {
@@ -47,10 +48,10 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         operations.recordActivity(actor, 'reply', conversationId, responseMs);
         return { ok: true, message: sent.message };
       } catch (err) {
-        if (err instanceof WindowClosedError) return reply.code(409).send({ error: err.message });
-        if (err instanceof NoSenderError) return reply.code(501).send({ error: err.message });
+        if (err instanceof WindowClosedError) return reply.code(409).send(apiError('window_closed', err.message));
+        if (err instanceof NoSenderError) return reply.code(501).send(apiError('no_sender', err.message));
         log.error('Отправка не удалась', err);
-        return reply.code(502).send({ error: `Отправить не удалось: ${(err as Error).message}` });
+        return reply.code(502).send(apiError('upstream', `Отправить не удалось: ${(err as Error).message}`));
       }
     },
   );
@@ -60,13 +61,13 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     async (request, reply) => {
       const conversationId = Number(request.params.id);
       const conversation = store.getConversation(conversationId);
-      if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
+      if (!conversation) return reply.code(404).send(apiError('not_found', 'Диалог не найден'));
       if (!outbox.supportsAttachments(conversation.channel)) {
-        return reply.code(501).send({ error: 'Этот канал принимает только текстовые ответы' });
+        return reply.code(501).send(apiError('bad_request', 'Этот канал принимает только текстовые ответы'));
       }
       const actor = actorOf(request);
       const claimed = operations.claim(conversationId, actor);
-      if (!claimed.ok) return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}` });
+      if (!claimed.ok) return reply.code(409).send(apiError('locked_by_other', `Диалог уже ведёт ${claimed.owner}`));
       const responseMs = operations.pendingResponseMs(conversationId);
 
       const decodeHeader = (name: string, fallback = ''): string => {
@@ -83,7 +84,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       const batchIndex = Number(request.headers['x-upload-index']);
       if (!/^[A-Za-z0-9_-]{8,80}$/.test(batchId) || !Number.isInteger(batchSize) || batchSize < 1 || batchSize > 10
           || !Number.isInteger(batchIndex) || batchIndex < 0 || batchIndex >= batchSize) {
-        return reply.code(400).send({ error: 'В одной отправке разрешено от 1 до 10 файлов' });
+        return reply.code(400).send(apiError('bad_request', 'В одной отправке разрешено от 1 до 10 файлов'));
       }
       const batchKey = `${actor.key}:${batchId}`;
       const now = Date.now();
@@ -92,16 +93,16 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       }
       const batch = uploadBatches.get(batchKey) ?? { seen: new Set<number>(), pending: new Set<number>(), at: now };
       if (batch.seen.has(batchIndex) || batch.pending.has(batchIndex)) {
-        return reply.code(409).send({ error: 'Этот файл уже был принят' });
+        return reply.code(409).send(apiError('bad_request', 'Этот файл уже был принят'));
       }
       batch.at = now; uploadBatches.set(batchKey, batch);
 
       const declaredBytes = Number(request.headers['content-length']);
       if (Number.isFinite(declaredBytes) && declaredBytes > config.mediaMaxFileBytes) {
-        return reply.code(413).send({ error: 'Максимальный размер файла — 45 МБ' });
+        return reply.code(413).send(apiError('bad_request', 'Максимальный размер файла — 45 МБ'));
       }
       if (store.mediaBytes() >= config.mediaMaxTotalBytes) {
-        return reply.code(507).send({ error: 'Хранилище вложений заполнено' });
+        return reply.code(507).send(apiError('bad_request', 'Хранилище вложений заполнено'));
       }
 
       let saved: Awaited<ReturnType<typeof saveUploadedMedia>> | undefined;
@@ -110,12 +111,12 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         saved = await saveUploadedMedia(limitUploadBytes(request.body, config.mediaMaxFileBytes), config.mediaMaxFileBytes);
         if (store.mediaBytes() + saved.bytes > config.mediaMaxTotalBytes) {
           await removeMediaFile(saved.fileRef);
-          return reply.code(507).send({ error: 'Хранилище вложений заполнено' });
+          return reply.code(507).send(apiError('bad_request', 'Хранилище вложений заполнено'));
         }
         const inspected = inspectUpload(saved.prefix, declaredMime, original);
         if (inspected.dangerous && request.headers['x-dangerous-confirmed'] !== 'yes') {
           await removeMediaFile(saved.fileRef);
-          return reply.code(409).send({ error: 'Для потенциально исполняемого файла требуется явное подтверждение' });
+          return reply.code(409).send(apiError('bad_request', 'Для потенциально исполняемого файла требуется явное подтверждение'));
         }
         const bytes = await readMediaFile(saved.fileRef);
         const sent = await outbox.sendAttachment(
@@ -141,10 +142,10 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         return { ok: true, message: sent.message };
       } catch (err) {
         if (saved) await removeMediaFile(saved.fileRef);
-        if (err instanceof WindowClosedError) return reply.code(409).send({ error: err.message });
-        if (err instanceof UploadTooLargeError) return reply.code(413).send({ error: err.message });
+        if (err instanceof WindowClosedError) return reply.code(409).send(apiError('window_closed', err.message));
+        if (err instanceof UploadTooLargeError) return reply.code(413).send(apiError('bad_request', err.message));
         log.error('Отправка вложения не удалась', err);
-        return reply.code(502).send({ error: `Файл не отправлен: ${(err as Error).message}` });
+        return reply.code(502).send(apiError('upstream', `Файл не отправлен: ${(err as Error).message}`));
       } finally {
         batch.pending.delete(batchIndex);
       }

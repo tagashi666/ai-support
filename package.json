@@ -33,7 +33,7 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
     "smoke": "tsx scripts/smoke.ts",
     "selfcheck": "tsx src/cli/selfcheck.ts",
-    "test": "npm run -s test:web && node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/baretest.ts && node --import tsx scripts/mediatest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minishoptest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/lifecycletest.ts && node --import tsx scripts/sectest.ts && node --import tsx scripts/nexttest.ts && node --import tsx scripts/updatetest.ts && node --import tsx scripts/setuptest.ts",
+    "test": "npm run -s test:web && node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/baretest.ts && node --import tsx scripts/mediatest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minishoptest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/lifecycletest.ts && node --import tsx scripts/inboxtest.ts && node --import tsx scripts/sectest.ts && node --import tsx scripts/nexttest.ts && node --import tsx scripts/updatetest.ts && node --import tsx scripts/setuptest.ts",
     "test:web": "vitest run --config web/vite.config.ts",
     "kb:mine": "tsx src/cli/kbmine.ts",
     "rwprobe": "tsx src/cli/rwprobe.ts",

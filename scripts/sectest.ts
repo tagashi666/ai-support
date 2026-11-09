@@ -345,6 +345,17 @@ console.log('\n[ доступ к панели ]');
   });
   check('WebSocket отвергает чужой Origin', crossOriginCode === 1008, crossOriginCode);
 
+  // Правило 6 раздела 10 плана: каждый маршрут /api описан в permissionFor.
+  // Неописанный открыт только администратору (DENY_BY_DEFAULT), и оператор
+  // узнал бы об этом по 403 уже в работе.
+  const { permissionFor, registeredApiRoutes, routeSample } = await import('../src/panel/permissions.js');
+  const unmapped = registeredApiRoutes.filter((route) => !permissionFor(route.method, routeSample(route.url)));
+  check('все маршруты /api описаны в permissionFor', registeredApiRoutes.length > 50 && unmapped.length === 0,
+    unmapped.map((route) => `${route.method} ${route.url}`));
+  check('маршруты новой панели — с правом conversation:read',
+    ['/api/inbox', '/api/events', '/api/bootstrap'].every((url) => permissionFor('GET', url) === 'conversation:read'
+      && permissionFor('GET', `${url}?x=1`) === 'conversation:read'));
+
   await app.close(); db.close();
 }
 

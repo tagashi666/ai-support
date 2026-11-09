@@ -5,10 +5,11 @@ import { runtime } from '../../core/settings.js';
 import { queueAutoLearn, requeueAutoLearn } from '../../ai/mining.js';
 import { channelAvailability, decorate, livePendingSuggestion } from '../helpers.js';
 import type { RouteContext } from '../context.js';
+import { apiError } from '../errors.js';
 
 /** Диалоги: список, папки, история, прочтение, присутствие, удержание, заметки и статус. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
-  const { store, outbox, notifier, customers, onOpened, operations, actorOf, runJob } = ctx;
+  const { store, outbox, notifier, customers, onOpened, operations, actorOf, runJob, live } = ctx;
 
   // --- диалоги ---------------------------------------------------------
 
@@ -114,21 +115,32 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     return { ok: true, collaboration: operations.collaboration(id) };
   });
 
-  /** Lease не только останавливает AI, но и не даёт двум операторам ответить одновременно. */
-  app.post<{ Params: { id: string }; Body: { state?: string; force?: boolean } }>('/api/conversations/:id/engage', async (request, reply) => {
+  /**
+   * Lease не только останавливает AI, но и не даёт двум операторам ответить одновременно.
+   * `typing: true` (новая панель, 10.2 п.6) — только «человек печатает»: помощник
+   * молчит 45 с, а диалог не закрепляется, и коллега может его взять.
+   */
+  app.post<{ Params: { id: string }; Body: { state?: string; force?: boolean; typing?: boolean } }>('/api/conversations/:id/engage', async (request, reply) => {
     const id = Number(request.params.id);
-    if (!store.getConversation(id)) return reply.code(404).send({ error: 'Диалог не найден' });
+    if (!store.getConversation(id)) return reply.code(404).send(apiError('not_found', 'Диалог не найден'));
     const actor = actorOf(request);
+    if (request.body?.typing === true) {
+      store.markOperatorActive(id);
+      operations.presence(id, actor, 'typing');
+      return { ok: true, collaboration: operations.collaboration(id) };
+    }
     const force = request.body?.force === true && operations.can(actor, 'conversation:assign');
     const claimed = operations.claim(id, actor, force);
     if (!claimed.ok) {
-      return reply.code(409).send({ error: `Диалог уже ведёт ${claimed.owner}`, collaboration: operations.collaboration(id) });
+      return reply.code(409).send({ ...apiError('locked_by_other', `Диалог уже ведёт ${claimed.owner}`), collaboration: operations.collaboration(id) });
     }
     // В общий журнал engage не пишется (это heartbeat), поэтому захват
     // диалога, особенно принудительный, фиксируем отдельно.
     if (claimed.acquired) operations.audit(actor, 'conversation.claim', 'conversations', id, { force }, request.ip);
     operations.presence(id, actor, request.body?.state);
     store.markOperatorActive(id);
+    // Закрепление меняет секцию у всех, кто смотрит, а Store о нём не сообщает.
+    if (claimed.acquired) live.touch([id]);
     return { ok: true, collaboration: operations.collaboration(id) };
   });
 
@@ -136,7 +148,8 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const actor = actorOf(request);
     const force = request.body?.force === true && operations.can(actor, 'conversation:assign');
     const id = Number(request.params.id);
-    if (!operations.release(id, actor, force)) return reply.code(409).send({ error: 'Диалог закреплён за другим оператором' });
+    if (!operations.release(id, actor, force)) return reply.code(409).send(apiError('locked_by_other', 'Диалог закреплён за другим оператором'));
+    live.touch([id]);
     return { ok: true, collaboration: operations.collaboration(id) };
   });
 
@@ -157,22 +170,25 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     async (request, reply) => {
       const id = Number(request.params.id);
       const before = store.getConversation(id);
-      if (!before) return reply.code(404).send({ error: 'Диалог не найден' });
+      if (!before) return reply.code(404).send(apiError('not_found', 'Диалог не найден'));
       const { status, aiMode, escalated, handoff, hidden } = request.body ?? {};
       if (hidden !== undefined && typeof hidden !== 'boolean') {
-        return reply.code(400).send({ error: 'Некорректный флаг скрытия' });
+        return reply.code(400).send(apiError('bad_request', 'Некорректный флаг скрытия'));
       }
       if (status && !['open', 'pending', 'resolved'].includes(status)) {
-        return reply.code(400).send({ error: 'Неизвестный статус диалога' });
+        return reply.code(400).send(apiError('bad_request', 'Неизвестный статус диалога'));
       }
       if (aiMode !== undefined && !['inherit', 'off', 'shadow', 'suggest', 'auto'].includes(aiMode)) {
-        return reply.code(400).send({ error: 'Неизвестный режим AI' });
+        return reply.code(400).send(apiError('bad_request', 'Неизвестный режим AI'));
       }
       if (status) {
         try {
           await outbox.syncStatus(before, status as ConversationStatus);
         } catch (err) {
-          if (err instanceof StatusSyncError) return reply.code(err.statusCode).send({ error: err.message });
+          if (err instanceof StatusSyncError) {
+            const code = err.statusCode === 502 ? 'upstream' : err.statusCode === 503 ? 'no_sender' : 'bad_request';
+            return reply.code(err.statusCode).send(apiError(code, err.message));
+          }
           throw err;
         }
       }

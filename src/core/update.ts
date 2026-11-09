@@ -141,6 +141,16 @@ export class UpdateManager {
     }
   }
 
+  /**
+   * Признак новой версии из последней проверки, без сетевого вызова (для
+   * лёгкого старта панели). null — обновление выключено или проверки ещё не было.
+   */
+  cachedAvailability(): { available: boolean; latest: string | null } | null {
+    if (!config.update.enabled || !this.cached) return null;
+    const tag = this.cached.release?.tag_name ?? null;
+    return { available: Boolean(this.cached.usable && tag && isNewer(tag, version)), latest: tag?.replace(/^v/, '') ?? null };
+  }
+
   async state(force = false): Promise<UpdateState> {
     if (!config.update.enabled) {
       const progress = await this.progress();

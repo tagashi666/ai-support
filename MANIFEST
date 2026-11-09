@@ -48,6 +48,7 @@ public/ui-v3.css
 scripts/aitest.ts
 scripts/baretest.ts
 scripts/host-updater.sh
+scripts/inboxtest.ts
 scripts/install-host-updater.sh
 scripts/lifecycletest.ts
 scripts/mediatest.ts
@@ -90,6 +91,7 @@ src/cli/selfcheck.ts
 src/cli/setup.ts
 src/cli/setupfiles.ts
 src/config.ts
+src/core/attention.ts
 src/core/channels.ts
 src/core/db.ts
 src/core/fts.ts
@@ -126,11 +128,16 @@ src/integrations/customers.ts
 src/integrations/remnawave.ts
 src/integrations/tgexport.ts
 src/panel/context.ts
+src/panel/errors.ts
 src/panel/helpers.ts
+src/panel/inbox.ts
 src/panel/kbfiles.ts
+src/panel/live.ts
+src/panel/permissions.ts
 src/panel/routes/ai.ts
 src/panel/routes/conversations.ts
 src/panel/routes/customers.ts
+src/panel/routes/inbox.ts
 src/panel/routes/interface-kb.ts
 src/panel/routes/knowledge.ts
 src/panel/routes/media.ts
@@ -143,7 +150,10 @@ src/panel/routes/system.ts
 src/panel/routes/team.ts
 src/panel/server.ts
 src/panel/webapp.ts
+src/shared/api-types.ts
+src/shared/attention.ts
 src/shared/confidence.ts
+src/shared/conversation-order.ts
 tsconfig.web.json
 web/index.html
 web/public/favicon.svg

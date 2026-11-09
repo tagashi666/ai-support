@@ -10,6 +10,7 @@ import type { SourceManager } from '../core/sources.js';
 import type { Conversation, Store } from '../core/store.js';
 import type { UpdateManager } from '../core/update.js';
 import { runMining } from '../ai/mining.js';
+import type { LiveHub } from './live.js';
 import type { CustomerDirectory } from '../integrations/customers.js';
 import type { NodeState, RemnawaveClient } from '../integrations/remnawave.js';
 
@@ -43,6 +44,8 @@ export interface RouteContext extends Omit<WebDeps, 'remnawaves'> {
   sources: SourceManager;
   /** Оператор запроса; без авторизации (тесты, внутренние вызовы) — root. */
   actorOf(request: object): Actor;
+  /** Живые данные новой панели: журнал кадров и пересчёт строк списка. */
+  live: LiveHub;
   /** Кадр всем WS-подписчикам с правом `permission` (по умолчанию conversation:read). */
   broadcast(frame: unknown, permission?: Permission): void;
   /**
@@ -57,7 +60,7 @@ export interface RouteContext extends Omit<WebDeps, 'remnawaves'> {
 
 export function createRouteContext(
   deps: WebDeps,
-  parts: Pick<RouteContext, 'operations' | 'updates' | 'sources' | 'actorOf' | 'broadcast'>,
+  parts: Pick<RouteContext, 'operations' | 'updates' | 'sources' | 'actorOf' | 'broadcast' | 'live'>,
 ): RouteContext {
   const { store, bot } = deps;
   const { broadcast } = parts;
