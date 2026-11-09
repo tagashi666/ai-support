@@ -8,6 +8,7 @@ import type { BootstrapResponse, EventsResponse, InboxCounts, InboxResponse, Liv
 import { ApiError, clearToken, getJson, readToken, saveToken } from './api';
 import { LiveClient, type ConnectionState, type Position } from './client';
 import { applyFrames, emptyInbox, mergeSnapshot, ordered, type InboxState } from './inbox';
+import { onThreadFrame, openThreadId, syncThread } from '@/lib/workspace/thread';
 
 export type Mode = 'demo' | 'live';
 const MODE_KEY = 'next.mode';
@@ -129,7 +130,14 @@ export async function startLive(): Promise<void> {
       },
       reload: loadSnapshot,
       onFrames: enqueue,
-      onState: (state) => { connection.value = state; },
+      onState: (state) => {
+        const was = connection.peek();
+        connection.value = state;
+        // Связь вернулась: открытый диалог догоняет пропущенное (кадры ленты без seq).
+        const open = openThreadId.peek();
+        if (state === 'live' && was !== 'live' && open !== null) void syncThread(open);
+      },
+      onThread: onThreadFrame,
       onPermission: () => {
         rightsChanged.value = true;
         void loadBootstrap().catch(expired);
@@ -181,7 +189,10 @@ export function setMode(next: Mode): void {
 
 /** Возврат во вкладку или в сеть — догнать пропущенное. */
 function resume(): void {
-  if (document.visibilityState === 'visible') void client?.resume();
+  if (document.visibilityState !== 'visible') return;
+  void client?.resume();
+  const open = openThreadId.peek();
+  if (open !== null) void syncThread(open);
 }
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', resume);

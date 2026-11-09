@@ -77,12 +77,5 @@ export function liveName(item: InboxItem): string {
   return item.customer.name?.trim() || (item.customer.username ? `@${item.customer.username}` : t('live.noName', { id: item.id }));
 }
 
-const CHANNEL_OF_SOURCE: Record<string, Channel> = {
-  telegram_bot: 'telegram',
-  telegram_business: 'business',
-  bedolaga: 'bedolaga',
-  minishop: 'minishop',
-};
-
-export const liveChannel = (item: InboxItem): Channel | undefined =>
-  item.source ? CHANNEL_OF_SOURCE[item.source.kind] : undefined;
+/** Канал — из строки сервера (по источнику не понять: у бота и Business он общий). */
+export const liveChannel = (item: InboxItem): Channel | undefined => item.channel;

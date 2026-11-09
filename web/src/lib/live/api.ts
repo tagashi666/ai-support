@@ -45,3 +45,59 @@ export async function getJson<T>(path: string, token: string, fetcher: Fetch = f
   const code = body.code ?? (response.status === 401 ? 'unauthorized' : response.status === 403 ? 'permission' : 'unknown');
   throw new ApiError(response.status, code, body.error ?? `HTTP ${response.status}`);
 }
+
+async function parseError(response: Response): Promise<ApiError> {
+  const body = await response.json().catch(() => ({})) as Partial<ApiErrorBody>;
+  const code = body.code ?? (response.status === 401 ? 'unauthorized' : response.status === 403 ? 'permission'
+    : response.status === 429 ? 'rate_limited' : response.status >= 502 ? 'upstream' : 'unknown');
+  return new ApiError(response.status, code, body.error ?? `HTTP ${response.status}`);
+}
+
+/**
+ * Изменяющий запрос с ключом. `keepalive` — запрос уйдёт, даже если вкладку
+ * закрывают (отложенная фиксация и окно отмены, 7.6 и 6.3.5).
+ */
+export async function sendJson<T>(path: string, token: string, body: unknown, options: { keepalive?: boolean; fetcher?: Fetch } = {}): Promise<T> {
+  let response: Response;
+  try {
+    response = await (options.fetcher ?? fetch)(path, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+      body: JSON.stringify(body ?? {}),
+      ...(options.keepalive ? { keepalive: true } : {}),
+    });
+  } catch (err) {
+    throw new ApiError(0, 'network', err instanceof Error ? err.message : String(err));
+  }
+  if (response.ok) return await response.json().catch(() => ({})) as T;
+  throw await parseError(response);
+}
+
+/** Загрузка одного файла сырым телом, как у классики (заголовки x-file-*). */
+export async function uploadFile<T>(path: string, token: string, file: Blob & { name?: string }, headers: Record<string, string>): Promise<T> {
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${token}`,
+        'content-type': 'application/octet-stream',
+        'x-file-name': encodeURIComponent(file.name ?? 'file'),
+        'x-file-type': encodeURIComponent(file.type || 'application/octet-stream'),
+        ...headers,
+      },
+      body: file,
+    });
+  } catch (err) {
+    throw new ApiError(0, 'network', err instanceof Error ? err.message : String(err));
+  }
+  if (response.ok) return await response.json() as T;
+  throw await parseError(response);
+}
+
+/** Новый id для повтора без дубля (10.3 п.2). */
+export function newClientId(): string {
+  const bytes = new Uint8Array(12);
+  crypto.getRandomValues(bytes);
+  return `cm-${[...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+}

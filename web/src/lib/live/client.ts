@@ -12,7 +12,7 @@
  * restoring — «Восстанавливаем связь…»; offline — «Нет связи · данные на …»;
  * syncing — «Связь есть, обновляем…».
  */
-import type { ControlFrame, EventsResponse, InboxCounts, LiveFrame } from '@shared/api-types';
+import type { ControlFrame, EventsResponse, InboxCounts, LiveFrame, ThreadFrame } from '@shared/api-types';
 
 export type ConnectionState = 'connecting' | 'live' | 'restoring' | 'offline' | 'syncing';
 
@@ -41,6 +41,8 @@ export interface LiveClientDeps {
   /** Кадры по порядку seq; counts — свежие счётчики получателя, если пришли. */
   onFrames(frames: LiveFrame[], counts?: InboxCounts): void;
   onState(state: ConnectionState): void;
+  /** Кадр ленты открытого диалога (без seq). */
+  onThread?(frame: ThreadFrame): void;
   /** Сервер закрыл сокет из-за прав (1008): панель перечитывает bootstrap. */
   onPermission?(): void;
   createSocket?(url: string): SocketLike;
@@ -161,8 +163,9 @@ export class LiveClient {
     socket.onmessage = (event) => {
       if (this.live !== socket) return;
       this.frameAt = this.now();
-      let frame: LiveFrame | ControlFrame;
-      try { frame = JSON.parse(String(event.data)) as LiveFrame | ControlFrame; } catch { return; }
+      let frame: LiveFrame | ControlFrame | ThreadFrame;
+      try { frame = JSON.parse(String(event.data)) as LiveFrame | ControlFrame | ThreadFrame; } catch { return; }
+      if (frame.type === 'thread') { this.deps.onThread?.(frame); return; }
       this.handle(frame);
     };
   }
