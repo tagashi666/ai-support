@@ -1,5 +1,7 @@
 node_modules
 dist
+web/dist
+web/node_modules
 coverage
 ._*
 .DS_Store

@@ -30,5 +30,8 @@ fi
 grep -Fxq "$project/.env.example" <<<"$listing"
 grep -Fxq "$project/LICENSE" <<<"$listing"
 grep -Fxq "$project/public/ui-v3.css" <<<"$listing"
+grep -Fxq "$project/web/index.html" <<<"$listing"
+grep -Fxq "$project/web/src/main.tsx" <<<"$listing"
+grep -Fxq "$project/tsconfig.web.json" <<<"$listing"
 
 printf 'Release archive is safe: %s\n' "$archive"
