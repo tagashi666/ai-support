@@ -19,16 +19,18 @@ interface RowProps {
   tabIndex?: number;
   onOpen: () => void;
   onKeyDown?: (event: KeyboardEvent) => void;
+  /** Строка внутри обёртки с меню «⋯»: data-row-id ставит обёртка (FLIP двигает строку целиком). */
+  wrapped?: boolean;
 }
 
 /** Строка списка (6.2): постоянная высота, превью и причина в одну строку. */
 export function Row(props: RowProps): JSX.Element {
-  const { id, avatar, title, time, who, preview, reason, tone, unread, current, tabIndex, onOpen, onKeyDown } = props;
+  const { id, avatar, title, time, who, preview, reason, tone, unread, current, tabIndex, onOpen, onKeyDown, wrapped } = props;
   return (
     <button
       type="button"
       class={s.row}
-      data-row-id={id}
+      data-row-id={wrapped ? undefined : id}
       data-unread={unread ? 'true' : 'false'}
       aria-current={current ? 'true' : undefined}
       tabIndex={tabIndex}

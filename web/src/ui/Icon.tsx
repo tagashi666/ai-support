@@ -35,6 +35,7 @@ const PATHS = {
   plus: <path d="M12 5.5v13M5.5 12h13" />,
   undo: <><path d="M9 7.5 4.5 12 9 16.5" /><path d="M5 12h9.5a5 5 0 0 1 5 5v1" /></>,
   edit: <path d="M14.5 5.5l4 4L9 19H5v-4z" />,
+  filter: <path d="M4.5 6h15M7.5 12h9M10.5 18h3" />,
 } as const;
 
 export type IconName = keyof typeof PATHS;

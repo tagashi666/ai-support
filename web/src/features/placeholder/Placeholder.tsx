@@ -50,7 +50,7 @@ export function MoreScreen(): JSX.Element {
           </li>
         ))}
         <li>
-          <a class={s.item} href="/">
+          <a class={s.item} href="/?ui=classic">
             <Icon name="back" />
             <span class={s.itemText}>{t('nav.classic')}</span>
           </a>

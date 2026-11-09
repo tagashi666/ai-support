@@ -6,6 +6,7 @@ import { bootstrap, liveMine, mode } from '@/lib/live/store';
 import { pausedUntil, waitingYou } from '@/lib/store/state';
 import { Avatar } from '@/ui/Avatar';
 import { Icon, type IconName } from '@/ui/Icon';
+import { roleLabel } from '@/lib/workspace/labels';
 import s from './shell.module.css';
 
 type Target = 'today' | 'chats' | 'more' | SectionKey;
@@ -72,6 +73,7 @@ function NavLink({ item, current, class: cls, iconSize }: { item: Item; current:
 }
 
 export function Rail({ current }: { current: Route }): JSX.Element {
+  const live = mode.value === 'live' ? bootstrap.value?.me : undefined;
   return (
     <nav class={s.rail} aria-label={t('nav.main')}>
       <ul class={s.railList}>
@@ -94,9 +96,9 @@ export function Rail({ current }: { current: Route }): JSX.Element {
         {RARE.map((item) => <li key={item.target}><NavLink item={item} current={current} class={`${s.railItem} ${s.railRare}`} iconSize={20} /></li>)}
       </ul>
       <div class={s.railFoot}>
-        <Avatar name={ME.name} size="s" />
-        <span class={s.railName}>{ME.name}</span>
-        <span class={s.railRole}>{t('nav.role.owner')}</span>
+        <Avatar name={live?.name ?? ME.name} size="s" />
+        <span class={s.railName}>{live?.name ?? ME.name}</span>
+        <span class={s.railRole}>{live ? roleLabel(live.role) : t('nav.role.owner')}</span>
       </div>
     </nav>
   );

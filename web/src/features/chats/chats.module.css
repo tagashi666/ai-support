@@ -74,6 +74,7 @@
   background: var(--surface);
   color: var(--text-3);
 }
+@media (max-width: 767px), (pointer: coarse) { .search { height: 44px; } }
 .search:focus-within { outline: 2px solid var(--focus); outline-offset: 1px; }
 .search input {
   flex: 1;
@@ -115,6 +116,7 @@
   text-transform: uppercase;
   text-align: left;
 }
+@media (max-width: 767px), (pointer: coarse) { .sectionToggle { min-height: 44px; } }
 .sectionCount { color: var(--text-3); letter-spacing: 0; }
 .sectionCount[data-tone="attention"] { color: var(--attention); }
 .chevron, .chevronClosed { margin-left: auto; color: var(--text-3); transition: transform var(--t-state) var(--ease); }

@@ -38,7 +38,19 @@ export function href(route: Route): string {
   }
 }
 
-export const route = signal<Route>(parse(location.pathname));
+/**
+ * Ссылка `/#c<id>` (уведомления в Telegram, 7.7) открывает нужный интерфейс:
+ * с cookie ui=next сервер отправляет в /next/, а фрагмент адреса сохраняется.
+ */
+function initialRoute(): Route {
+  const hashed = /^#c(\d{1,15})$/.exec(location.hash);
+  if (!hashed) return parse(location.pathname);
+  const next: Route = { name: 'chats', id: hashed[1] ?? null };
+  history.replaceState(null, '', href(next));
+  return next;
+}
+
+export const route = signal<Route>(initialRoute());
 
 export function navigate(next: Route, replace = false): void {
   const url = href(next);

@@ -1,0 +1,334 @@
+import type { ComponentChildren, JSX } from 'preact';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import type { InboxItem, ThreadAttachment, ThreadEvent, ThreadMessage } from '@shared/api-types';
+import { t, type Key } from '@/i18n/ru';
+import { clock, dayDivider, sameDay } from '@/lib/format/format';
+import { liveName } from '@/lib/live/labels';
+import { readToken, sendJson } from '@/lib/live/api';
+import { now, announcement } from '@/lib/store/state';
+import {
+  cancelSend, dismissOutgoing, drafts, draftTick, markRead, meKey, permissions, retrySend, returnToField, sendNow,
+} from '@/lib/workspace/actions';
+import { modeLabel } from '@/lib/workspace/labels';
+import { availability } from '@/lib/workspace/registry';
+import { loadEarlier, threads, type Outgoing } from '@/lib/workspace/thread';
+import { showToast } from '@/lib/actions/toasts';
+import type { Author } from '@/lib/types';
+import { Bubble } from '@/ui/Bubble';
+import { Button } from '@/ui/Button';
+import { Icon } from '@/ui/Icon';
+import { Option, Sheet } from '@/ui/Sheet';
+import s from '@/features/thread/thread.module.css';
+import w from './workspace.module.css';
+
+const NEAR_BOTTOM = 120;
+const EARLIER_AT = 80;
+
+type Entry =
+  | { type: 'message'; at: number; key: string; message: ThreadMessage }
+  | { type: 'event'; at: number; key: string; event: ThreadEvent }
+  | { type: 'outgoing'; at: number; key: string; outgoing: Outgoing };
+
+const EVENT_KEY: Record<ThreadEvent['kind'], Key> = {
+  handoff: 'event.handoff',
+  took: 'event.took',
+  returned: 'event.returned',
+  resolved: 'event.resolvedBy',
+  reopened: 'event.reopenedBy',
+  pending: 'event.pendingBy',
+  important: 'event.importantBy',
+  unimportant: 'event.unimportantBy',
+  hidden: 'event.hiddenBy',
+  unhidden: 'event.unhiddenBy',
+  mode: 'event.modeBy',
+  claimed: 'event.claimed',
+};
+
+function eventText(event: ThreadEvent, me: string): string {
+  const who = event.actor ? (event.actor.id === me ? t('feed.you') : event.actor.name) : t('feed.assistant');
+  const mode = event.mode ? modeLabel(event.mode) : '';
+  return t(EVENT_KEY[event.kind], { who, mode });
+}
+
+/** Ссылки кликабельны (inv-work P2-18); длинные слова переносит CSS. */
+function linkify(text: string): ComponentChildren {
+  const parts = text.split(/(https?:\/\/[^\s<>«»"]+)/g);
+  return parts.map((part, index) => (index % 2 === 1
+    ? <a key={index} href={part} target="_blank" rel="noopener noreferrer nofollow" class={w.link}>{part}</a>
+    : part));
+}
+
+const size = (bytes: number | null): string => {
+  if (!bytes) return '';
+  if (bytes < 1024 * 1024) return t('file.kb', { n: Math.max(1, Math.round(bytes / 1024)) });
+  return t('file.mb', { n: (bytes / 1024 / 1024).toFixed(1).replace('.', ',') });
+};
+
+const KIND_KEY: Record<string, Key> = {
+  voice: 'file.voice', audio: 'file.audio', video: 'file.video', video_note: 'file.videoNote', document: 'file.document',
+  tgs_sticker: 'file.sticker', video_sticker: 'file.sticker', sticker: 'file.sticker', animation: 'file.animation', photo: 'file.photo',
+};
+
+/** Вложение в ленте: место под картинку резервируется заранее по width/height — лента не прыгает. */
+function AttachmentView({ file, onOpen }: { file: ThreadAttachment; onOpen: (file: ThreadAttachment) => void }): JSX.Element {
+  const src = `/api/attachments/${file.id}`;
+  const label = file.name || t(KIND_KEY[file.kind] ?? 'file.document');
+  if (file.state !== 'ready') {
+    return (
+      <span class={w.fileCard} data-state={file.state}>
+        <Icon name="clock" size={16} />
+        <span>{file.state === 'pending' ? t('file.loading') : t('file.failed')}</span>
+        {file.state === 'failed' && (
+          <>
+            <button type="button" class={w.inlineAction} onClick={() => {
+              void sendJson(`/api/attachments/${file.id}/retry`, readToken() ?? '', {}).then(() => showToast({ text: t('file.retrying') })).catch(() => undefined);
+            }}>{t('live.retry')}</button>
+            <a class={w.inlineAction} href={src} download>{t('file.download')}</a>
+          </>
+        )}
+      </span>
+    );
+  }
+  const ratio = file.width && file.height ? `${file.width} / ${file.height}` : undefined;
+  if ((file.kind === 'photo' || file.kind === 'sticker' || (file.kind === 'animation' && file.mime === 'image/gif')) && file.mime !== 'application/x-tgsticker') {
+    return (
+      <button type="button" class={w.media} style={ratio ? { aspectRatio: ratio } : undefined} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
+        <img src={src} alt="" loading="lazy" width={file.width ?? undefined} height={file.height ?? undefined} />
+      </button>
+    );
+  }
+  if (file.kind === 'video' || file.kind === 'video_note' || file.kind === 'animation') {
+    return <video class={w.media} style={ratio ? { aspectRatio: ratio } : undefined} src={src} controls preload="none" />;
+  }
+  if (file.kind === 'voice' || file.kind === 'audio') {
+    return <audio class={w.audio} src={src} controls preload="none" aria-label={label} />;
+  }
+  return (
+    <a class={w.fileCard} href={src} download={file.name ?? undefined}>
+      <Icon name="arrowDown" size={16} />
+      <span class={w.fileName}>{label}</span>
+      {file.bytes ? <span class="num">{size(file.bytes)}</span> : null}
+    </a>
+  );
+}
+
+/** «Вы · отправим через 4 с · Отменить» — окно отмены (6.3.5). */
+function PendingMeta({ id, entry }: { id: number; entry: Outgoing }): JSX.Element {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (entry.state !== 'waiting') return undefined;
+    const timer = setInterval(() => tick((value) => value + 1), 250);
+    return () => clearInterval(timer);
+  }, [entry.state]);
+  if (entry.state === 'sending') return <span>{entry.kind === 'file' ? t('file.uploading') : t('feed.sending')}</span>;
+  if (entry.state === 'failed') return <span>{t('feed.notSent')}</span>;
+  const left = Math.max(1, Math.ceil(((entry.sendAt ?? 0) - Date.now()) / 1000));
+  return (
+    <>
+      <span>{t('feed.sendingIn', { s: left })}</span>
+      <button type="button" class={s.inlineUndo} onClick={() => cancelSend(id, entry.localId)}>{t('feed.undo')}</button>
+      <button type="button" class={s.inlineNow} onClick={() => sendNow(entry.localId)} aria-label={t('feed.sendNow')}>
+        <Icon name="send" size={14} />
+      </button>
+    </>
+  );
+}
+
+/**
+ * Лента на живых данных (6.3.2): клиент слева, вы и коллеги справа, помощник
+ * фиолетовый с ✦, заметки — жёлтые карточки, события — строка по центру.
+ * Ранние сообщения подгружаются при прокрутке вверх без сдвига.
+ */
+export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Element {
+  const ref = useRef<HTMLDivElement>(null);
+  const thread = threads.value.get(id);
+  const me = meKey.value;
+  const today = now.value;
+  const [unseen, setUnseen] = useState(0);
+  const [menu, setMenu] = useState<ThreadMessage | null>(null);
+  const [viewer, setViewer] = useState<ThreadAttachment | null>(null);
+  const anchor = useRef<{ height: number; top: number } | null>(null);
+  const lastId = useRef<number | null>(null);
+  const firstLoad = useRef(true);
+  // «Новое» — линия перед непрочитанными при открытии (сколько их было в строке списка).
+  const [newFrom] = useState(() => item.unread);
+  const canQuote = availability('msg.quote', permissions.value) === 'show';
+
+  const messages = thread?.messages ?? [];
+  const entries: Entry[] = [
+    ...messages.map((message): Entry => ({ type: 'message', at: message.at, key: `m${message.id}`, message })),
+    ...(thread?.events ?? []).map((event): Entry => ({ type: 'event', at: event.at, key: `e${event.id}`, event })),
+    ...(thread?.outgoing ?? []).map((outgoing): Entry => ({ type: 'outgoing', at: outgoing.at, key: `o${outgoing.localId}`, outgoing })),
+  ].sort((a, b) => a.at - b.at || (a.type === 'outgoing' ? 1 : b.type === 'outgoing' ? -1 : 0));
+  const clientIds = messages.filter((message) => message.voice === 'client').map((message) => message.id);
+  const firstNew = newFrom > 0 ? clientIds[Math.max(0, clientIds.length - newFrom)] : undefined;
+
+  const atBottom = (): boolean => {
+    const el = ref.current;
+    return !el || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
+  };
+
+  // Первая загрузка — вниз; подгрузка ранних — сохранить место (без сдвига).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || thread?.status !== 'ready') return;
+    if (firstLoad.current) {
+      firstLoad.current = false;
+      el.scrollTop = el.scrollHeight;
+      lastId.current = messages.at(-1)?.id ?? null;
+      return;
+    }
+    if (anchor.current) {
+      el.scrollTop = el.scrollHeight - anchor.current.height + anchor.current.top;
+      anchor.current = null;
+    }
+    const last = messages.at(-1);
+    if (last && last.id !== lastId.current) {
+      const added = messages.filter((message) => message.id > (lastId.current ?? 0));
+      lastId.current = last.id;
+      const fromClient = added.filter((message) => message.voice === 'client');
+      if (fromClient.length) announcement.value = t('feed.newMessage', { name: liveName(item) });
+      const own = added.some((message) => message.voice === 'operator' && message.author?.id === me);
+      if (own || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM + 200) {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        // Новое входящее при видимой вкладке и ленте внизу — прочитано (прил. А.C, 7.2).
+        if (fromClient.length && document.visibilityState === 'visible') markRead(id);
+      } else if (fromClient.length) setUnseen((value) => value + fromClient.length);
+    }
+  }, [messages.length, messages.at(-1)?.id, thread?.status, thread?.outgoing.length]);
+
+  const onScroll = (): void => {
+    const el = ref.current;
+    if (!el) return;
+    if (atBottom() && unseen) { setUnseen(0); markRead(id); }
+    if (el.scrollTop < EARLIER_AT && thread?.hasMore && !thread.loadingEarlier) {
+      anchor.current = { height: el.scrollHeight, top: el.scrollTop };
+      void loadEarlier(id);
+    }
+  };
+
+  const quote = (message: ThreadMessage): void => {
+    setMenu(null);
+    if (!message.quote_id) return;
+    drafts.set(id, { quote: { id: message.id, quoteId: message.quote_id, excerpt: (message.text ?? '').slice(0, 120) }, mode: 'reply' });
+    draftTick.value += 1;
+  };
+  const copy = (message: ThreadMessage): void => {
+    setMenu(null);
+    void navigator.clipboard.writeText(message.text ?? '').then(() => showToast({ text: t('toast.copied') })).catch(() => undefined);
+  };
+
+  const out: JSX.Element[] = [];
+  let prev: Entry | undefined;
+  for (const entry of entries) {
+    if (!prev || !sameDay(prev.at, entry.at)) {
+      const day = dayDivider(entry.at, today);
+      out.push(<div key={`d${entry.key}`} class={s.day}><span>{day === 'today' ? t('feed.today') : day === 'yesterday' ? t('feed.yesterday') : day}</span></div>);
+    }
+    if (entry.type === 'message' && entry.message.id === firstNew) out.push(<div key="new" class={w.newLine}><span>{t('feed.newLine')}</span></div>);
+    if (entry.type === 'event') {
+      out.push(<p key={entry.key} class={s.event}>{eventText(entry.event, me)} · <span class="num">{clock(entry.at)}</span></p>);
+    } else if (entry.type === 'message' && entry.message.voice === 'note') {
+      const author = entry.message.author ? (entry.message.author.id === me ? t('feed.you') : entry.message.author.name) : t('feed.team');
+      out.push(
+        <section key={entry.key} class={s.note} aria-label={t('feed.noteTitle')}>
+          <p class={s.noteHead}><Icon name="lock" size={14} />{t('feed.noteTitle')} · {author}, <span class="num">{clock(entry.at)}</span></p>
+          <p class={s.noteText}>{linkify(entry.message.text ?? '')}</p>
+        </section>,
+      );
+    } else if (entry.type === 'message') {
+      const message = entry.message;
+      const voice: Author = message.voice === 'client' ? 'client' : message.voice === 'assistant' ? 'assistant'
+        : message.voice === 'auto' ? 'auto' : message.author && message.author.id === me ? 'you' : 'colleague';
+      const label = voice === 'client' ? liveName(item) : voice === 'assistant' ? t('feed.assistant') : voice === 'auto' ? t('feed.auto')
+        : voice === 'colleague' ? message.author?.name ?? t('feed.operator') : t('feed.you');
+      const grouped = prev?.type === 'message' && prev.message.voice === message.voice && prev.message.author?.id === message.author?.id
+        && sameDay(prev.at, entry.at) && entry.at - prev.at < 10 * 60_000;
+      const text = message.text ?? '';
+      out.push(
+        <div key={entry.key} class={`${grouped ? s.msgGrouped : s.msg} ${w.msgRow}`} data-side={voice === 'client' ? 'in' : 'out'}
+          onContextMenu={(event) => { event.preventDefault(); setMenu(message); }}>
+          <Bubble
+            voice={voice}
+            label={grouped ? undefined : label}
+            a11y={`${voice === 'client' ? t('feed.clientA11y', { name: label }) : label}, ${clock(message.at)}: ${text || t(KIND_KEY[message.kind] ?? 'file.document')}`}
+            meta={clock(message.at)}
+            foot={message.attachments.length ? message.attachments.map((file) => <AttachmentView key={file.id} file={file} onOpen={setViewer} />) : undefined}
+          >
+            {message.quote && <span class={w.quote}>↩ {message.quote}</span>}
+            {text ? linkify(text) : message.attachments.length ? null : t(KIND_KEY[message.kind] ?? 'file.document')}
+          </Bubble>
+          <button type="button" class={w.msgMenu} aria-label={t('message.menu')} aria-haspopup="dialog" onClick={() => setMenu(message)}>
+            <Icon name="more" size={18} />
+          </button>
+        </div>,
+      );
+    } else {
+      const outgoing = entry.outgoing;
+      const failed = outgoing.state === 'failed';
+      out.push(
+        <div key={entry.key} class={s.msg}>
+          <Bubble
+            voice="you"
+            label={t('feed.you')}
+            pending
+            a11y={`${t('feed.you')}: ${outgoing.text || outgoing.fileName || ''}`}
+            meta={<PendingMeta id={id} entry={outgoing} />}
+            foot={failed && outgoing.error ? (
+              <span class={w.sendError} role="alert">
+                <span>{t(outgoing.error.text)}</span>
+                {outgoing.error.retry && outgoing.kind === 'text' && <Button variant="secondary" size="sm" onClick={() => retrySend(id, outgoing.localId)}>{t('live.retry')}</Button>}
+                {outgoing.kind === 'text'
+                  ? <Button variant="quiet" size="sm" onClick={() => returnToField(id, outgoing.localId)}>{t('feed.toField')}</Button>
+                  : <Button variant="quiet" size="sm" onClick={() => dismissOutgoing(id, outgoing.localId)}>{t('sheet.close')}</Button>}
+              </span>
+            ) : undefined}
+          >
+            {outgoing.quote && <span class={w.quote}>↩ {outgoing.quote.excerpt}</span>}
+            {outgoing.kind === 'file' ? t('file.sent', { name: outgoing.fileName ?? '' }) : outgoing.text}
+          </Bubble>
+        </div>,
+      );
+    }
+    prev = entry;
+  }
+
+  return (
+    <div class={s.feedWrap}>
+      <div class={s.feed} ref={ref} role="log" aria-label={t('feed.label')} aria-busy={thread?.status === 'loading' ? 'true' : 'false'} tabIndex={0} onScroll={onScroll}>
+        <div class={s.column}>
+          {thread?.loadingEarlier && <p class={s.event}>{t('feed.loadingEarlier')}</p>}
+          {thread?.status === 'loading' && <div class={w.skeletonFeed} />}
+          {thread?.status === 'ready' && entries.length === 0 && <p class={s.event}>{t('feed.empty')}</p>}
+          {out}
+        </div>
+      </div>
+      {unseen > 0 && (
+        <Button variant="secondary" size="sm" icon="arrowDown" class={s.newBelow}
+          onClick={() => { ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' }); setUnseen(0); markRead(id); }}>
+          {t('feed.newBelow', { n: unseen })}
+        </Button>
+      )}
+
+      <Sheet open={menu !== null} onClose={() => setMenu(null)} title={t('message.menu')}>
+        {menu && (
+          <div role="menu" aria-label={t('message.menu')}>
+            {menu.voice === 'client' && canQuote && (menu.quote_id
+              ? <Option label={t('message.quote')} onSelect={() => quote(menu)} />
+              : <Option label={t('message.quote')} hint={t('message.quoteUnavailable')} onSelect={() => setMenu(null)} />)}
+            {menu.text && <Option label={t('message.copy')} onSelect={() => copy(menu)} />}
+          </div>
+        )}
+      </Sheet>
+
+      <Sheet open={viewer !== null} onClose={() => setViewer(null)} title={viewer?.name || t('file.photo')}>
+        {viewer && (
+          <div class={w.viewer}>
+            <img src={`/api/attachments/${viewer.id}`} alt="" />
+            <a class={w.inlineAction} href={`/api/attachments/${viewer.id}`} download={viewer.name ?? undefined}>{t('file.download')}</a>
+          </div>
+        )}
+      </Sheet>
+    </div>
+  );
+}

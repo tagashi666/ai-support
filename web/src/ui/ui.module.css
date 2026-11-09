@@ -360,6 +360,7 @@
   white-space: nowrap;
 }
 @media (pointer: coarse) { .tab { min-height: 40px; } }
+@media (max-width: 767px), (pointer: coarse) { .tab { min-height: 44px; } }
 .tab[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08); }
 .tabs[data-stretch="true"] { display: flex; width: 100%; }
 .tabs[data-stretch="true"] .tab { flex: 1 1 auto; justify-content: center; padding: 0 var(--s2); }

@@ -12,7 +12,7 @@
 }
 @media (min-width: 1024px) { .head { padding: var(--s3) var(--s6); } }
 .headTop { display: flex; align-items: center; gap: var(--s3); min-width: 0; }
-.back { margin-left: calc(-1 * var(--s2)); }
+.back { margin-left: calc(-1 * var(--s2)); min-width: 44px; }
 .headName { flex: 1; min-width: 0; }
 .name { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sub { display: flex; gap: 6px; min-width: 0; color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 500; white-space: nowrap; overflow: hidden; }
@@ -206,6 +206,7 @@
 /* Телефон: черновик компактнее, чтобы лента не пропадала */
 .more { border: 0; padding: 0; background: none; color: var(--ai-ink); font: inherit; font-size: var(--fs-small); font-weight: 700; justify-self: start; min-height: 28px; }
 @media (max-width: 767px) {
+  .more, .mode { min-height: 44px; }
   .draft { padding: var(--s3); gap: 6px; }
   .draftText[data-clamp="true"] { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .draftWhy, .draftSources { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-small); line-height: var(--lh-small); }
