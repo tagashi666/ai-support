@@ -554,6 +554,35 @@ export class Operations {
     `).run(status, Date.now(), actor.key, id).changes > 0;
   }
 
+  /** Откат решения, если публикация после него не удалась (10.5 п.6: сначала решение, потом файл). */
+  undoCandidateDecision(id: number, actor: Actor): boolean {
+    return this.db.prepare(`
+      UPDATE kb_candidate SET status='pending', decided_at=NULL, decided_by=NULL WHERE id=? AND decided_by=? AND status!='pending'
+    `).run(id, actor.key).changes > 0;
+  }
+
+  /** Публикация черновика закрывает идеи с тем же файлом (10.5 п.2). */
+  closeCandidatesFor(fileName: string, actor: Actor): number[] {
+    const rows = this.db.prepare(`SELECT id FROM kb_candidate WHERE file_name=? AND status='pending'`).all(fileName) as Array<{ id: number }>;
+    return rows.filter((row) => this.decideCandidate(row.id, 'approved', actor)).map((row) => row.id);
+  }
+
+  /**
+   * Кто последним менял статью (10.5 п.5): последняя успешная запись журнала
+   * по этому имени, если она не раньше чем за 2 с до изменения файла. Иначе
+   * файл после неё менял кто-то другой (диск, решение по идее) — имени нет.
+   */
+  kbChangedBy(area: 'kb' | 'draft', name: string, changedAt: number): string | null {
+    const actions = [`PUT /api/kb/${area}/${name}`, `DELETE /api/kb/${area}/${name}`, `POST /api/kb/publish/${name}`];
+    const encoded = actions.map((action) => action.replace(name, encodeURIComponent(name)));
+    const all = [...new Set([...actions, ...encoded])];
+    const row = this.db.prepare(`
+      SELECT actor_name, created_at FROM audit_log WHERE resource='kb' AND action IN (${all.map(() => '?').join(',')})
+       ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(...all) as { actor_name: string; created_at: number } | undefined;
+    return row && row.created_at >= changedAt - 2000 ? row.actor_name : null;
+  }
+
   savedFilters(actor: Actor): Array<Record<string, unknown>> {
     return this.db.prepare(`SELECT * FROM saved_filter WHERE owner_key=? ORDER BY name COLLATE NOCASE`).all(actor.key) as Array<Record<string, unknown>>;
   }

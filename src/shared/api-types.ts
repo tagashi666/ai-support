@@ -18,7 +18,13 @@ export type ErrorCode =
   | 'upstream'
   | 'not_found'
   | 'bad_request'
-  | 'unauthorized';
+  | 'unauthorized'
+  /** Статью изменили, пока вы правили (10.5 п.5). */
+  | 'version_conflict'
+  /** Идею уже разобрал другой человек (10.5 п.6). */
+  | 'already_decided'
+  /** Нет прав на запись в папку знаний (6.6, состояния): текст для человека — в панели. */
+  | 'write_denied';
 
 export interface ApiError {
   error: string;
@@ -359,4 +365,85 @@ export interface ActivityResponse {
 export interface FeedbackResponse {
   ok: true;
   message_id: number;
+  /**
+   * Идея статьи из «как правильно» (этап 5): id кандидата обучения или null,
+   * если правильного ответа не прислали или черновик не записался.
+   */
+  idea_id?: number | null;
+}
+
+// --- Знания (этап 5, 10.5) ------------------------------------------------
+
+export type KbArea = 'kb' | 'draft';
+
+export interface KbDoc {
+  name: string;
+  title: string;
+  size: number;
+  updatedAt: number;
+  excerpt: string;
+}
+
+export interface KbListResponse {
+  kb: KbDoc[];
+  /** Пусто без права knowledge:review. */
+  drafts: KbDoc[];
+  interfaceScreens: unknown[];
+}
+
+export interface KbDocResponse {
+  name: string;
+  text: string;
+  /** Хэш текста: передаётся обратно как expectedVersion. */
+  version: string;
+  changed_at: number;
+}
+
+/** Ответ сохранения, создания и публикации: прежний текст — для «Отменить» (10.5 п.3). */
+export interface KbWriteResponse {
+  ok: true;
+  name: string;
+  version: string;
+  /** Текст до записи в той же области (для публикации — опубликованный); null — файла не было. */
+  previous: string | null;
+  /** Публикация: идеи, которые она закрыла (10.5 п.2). */
+  closed_ideas?: number[];
+}
+
+export interface KbConflict {
+  error: string;
+  code: 'version_conflict';
+  /** Текст и версия на сервере сейчас; text null — файл удалили. */
+  text: string | null;
+  version: string | null;
+  changed_at: number | null;
+  /** Имя из журнала действий, если запись не старше файла больше чем на 2 с. */
+  changed_by: string | null;
+}
+
+export type IdeaSource = 'auto-learn' | 'archive' | 'panel' | 'telegram-export' | 'feedback';
+export type IdeaRejectReason = 'wrong' | 'duplicate' | 'too_specific' | 'not_needed';
+
+export interface IdeaRow {
+  id: number;
+  title: string;
+  file_name: string;
+  source: string;
+  confidence: number | null;
+  status: 'pending' | 'approved' | 'rejected';
+  created_at: number;
+  decided_at: number | null;
+  decided_by: string | null;
+}
+
+export interface IdeasResponse {
+  candidates: IdeaRow[];
+}
+
+export interface IdeaDecided {
+  error: string;
+  code: 'already_decided';
+  decision: 'approved' | 'rejected';
+  /** Имя того, кто решил; null — не нашли. */
+  decided_by: string | null;
 }

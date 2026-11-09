@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { constants } from 'node:fs';
 import { readdir, open, unlink, writeFile, mkdir, rename } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -20,6 +20,18 @@ export interface Doc {
   title: string;
   size: number;
   updatedAt: number;
+  /** Начало текста без заголовка и служебных комментариев (список «Знаний», 6.6). */
+  excerpt: string;
+}
+
+/** Версия статьи — хэш текста (10.5 п.5): по ней сервер узнаёт чужую правку. */
+export const docVersion = (text: string): string => createHash('sha256').update(text, 'utf8').digest('hex').slice(0, 16);
+
+/** Начало тела статьи: без строки «# …» и без блока <!-- … --> черновиков сбора. */
+export function excerptOf(text: string, limit = 160): string {
+  const body = text.replace(/<!--[\s\S]*?-->/g, '').split('\n').filter((line) => !/^#\s+/.test(line)).join(' ');
+  const flat = body.replace(/\s+/g, ' ').trim();
+  return flat.length > limit ? `${flat.slice(0, limit - 1)}…` : flat;
 }
 
 function dirFor(area: Area): string {
@@ -95,6 +107,7 @@ export async function listDocs(area: Area): Promise<Doc[]> {
           title: titleOf(text) || name.replace(/\.md$/i, ''),
           size,
           updatedAt: mtimeMs,
+          excerpt: excerptOf(text),
         };
       } catch {
         return null;
@@ -106,6 +119,38 @@ export async function listDocs(area: Area): Promise<Doc[]> {
 
 export async function readDoc(area: Area, name: string): Promise<string> {
   return (await readRegularFile(safePath(area, name))).text;
+}
+
+export interface DocMeta {
+  text: string;
+  version: string;
+  /** Время изменения файла, мс. */
+  changedAt: number;
+}
+
+/** Текст с версией и временем изменения; null — файла нет. */
+export async function readDocMeta(area: Area, name: string): Promise<DocMeta | null> {
+  const path = safePath(area, name);
+  try {
+    const { text, mtimeMs } = await readRegularFile(path);
+    return { text, version: docVersion(text), changedAt: Math.round(mtimeMs) };
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+/**
+ * Имя нового черновика из названия: не занятое ни опубликованной статьёй, ни
+ * черновиком (иначе «Новая статья» молча перезаписала бы чужую, 10.5 п.1).
+ */
+export async function freeName(title: string): Promise<string> {
+  const base = slugFromTitle(title);
+  for (let n = 1; n < 1000; n += 1) {
+    const name = n === 1 ? base : base.replace(/\.md$/, `-${n}.md`);
+    if (!(await readDocMeta('kb', name)) && !(await readDocMeta('draft', name))) return name;
+  }
+  return base.replace(/\.md$/, `-${randomBytes(4).toString('hex')}.md`);
 }
 
 export async function writeDoc(area: Area, name: string, text: string): Promise<void> {

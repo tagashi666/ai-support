@@ -8,6 +8,7 @@ import type {
 import { ACTIVITY_LIMIT_MAX, listActivity, pauseView } from '../assistant.js';
 import type { RouteContext } from '../context.js';
 import { apiError } from '../errors.js';
+import { freeName, writeDoc } from '../kbfiles.js';
 
 const DAY_MS = 24 * 60 * 60_000;
 /** Ключи runtime, которые правит раздел «Помощник» (6.7). */
@@ -87,7 +88,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
 
   // «Это неверно» на ответе помощника (10.4 п.6). Отметка — в журнале event:
   // по ней лента и итоги показывают, где помощник ошибся.
-  app.post<{ Params: { id: string }; Body: { verdict?: unknown; reason?: unknown; note?: unknown } }>(
+  app.post<{ Params: { id: string }; Body: { verdict?: unknown; reason?: unknown; note?: unknown; correct?: unknown } }>(
     '/api/messages/:id/feedback',
     async (request, reply): Promise<FeedbackResponse | void> => {
       const id = Number(request.params.id);
@@ -108,7 +109,26 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       store.logEvent('ai_feedback', message.conversation_id, {
         message: message.id, suggestion: message.suggestion_id, verdict: 'wrong', reason, ...(note ? { note } : {}), by: actor.key,
       });
-      return { ok: true, message_id: message.id };
+      // «Как правильно» (этап 5) становится идеей статьи: черновик из вопроса
+      // клиента и правильного ответа. Неверный ответ помощника в черновик не
+      // попадает — «Опубликовать» идеи публикует файл как есть.
+      const correct = typeof body.correct === 'string' ? body.correct.trim().slice(0, 4000) : '';
+      let ideaId: number | null = null;
+      if (correct) {
+        const question = store.db.prepare(`
+          SELECT text FROM message WHERE conversation_id = ? AND direction = 'in' AND id < ? AND text IS NOT NULL AND text != ''
+           ORDER BY id DESC LIMIT 1
+        `).get(message.conversation_id, message.id) as { text: string } | undefined;
+        const title = (question?.text ?? '').replace(/\s+/g, ' ').trim().slice(0, 120) || 'Ответ из диалога';
+        try {
+          const file = await freeName(title);
+          await writeDoc('draft', file, `# ${title}\n\n${correct}\n\n<!--\nидея из «Это неверно», сообщение ${message.id}\n-->\n`);
+          ideaId = operations.registerCandidates([{ title, file }], 'feedback')[0] ?? null;
+        } catch {
+          ideaId = null;
+        }
+      }
+      return { ok: true, message_id: message.id, ...(correct ? { idea_id: ideaId } : {}) };
     },
   );
 }

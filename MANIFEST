@@ -54,6 +54,7 @@ scripts/e2eserver.ts
 scripts/host-updater.sh
 scripts/inboxtest.ts
 scripts/install-host-updater.sh
+scripts/knowledgetest.ts
 scripts/lifecycletest.ts
 scripts/mediatest.ts
 scripts/minetest.ts
