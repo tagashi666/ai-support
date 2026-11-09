@@ -63,6 +63,7 @@ scripts/sectest.ts
 scripts/setuptest.ts
 scripts/smoke.ts
 scripts/source-updater.sh
+scripts/threadtest.ts
 scripts/uitest.ts
 scripts/updatetest.ts
 scripts/webbudget.ts
@@ -149,7 +150,9 @@ src/panel/routes/settings.ts
 src/panel/routes/suggestions.ts
 src/panel/routes/system.ts
 src/panel/routes/team.ts
+src/panel/routes/thread.ts
 src/panel/server.ts
+src/panel/thread.ts
 src/panel/webapp.ts
 src/shared/api-types.ts
 src/shared/attention.ts
@@ -173,7 +176,6 @@ web/src/features/client/ClientPanel.tsx
 web/src/features/client/client.module.css
 web/src/features/live/ConnectionLine.tsx
 web/src/features/live/LiveBar.tsx
-web/src/features/live/LiveChats.tsx
 web/src/features/live/LiveSummary.tsx
 web/src/features/live/SignIn.tsx
 web/src/features/live/live.module.css
@@ -186,6 +188,14 @@ web/src/features/thread/Thread.tsx
 web/src/features/thread/thread.module.css
 web/src/features/today/Today.tsx
 web/src/features/today/today.module.css
+web/src/features/workspace/FilterSheet.tsx
+web/src/features/workspace/WorkComposer.tsx
+web/src/features/workspace/WorkDraft.tsx
+web/src/features/workspace/WorkFeed.tsx
+web/src/features/workspace/WorkList.tsx
+web/src/features/workspace/WorkThread.tsx
+web/src/features/workspace/Workspace.tsx
+web/src/features/workspace/workspace.module.css
 web/src/i18n/ru.test.ts
 web/src/i18n/ru.ts
 web/src/lib/actions/chat.ts
@@ -193,6 +203,7 @@ web/src/lib/actions/toasts.ts
 web/src/lib/confidence.test.ts
 web/src/lib/format/format.test.ts
 web/src/lib/format/format.ts
+web/src/lib/hooks/useFrozenList.ts
 web/src/lib/labels.ts
 web/src/lib/live/api.ts
 web/src/lib/live/client.test.ts
@@ -208,6 +219,18 @@ web/src/lib/store/order.test.ts
 web/src/lib/store/order.ts
 web/src/lib/store/state.ts
 web/src/lib/types.ts
+web/src/lib/workspace/actions.ts
+web/src/lib/workspace/deferred.ts
+web/src/lib/workspace/drafts.ts
+web/src/lib/workspace/errors.ts
+web/src/lib/workspace/filter.ts
+web/src/lib/workspace/labels.ts
+web/src/lib/workspace/local.ts
+web/src/lib/workspace/registry.ts
+web/src/lib/workspace/thread.ts
+web/src/lib/workspace/typing.ts
+web/src/lib/workspace/who.ts
+web/src/lib/workspace/workspace.test.ts
 web/src/main.tsx
 web/src/styles/base.css
 web/src/styles/contrast.test.ts
