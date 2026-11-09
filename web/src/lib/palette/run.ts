@@ -12,6 +12,8 @@ export { LETTERS } from './commands';
 
 export const paletteOpen = signal(false);
 export const keysHelpOpen = signal(false);
+/** X — выбрать строку под фокусом: список слушает этот счётчик. */
+export const selectTick = signal(0);
 /** Порядок строк, которые сейчас видны в списке, — для [ и ]. */
 export const listOrder = signal<number[]>([]);
 /** Лист «Внешняя заявка: закрыть?» для «Решено» не из шапки (7.6) — открывает список. */
@@ -75,6 +77,7 @@ export function runCommand(id: string): void {
     case 'theme.dark': setTheme('dark'); return;
     case 'theme.auto': setTheme('auto'); return;
     case 'keys': keysHelpOpen.value = true; return;
+    case 'list.select': selectTick.value += 1; return;
     case 'classic': location.assign(`/?ui=classic${thread !== null ? `#c${thread}` : ''}`); return;
     default:
       if (classic) location.assign(`/?ui=classic#v=${classic}`);

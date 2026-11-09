@@ -18,6 +18,8 @@ interface RowProps {
   current?: boolean;
   tabIndex?: number;
   onOpen: () => void;
+  /** Режим выбора: строка — переключатель (aria-pressed). */
+  pressed?: boolean;
   onKeyDown?: (event: KeyboardEvent) => void;
   /** Строка внутри обёртки с меню «⋯»: data-row-id ставит обёртка (FLIP двигает строку целиком). */
   wrapped?: boolean;
@@ -25,7 +27,7 @@ interface RowProps {
 
 /** Строка списка (6.2): постоянная высота, превью и причина в одну строку. */
 export function Row(props: RowProps): JSX.Element {
-  const { id, avatar, title, time, who, preview, reason, tone, unread, current, tabIndex, onOpen, onKeyDown, wrapped } = props;
+  const { id, avatar, title, time, who, preview, reason, tone, unread, current, tabIndex, onOpen, onKeyDown, wrapped, pressed } = props;
   return (
     <button
       type="button"
@@ -33,6 +35,7 @@ export function Row(props: RowProps): JSX.Element {
       data-row-id={wrapped ? undefined : id}
       data-unread={unread ? 'true' : 'false'}
       aria-current={current ? 'true' : undefined}
+      aria-pressed={pressed === undefined ? undefined : pressed ? 'true' : 'false'}
       tabIndex={tabIndex}
       onClick={onOpen}
       onKeyDown={onKeyDown}

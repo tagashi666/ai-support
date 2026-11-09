@@ -11,11 +11,13 @@ import { getJson, readToken } from '@/lib/live/api';
 import { isUrgentCode, liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, liveCounts, liveItems, loadError, loading, startLive } from '@/lib/live/store';
 import { isDesktop, isSplit, reducedMotion } from '@/lib/media';
-import { listOrder, paletteOpen } from '@/lib/palette/run';
+import { listOrder, paletteOpen, selectTick } from '@/lib/palette/run';
 import { navigate } from '@/lib/router';
 import { applyServer, pendingChanges, removeShown, type Placed } from '@/lib/store/order';
 import { now } from '@/lib/store/state';
-import { drafts, hide, markRead, permissions, resolve, setImportant } from '@/lib/workspace/actions';
+import { bulk, drafts, hide, markRead, permissions, resolve, setImportant, type BulkAction } from '@/lib/workspace/actions';
+import { gestures } from '@/lib/device';
+import { lockOf, offsetOf, PANEL_PX, settle, type SwipeLock } from '@/lib/hooks/swipe';
 import { filterItems, filterSize, readFilter, saveFilter, type ListFilter } from '@/lib/workspace/filter';
 import { patched, patches } from '@/lib/workspace/local';
 import { viewLabel } from '@/lib/workspace/labels';
@@ -47,36 +49,127 @@ const readView = (): View => {
   } catch { return 'open'; }
 };
 
-/** Строка с меню «⋯»: на компьютере видно при наведении и фокусе, на телефоне — всегда (цель 44 px). */
-function WorkRow({ item, current, tabIndex, onKeyDown, onMenu }: {
-  item: InboxItem; current: boolean; tabIndex: number; onKeyDown: (event: KeyboardEvent) => void; onMenu: () => void;
+interface RowActions {
+  onMenu: () => void;
+  /** Режим выбора: null — выключен. */
+  selected: boolean | null;
+  onSelect: () => void;
+  onLongPress: () => void;
+  /** Свайп влево открыт у этой строки. */
+  swiped: boolean;
+  onSwipe: (open: boolean) => void;
+  swipeEnabled: boolean;
+  onResolve: () => void;
+  onImportant: (() => void) | null;
+  onHide: (() => void) | null;
+}
+
+const LONG_PRESS_MS = 500;
+
+/**
+ * Строка с меню «⋯»: на компьютере видно при наведении и фокусе, на телефоне —
+ * всегда (цель 44 px). На телефоне свайп влево открывает «Решено · Важно ·
+ * Убрать · ⋯» (7.5), долгое нажатие — режим выбора. У каждого жеста есть кнопка.
+ */
+function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
+  item: InboxItem; current: boolean; tabIndex: number; onKeyDown: (event: KeyboardEvent) => void; actions: RowActions;
 }): JSX.Element {
   const at = now.value;
   const reason = liveReasonView(item, at);
   const own = drafts.get(item.id);
   const preview = own.text.trim() && own.mode === 'reply' ? { who: t('preview.draft'), text: own.text } : livePreview(item);
   const name = liveName(item);
+  const front = useRef<HTMLDivElement>(null);
+  const gesture = useRef<{ x: number; y: number; lock: SwipeLock; dx: number; timer: ReturnType<typeof setTimeout> | null; long: boolean } | null>(null);
+
+  const setOffset = (px: number, animate: boolean): void => {
+    const el = front.current;
+    if (!el) return;
+    el.style.transition = animate && !reducedMotion.value ? 'transform 180ms ease' : 'none';
+    el.style.transform = px ? `translateX(${px}px)` : '';
+  };
+  useEffect(() => { setOffset(actions.swiped ? -PANEL_PX : 0, true); }, [actions.swiped]);
+
+  const onPointerDown = (event: PointerEvent): void => {
+    if (event.pointerType !== 'touch') return;
+    const timer = setTimeout(() => {
+      if (gesture.current && gesture.current.lock === 'none') { gesture.current.long = true; actions.onLongPress(); }
+    }, LONG_PRESS_MS);
+    gesture.current = { x: event.clientX, y: event.clientY, lock: 'none', dx: 0, timer, long: false };
+  };
+  const onPointerMove = (event: PointerEvent): void => {
+    const g = gesture.current;
+    if (!g) return;
+    const dx = event.clientX - g.x;
+    const dy = event.clientY - g.y;
+    if (g.lock === 'none') {
+      g.lock = lockOf(g.x, dx, dy);
+      if (g.lock !== 'none' && g.timer) { clearTimeout(g.timer); g.timer = null; }
+    }
+    if (g.lock !== 'horizontal' || !actions.swipeEnabled || actions.selected !== null) return;
+    g.dx = dx;
+    setOffset(offsetOf(dx, actions.swiped), false);
+  };
+  const onPointerEnd = (): void => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    if (g.timer) clearTimeout(g.timer);
+    if (g.lock === 'horizontal' && actions.swipeEnabled && actions.selected === null) {
+      const open = settle(g.dx, actions.swiped);
+      actions.onSwipe(open);
+      setOffset(open ? -PANEL_PX : 0, true);
+    }
+  };
+  const onClickCapture = (event: MouseEvent): void => {
+    // После долгого нажатия или сдвига — не открывать диалог.
+    if (gesture.current?.long || (actions.swiped && event.target instanceof Element && event.target.closest(`.${w.rowFront}`))) {
+      event.preventDefault(); event.stopPropagation();
+      if (actions.swiped) actions.onSwipe(false);
+    }
+  };
+
+  const selecting = actions.selected !== null;
   return (
-    <div class={w.rowWrap} data-row-id={String(item.id)}>
-      <Row
-        id={String(item.id)}
-        wrapped
-        avatar={<Avatar name={name} channel={liveChannel(item)} />}
-        title={name}
-        time={listTime(item.activity_at, at)}
-        who={preview.who}
-        preview={preview.text}
-        reason={reason.text}
-        tone={reason.tone}
-        unread={item.unread > 0}
-        current={current}
-        tabIndex={tabIndex}
-        onOpen={() => { markRead(item.id); navigate({ name: 'chats', id: String(item.id) }); }}
-        onKeyDown={onKeyDown}
-      />
-      <button type="button" class={w.rowMenu} aria-label={t('list.rowMenu', { name })} aria-haspopup="dialog" tabIndex={tabIndex} onClick={onMenu}>
-        <Icon name="more" size={20} />
-      </button>
+    <div class={w.rowWrap} data-row-id={String(item.id)} data-swiped={actions.swiped ? 'true' : 'false'} data-selecting={selecting ? 'true' : 'false'}>
+      {actions.swipeEnabled && (
+        <div class={w.swipePanel} aria-hidden={actions.swiped ? undefined : 'true'}>
+          <button type="button" class={w.swipeBtn} data-tone="ok" tabIndex={actions.swiped ? 0 : -1} onClick={() => { actions.onSwipe(false); actions.onResolve(); }}>{t('thread.resolve')}</button>
+          {actions.onImportant && <button type="button" class={w.swipeBtn} tabIndex={actions.swiped ? 0 : -1} onClick={() => { actions.onSwipe(false); actions.onImportant?.(); }}>{t('swipe.important')}</button>}
+          {actions.onHide && <button type="button" class={w.swipeBtn} tabIndex={actions.swiped ? 0 : -1} onClick={() => { actions.onSwipe(false); actions.onHide?.(); }}>{t('swipe.hide')}</button>}
+          <button type="button" class={w.swipeBtn} tabIndex={actions.swiped ? 0 : -1} aria-label={t('list.rowMenu', { name })} onClick={() => { actions.onSwipe(false); actions.onMenu(); }}>⋯</button>
+        </div>
+      )}
+      <div ref={front} class={w.rowFront} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd} onClickCapture={onClickCapture} onContextMenu={(event) => { if (gesture.current) event.preventDefault(); }}>
+        <Row
+          id={String(item.id)}
+          wrapped
+          avatar={selecting
+            ? <span class={w.check} data-checked={actions.selected ? 'true' : 'false'} aria-hidden="true">{actions.selected ? '✓' : ''}</span>
+            : <Avatar name={name} channel={liveChannel(item)} />}
+          title={name}
+          time={listTime(item.activity_at, at)}
+          who={preview.who}
+          preview={preview.text}
+          reason={reason.text}
+          tone={reason.tone}
+          unread={item.unread > 0}
+          current={current}
+          tabIndex={tabIndex}
+          pressed={selecting ? Boolean(actions.selected) : undefined}
+          onOpen={() => {
+            if (selecting) { actions.onSelect(); return; }
+            markRead(item.id); navigate({ name: 'chats', id: String(item.id) });
+          }}
+          onKeyDown={onKeyDown}
+        />
+        {!selecting && (
+          <button type="button" class={w.rowMenu} aria-label={t('list.rowMenu', { name })} aria-haspopup="dialog" tabIndex={tabIndex} onClick={actions.onMenu}>
+            <Icon name="more" size={20} />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -94,7 +187,10 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
   const [collapsed, setCollapsed] = useState<Partial<Record<Section, boolean>>>({});
   const [active, setActive] = useState<string | null>(null);
   const [filter, setFilter] = useState<ListFilter>(readFilter);
-  const [sheet, setSheet] = useState<'filter' | { row: number } | { confirmResolve: number } | null>(null);
+  const [sheet, setSheet] = useState<'filter' | { row: number } | { confirmResolve: number } | { confirmBulk: number[] } | null>(null);
+  /** Режим выбора (6.2): null — выключен. */
+  const [selected, setSelected] = useState<Set<number> | null>(null);
+  const [swiped, setSwiped] = useState<number | null>(null);
   const [query, setQuery] = useState('');
   const [found, setFound] = useState<{ q: string; ids: number[]; items: Map<number, InboxItem> } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -117,7 +213,7 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
   // Первый снимок — сразу; свои действия (заплатки) и смена фильтра — сразу (7.1 п.5).
   useEffect(() => { if (shown.length === 0 && server.length > 0) setShown(server); }, [server]);
   useEffect(() => { list.applyNow(); }, [map, filter]);
-  useEffect(() => { list.hold(sheet !== null); }, [sheet]);
+  useEffect(() => { list.hold(sheet !== null || selected !== null || swiped !== null); }, [sheet, selected !== null, swiped]);
 
   // Поиск на сервере в текущем виде (/api/inbox?q=); строки дальше обновляются живыми кадрами.
   useEffect(() => {
@@ -187,10 +283,50 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
   const activeFilters = filterSize(filter);
   const confirmItem = sheet && typeof sheet === 'object' && 'confirmResolve' in sheet ? itemFor(sheet.confirmResolve) : undefined;
 
+  const toggle = (id: number): void => {
+    const next = new Set(selected ?? []);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+  const phone = !isSplit.value;
   const renderRow = (item: InboxItem): JSX.Element => (
     <WorkRow key={item.id} item={item} current={String(item.id) === pinned} tabIndex={String(item.id) === focusId ? 0 : -1}
-      onKeyDown={onRowKey} onMenu={() => setSheet({ row: item.id })} />
+      onKeyDown={onRowKey} actions={{
+        onMenu: () => setSheet({ row: item.id }),
+        selected: selected === null ? null : selected.has(item.id),
+        onSelect: () => toggle(item.id),
+        onLongPress: () => { setSwiped(null); setSelected(new Set([...(selected ?? []), item.id])); },
+        swiped: swiped === item.id,
+        onSwipe: (open) => setSwiped(open ? item.id : null),
+        swipeEnabled: phone && gestures.value && can('conv.resolve') && item.state !== 'done',
+        onResolve: () => resolveRow(item),
+        onImportant: can('conv.important') ? () => setImportant(item.id, !item.flags.important) : null,
+        onHide: can('conv.hide') ? () => { setShown(removeShown(shown, String(item.id)).list); hide(item.id); } : null,
+      }} />
   );
+
+  /** Пакет: внешние заявки среди выбранных — ярус 2 (7.6). */
+  const chosen = [...(selected ?? [])].map((id) => itemFor(id)).filter((item): item is InboxItem => item !== undefined);
+  const runBulk = (action: BulkAction, confirmed = false): void => {
+    const ids = chosen.map((item) => item.id);
+    if (!ids.length) return;
+    if (action === 'resolve' && !confirmed && chosen.some(isTicket)) { setSheet({ confirmBulk: ids }); return; }
+    if (action === 'resolve' || action === 'hide') {
+      let next = shown;
+      for (const id of ids) next = removeShown(next, String(id)).list;
+      setShown(next);
+    }
+    bulk(ids, action);
+    setSelected(null);
+  };
+  const bulkTickets = sheet && typeof sheet === 'object' && 'confirmBulk' in sheet
+    ? sheet.confirmBulk.map((id) => itemFor(id)).filter((item): item is InboxItem => item !== undefined && isTicket(item)).length : 0;
+
+  // X — выбрать строку под фокусом (одной буквой, если включено, 7.3).
+  useEffect(() => {
+    if (selectTick.value === 0 || !focusId) return;
+    toggle(Number(focusId));
+  }, [selectTick.value]);
 
   return (
     <div class={s.list}>
@@ -199,6 +335,11 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
         <div class={w.titleRow}>
           <h1 class={s.title}>{t('chats.title')}</h1>
           {!isDesktop.value && <Button variant="quiet" size="sm" icon="search" label={t('nav.search')} aria-haspopup="dialog" onClick={() => { paletteOpen.value = true; }} />}
+          {can('conv.resolve') && (
+            <Button variant="quiet" size="sm" icon="check" aria-pressed={selected !== null} onClick={() => { setSwiped(null); setSelected(selected === null ? new Set() : null); }}>
+              {t('bulk.select')}
+            </Button>
+          )}
           <Button variant="quiet" size="sm" icon="filter" aria-haspopup="dialog" onClick={() => setSheet('filter')}>
             {activeFilters > 0 ? t('filter.buttonActive', { n: activeFilters }) : t('filter.button')}
           </Button>
@@ -296,6 +437,27 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
           <span class="num">{t('chats.updates', { n: pending.length, updates: tn('plural.updates', pending.length) })}</span>
         </button>
       )}
+
+      {selected !== null && (
+        <div class={w.bulkBar} role="toolbar" aria-label={t('bulk.toolbar')}>
+          <span class="num" aria-live="polite">{t('bulk.count', { n: selected.size })}</span>
+          <Button variant="primary" size="sm" icon="check" disabled={!selected.size} onClick={() => runBulk('resolve')}>{t('thread.resolve')}</Button>
+          <Button variant="secondary" size="sm" disabled={!selected.size} onClick={() => runBulk('read')}>{t('bulk.read')}</Button>
+          {can('conv.important') && <Button variant="secondary" size="sm" disabled={!selected.size} onClick={() => runBulk('important')}>{t('swipe.important')}</Button>}
+          {can('conv.hide') && <Button variant="secondary" size="sm" disabled={!selected.size} onClick={() => runBulk('hide')}>{t('swipe.hide')}</Button>}
+          <Button variant="quiet" size="sm" onClick={() => setSelected(null)}>{t('bulk.cancel')}</Button>
+        </div>
+      )}
+      {swiped !== null && <button type="button" class={w.swipeScrim} aria-label={t('swipe.close')} onClick={() => setSwiped(null)} />}
+
+      <Sheet open={sheet !== null && typeof sheet === 'object' && 'confirmBulk' in sheet} onClose={close}
+        title={t('bulk.ticketsTitle', { n: bulkTickets, tickets: tn('plural.tickets', bulkTickets) })}>
+        <p class={sheetStyles.text}>{t('bulk.ticketsText', { n: chosen.length })}</p>
+        <div class={sheetStyles.actions}>
+          <Button variant="secondary" onClick={close} autoFocus>{t('sheet.cancel')}</Button>
+          <Button variant="primary" icon="check" onClick={() => { close(); runBulk('resolve', true); }}>{t('bulk.ticketsYes', { n: chosen.length })}</Button>
+        </div>
+      </Sheet>
 
       <FilterSheet open={sheet === 'filter'} onClose={close} value={filter} onChange={changeFilter} />
 

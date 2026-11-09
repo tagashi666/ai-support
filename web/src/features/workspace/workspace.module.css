@@ -4,7 +4,7 @@
 
 /* Строка списка с «⋯»: меню видно при наведении и фокусе; на сенсоре — всегда, цель 44 px. */
 .rowWrap { position: relative; }
-.rowWrap > button:first-child { padding-right: 48px; }
+.rowFront > button:first-child { padding-right: 48px; }
 .rowMenu {
   position: absolute;
   top: 50%;
@@ -157,3 +157,18 @@
 .templateTitle { font-weight: 600; }
 .templateShortcut { color: var(--text-3); font-weight: 500; }
 .templateBody { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: var(--fs-small); }
+
+/* Свайп влево по строке (7.5) и режим выбора (6.2) */
+.rowWrap { overflow: hidden; touch-action: pan-y; }
+.rowFront { position: relative; background: var(--surface); z-index: 1; will-change: transform; }
+.swipePanel { position: absolute; inset: 0 0 0 auto; width: 216px; display: flex; z-index: 0; }
+.swipeBtn { flex: 1; min-height: 44px; border: 0; background: var(--surface-sunken); color: var(--text); font: inherit; font-size: var(--fs-small); font-weight: 600; cursor: pointer; }
+.swipeBtn[data-tone="ok"] { background: var(--ok); color: var(--bg); }
+.swipeBtn + .swipeBtn { border-left: 1px solid var(--border); }
+.swipeScrim { position: fixed; inset: 0; z-index: 0; border: 0; background: transparent; padding: 0; }
+.rowWrap[data-swiped="true"] { z-index: 1; }
+.check { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 2px solid var(--control-border); border-radius: 50%; color: var(--on-accent); font-weight: 700; }
+.check[data-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.rowWrap[data-selecting="true"] .rowFront > button:first-child { padding-right: var(--s4); }
+.bulkBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-top: 1px solid var(--border); background: var(--surface); position: sticky; bottom: 0; z-index: 2; }
+.bulkBar > span { margin-right: auto; font-size: var(--fs-body); font-weight: 600; }

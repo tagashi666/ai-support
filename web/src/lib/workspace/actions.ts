@@ -394,3 +394,52 @@ export async function sendFile(id: number, file: File, options: { dangerousConfi
 }
 
 export function dismissOutgoing(id: number, localId: string): void { setOutgoing(id, localId, null); }
+
+// --- пакетные действия (6.2, 7.6, 10.3 п.1) ---------------------------------
+
+export type BulkAction = 'resolve' | 'read' | 'important' | 'hide';
+
+const BULK_BODY: Record<BulkAction, Record<string, unknown> | null> = {
+  resolve: { status: 'resolved' }, important: { escalated: true }, hide: { hidden: true }, read: null,
+};
+
+/**
+ * Пакет: показ меняется сразу у всех строк, запросы уходят после окна
+ * отмены. Маршрута-пакета (10.3 п.1) на сервере пока нет — панель шлёт /state
+ * по одному и сама собирает итог «Решено 8 из 9». «Прочитано» уходит в канал
+ * клиенту, поэтому сразу и без отмены.
+ */
+export function bulk(ids: readonly number[], action: BulkAction): void {
+  if (!ids.length) return;
+  const n = ids.length;
+  if (action === 'read') {
+    for (const id of ids) markRead(id);
+    showToast({ text: t('bulk.readDone', { n }) });
+    return;
+  }
+  for (const id of ids) {
+    const item = itemOf(id);
+    if (action === 'resolve') patch(id, { status: 'resolved', state: 'done', section: 'done' });
+    else if (action === 'important') patch(id, { flags: { ...(item?.flags ?? { not_found: false, handoff: false }), important: true } });
+    else patch(id, {}, true);
+  }
+  const key = `bulk:${action}:${ids.join(',')}`;
+  const body = BULK_BODY[action]!;
+  deferred.schedule({
+    key,
+    commit: async (keepalive) => {
+      const failed: number[] = [];
+      for (const id of ids) {
+        try { await state(id, body, keepalive); } catch { failed.push(id); dropPatch(id); }
+      }
+      for (const id of ids) if (!failed.includes(id)) void syncThread(id);
+      if (failed.length) {
+        showToast({ text: t('bulk.partial', { done: n - failed.length, n, names: failed.map(nameOf).filter(Boolean).join(', ') }), kind: 'error', ttl: null });
+      }
+    },
+    revert: () => { for (const id of ids) dropPatch(id); },
+    failed: failToast,
+  }, UNDO_MS);
+  const label = action === 'resolve' ? 'bulk.resolved' : action === 'important' ? 'bulk.important' : 'bulk.hidden';
+  undoable(t(label, { n }), () => { deferred.cancel(key); });
+}

@@ -590,6 +590,24 @@ export const ru = {
   'device.logoutYes': 'Выйти',
   'device.you': 'Вы: {name} · {role}',
 
+  // Свайпы и пакетные действия (7.5, 6.2)
+  'swipe.important': 'Важно',
+  'swipe.hide': 'Убрать',
+  'swipe.close': 'Закрыть кнопки строки',
+  'bulk.select': 'Выбрать',
+  'bulk.toolbar': 'Действия с выбранными',
+  'bulk.count': 'Выбрано: {n}',
+  'bulk.read': 'Прочитано',
+  'bulk.cancel': 'Отмена',
+  'bulk.resolved': 'Решено: {n}',
+  'bulk.important': 'Отмечено важным: {n}',
+  'bulk.hidden': 'Убрано из списка: {n}',
+  'bulk.readDone': 'Прочитано: {n}',
+  'bulk.partial': 'Готово {done} из {n}. Не вышло: {names}',
+  'bulk.ticketsTitle': 'Закрыть {n} {tickets} в кабинете?',
+  'bulk.ticketsText': 'Выбрано диалогов: {n}. Статус внешних заявок сменится на «закрыта», клиент может получить уведомление из кабинета.',
+  'bulk.ticketsYes': 'Решить ({n})',
+
   // Заглушки разделов
   'placeholder.title': 'Раздел «{name}» появится позже',
   'placeholder.text': 'В прототипе работают «Сегодня» и «Диалоги». Здесь будет раздел по плану.',
@@ -791,6 +809,7 @@ export const ru = {
   'plural.updates': 'обновление|обновления|обновлений',
   'plural.days': 'день|дня|дней',
   'plural.cases': 'обращение|обращения|обращений',
+  'plural.tickets': 'заявку|заявки|заявок',
   'plural.minutes': 'мин|мин|мин',
 } as const;
 
