@@ -1,13 +1,15 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import type { InboxItem, ThreadAttachment, ThreadEvent, ThreadMessage } from '@shared/api-types';
+import type { InboxItem, ThreadAttachment, ThreadEvent, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
+import { ImageEditor } from '@/features/media/ImageEditor';
+import { TgsSticker } from '@/features/media/TgsSticker';
 import { t, type Key } from '@/i18n/ru';
 import { clock, dayDivider, sameDay } from '@/lib/format/format';
 import { liveName } from '@/lib/live/labels';
-import { readToken, sendJson } from '@/lib/live/api';
+import { getJson, readToken, sendJson } from '@/lib/live/api';
 import { now, announcement } from '@/lib/store/state';
 import {
-  cancelSend, dismissOutgoing, drafts, draftTick, markRead, meKey, permissions, retrySend, returnToField, sendNow,
+  cancelSend, dismissOutgoing, drafts, draftTick, markRead, meKey, permissions, retrySend, returnToField, sendFile, sendNow,
 } from '@/lib/workspace/actions';
 import { modeLabel } from '@/lib/workspace/labels';
 import { availability } from '@/lib/workspace/registry';
@@ -90,6 +92,7 @@ function AttachmentView({ file, onOpen }: { file: ThreadAttachment; onOpen: (fil
     );
   }
   const ratio = file.width && file.height ? `${file.width} / ${file.height}` : undefined;
+  if (file.kind === 'tgs_sticker' || file.mime === 'application/x-tgsticker') return <TgsSticker id={file.id} />;
   if ((file.kind === 'photo' || file.kind === 'sticker' || (file.kind === 'animation' && file.mime === 'image/gif')) && file.mime !== 'application/x-tgsticker') {
     return (
       <button type="button" class={w.media} style={ratio ? { aspectRatio: ratio } : undefined} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
@@ -147,12 +150,17 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   const [unseen, setUnseen] = useState(0);
   const [menu, setMenu] = useState<ThreadMessage | null>(null);
   const [viewer, setViewer] = useState<ThreadAttachment | null>(null);
+  const [editing, setEditing] = useState<File | null>(null);
+  const [why, setWhy] = useState<{ state: 'loading' | 'error' } | { state: 'ready'; data: ThreadSuggestion } | null>(null);
+  const canEdit = availability('conv.attach', permissions.value) === 'show' && thread?.head?.attachments === true;
   const anchor = useRef<{ height: number; top: number } | null>(null);
   const lastId = useRef<number | null>(null);
   const firstLoad = useRef(true);
   // «Новое» — линия перед непрочитанными при открытии (сколько их было в строке списка).
   const [newFrom] = useState(() => item.unread);
   const canQuote = availability('msg.quote', permissions.value) === 'show';
+  // «Почему так?» читает черновик: право на ответ (наблюдатель не видит, раздел 10).
+  const canWhy = permissions.value.has('conversation:reply');
 
   const messages = thread?.messages ?? [];
   const entries: Entry[] = [
@@ -212,6 +220,27 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
     if (!message.quote_id) return;
     drafts.set(id, { quote: { id: message.id, quoteId: message.quote_id, excerpt: (message.text ?? '').slice(0, 120) }, mode: 'reply' });
     draftTick.value += 1;
+  };
+  /** «Почему так?» у ответа помощника (6.3.2): данные черновика, из которого ушёл ответ. */
+  const explain = (message: ThreadMessage): void => {
+    setMenu(null);
+    if (message.suggestion_id === null) { setWhy({ state: 'error' }); return; }
+    setWhy({ state: 'loading' });
+    void getJson<{ suggestion: ThreadSuggestion }>(`/api/suggestions/${message.suggestion_id}`, readToken() ?? '')
+      .then((response) => setWhy({ state: 'ready', data: response.suggestion }))
+      .catch(() => setWhy({ state: 'error' }));
+  };
+  /** «Править» в просмотрщике: картинка — в редактор, результат уходит файлом (ярус 1, кнопка названа). */
+  const edit = (file: ThreadAttachment): void => {
+    const url = `/api/attachments/${file.id}`;
+    void fetch(url, { credentials: 'same-origin' })
+      // 401 — медиа-билет в cookie истёк: взять новый и повторить один раз.
+      .then(async (response) => (response.status === 401
+        ? getJson('/api/ticket', readToken() ?? '').then(() => fetch(url, { credentials: 'same-origin' }))
+        : response))
+      .then((response) => { if (!response.ok) throw new Error(String(response.status)); return response.blob(); })
+      .then((blob) => { setViewer(null); setEditing(new File([blob], file.name || 'image.png', { type: blob.type || 'image/png' })); })
+      .catch(() => showToast({ text: t('editor.loadFailed'), kind: 'error', ttl: null }));
   };
   const copy = (message: ThreadMessage): void => {
     setMenu(null);
@@ -317,15 +346,40 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
               ? <Option label={t('message.quote')} onSelect={() => quote(menu)} />
               : <Option label={t('message.quote')} hint={t('message.quoteUnavailable')} onSelect={() => setMenu(null)} />)}
             {menu.text && <Option label={t('message.copy')} onSelect={() => copy(menu)} />}
+            {menu.voice === 'assistant' && canWhy && <Option label={t('why.title')} onSelect={() => explain(menu)} />}
           </div>
         )}
       </Sheet>
+
+      <Sheet open={why !== null} onClose={() => setWhy(null)} title={t('why.title')}>
+        {why?.state === 'loading' && <p>{t('live.loading')}</p>}
+        {why?.state === 'error' && <p>{t('why.noSources')}</p>}
+        {why?.state === 'ready' && (
+          <div class={w.why}>
+            <p>{why.data.sources.length ? t('why.from', { sources: why.data.sources.map((source) => `«${source}»`).join(', ') }) : t('why.noSources')}</p>
+            <p>{t('why.level', { level: t(why.data.level === 'sure' ? 'draft.sure' : why.data.level === 'check' ? 'draft.check' : 'draft.unsure') })}{why.data.reason ? ` — ${why.data.reason}` : ''}</p>
+            {why.data.operator_note && <p>{t('draft.noteForYou', { note: why.data.operator_note })}</p>}
+            <details class={w.expert}>
+              <summary>{t('draft.expert')}</summary>
+              <p>{t('draft.expertText', { score: why.data.confidence === null ? '—' : `${Math.round(why.data.confidence * 100)}%`, model: why.data.model ?? '—' })}</p>
+            </details>
+          </div>
+        )}
+      </Sheet>
+
+      {editing && (
+        <ImageEditor file={editing} saveLabel={t('editor.send')} onClose={() => setEditing(null)}
+          onSave={(edited) => { setEditing(null); void sendFile(id, edited, { dangerousConfirmed: false, quote: null }); }} />
+      )}
 
       <Sheet open={viewer !== null} onClose={() => setViewer(null)} title={viewer?.name || t('file.photo')}>
         {viewer && (
           <div class={w.viewer}>
             <img src={`/api/attachments/${viewer.id}`} alt="" />
-            <a class={w.inlineAction} href={`/api/attachments/${viewer.id}`} download={viewer.name ?? undefined}>{t('file.download')}</a>
+            <div class={w.viewerActions}>
+              {canEdit && <Button variant="secondary" size="sm" icon="edit" onClick={() => edit(viewer)}>{t('editor.edit')}</Button>}
+              <a class={w.inlineAction} href={`/api/attachments/${viewer.id}`} download={viewer.name ?? undefined}>{t('file.download')}</a>
+            </div>
           </div>
         )}
       </Sheet>

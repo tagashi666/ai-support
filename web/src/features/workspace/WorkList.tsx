@@ -336,8 +336,9 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
           <h1 class={s.title}>{t('chats.title')}</h1>
           {!isDesktop.value && <Button variant="quiet" size="sm" icon="search" label={t('nav.search')} aria-haspopup="dialog" onClick={() => { paletteOpen.value = true; }} />}
           {can('conv.resolve') && (
-            <Button variant="quiet" size="sm" icon="check" aria-pressed={selected !== null} onClick={() => { setSwiped(null); setSelected(selected === null ? new Set() : null); }}>
-              {t('bulk.select')}
+            <Button variant="quiet" size="sm" icon="check" aria-pressed={selected !== null} label={phone ? t('bulk.select') : undefined}
+              onClick={() => { setSwiped(null); setSelected(selected === null ? new Set() : null); }}>
+              {phone ? undefined : t('bulk.select')}
             </Button>
           )}
           <Button variant="quiet" size="sm" icon="filter" aria-haspopup="dialog" onClick={() => setSheet('filter')}>

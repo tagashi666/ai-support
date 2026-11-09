@@ -10,6 +10,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { deflateSync, gzipSync } from 'node:zlib';
 
 export interface DevPanelOptions {
   port: number;
@@ -36,6 +37,36 @@ export const TEXTS = ['Не подключается на телефоне', 'К
   'Сколько устройств можно?', 'Оплатил, но доступа нет', 'Спасибо, заработало', 'Где взять ссылку подписки?'];
 
 const DAY = 86_400_000;
+
+const CRC = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+const crc32 = (bytes: Buffer): number => {
+  let c = 0xffffffff;
+  for (const byte of bytes) c = CRC[(c ^ byte) & 0xff]! ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+};
+/** Синтетический PNG: градиент, RGB, без внешних файлов. */
+function makePng(width: number, height: number): Buffer {
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const head = Buffer.alloc(4); head.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([head, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0); ihdr.writeUInt32BE(height, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const rows = Buffer.alloc((width * 3 + 1) * height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const at = y * (width * 3 + 1) + 1 + x * 3;
+      rows[at] = 40 + x * 3; rows[at + 1] = 90 + y * 4; rows[at + 2] = 200;
+    }
+  }
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(rows)), chunk('IEND', Buffer.alloc(0))]);
+}
 const GB = 1024 ** 3;
 
 export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel> {
@@ -98,13 +129,31 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
     if (i % 13 === 7) store.setSuspicious(conversation.id, true);
   }
 
-  // Картинка 2×1 пикселя (PNG), чтобы в ленте было фото с размерами.
-  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYPj/n4GBgQEAEgIC/2nUPxkAAAAASUVORK5CYII=', 'base64');
+  // Картинка 64×32 (настоящий PNG — её можно открыть в редакторе), чтобы в ленте было фото с размерами.
+  const png = makePng(64, 32);
   const photoMsg = inboundAt(0, now - 30_000, 'Вот снимок ошибки')!.message;
   const saved = await saveUploadedMedia((async function* () { yield png; })(), config.mediaMaxFileBytes);
   store.addLocalAttachment(photoMsg.id, { fileRef: saved.fileRef, localPath: saved.localPath, mediaType: 'photo', mimeType: 'image/png',
     originalName: 'ошибка.png', bytes: saved.bytes, sha256: saved.sha256, width: 640, height: 320 });
   store.addNote(photoMsg.conversation_id, 'Клиент на iOS 17, проверить профиль.');
+  // Анимированный стикер TGS (Lottie в gzip): квадрат, который вращается.
+  const lottie = { v: '5.5.2', fr: 30, ip: 0, op: 60, w: 128, h: 128, nm: 'dev', ddd: 0, assets: [], layers: [{
+    ddd: 0, ind: 1, ty: 4, nm: 'square', sr: 1, ip: 0, op: 60, st: 0, bm: 0,
+    ks: { o: { a: 0, k: 100 }, r: { a: 1, k: [{ t: 0, s: [0], i: { x: [0.5], y: [0.5] }, o: { x: [0.5], y: [0.5] } }, { t: 60, s: [360] }] },
+      p: { a: 0, k: [64, 64, 0] }, a: { a: 0, k: [0, 0, 0] }, s: { a: 0, k: [100, 100, 100] } },
+    shapes: [{ ty: 'rc', d: 1, s: { a: 0, k: [60, 60] }, p: { a: 0, k: [0, 0] }, r: { a: 0, k: 12 } },
+      { ty: 'fl', c: { a: 0, k: [0.15, 0.39, 0.92, 1] }, o: { a: 0, k: 100 } }],
+  }] };
+  const tgs = gzipSync(Buffer.from(JSON.stringify(lottie)));
+  const stickerMsg = inboundAt(0, now - 20_000, '')!.message;
+  const savedTgs = await saveUploadedMedia((async function* () { yield tgs; })(), config.mediaMaxFileBytes);
+  store.addLocalAttachment(stickerMsg.id, { fileRef: savedTgs.fileRef, localPath: savedTgs.localPath, mediaType: 'tgs_sticker',
+    mimeType: 'application/x-tgsticker', originalName: 'sticker.tgs', bytes: savedTgs.bytes, sha256: savedTgs.sha256, width: 128, height: 128 });
+  // Ответ помощника из черновика — для «Почему так?».
+  const answered = byIndex.get(4)!;
+  const used = store.createSuggestion({ conversationId: answered, text: 'Можно подключить до трёх устройств.', confidence: 0.88,
+    sources: ['Устройства'], reason: 'статья короткая' });
+  store.recordOutbound({ conversationId: answered, author: 'ai', text: 'Можно подключить до трёх устройств.', suggestionId: used.id });
   // Business-диалог: клиент писал больше суток назад — окно ответа закрыто.
   store.recordInbound({ channel: 'tg_dm', externalId: 'dev-biz', displayName: 'Дина С.', text: 'Верните деньги за месяц',
     externalMsgId: 'dev-biz-1', sentAt: now - 26 * 60 * 60_000, tgUserId: 900001, businessConnectionId: 'dev-bc' });

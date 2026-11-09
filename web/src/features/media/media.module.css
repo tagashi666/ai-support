@@ -1,0 +1,22 @@
+.tgs { width: 160px; height: 160px; display: grid; place-items: center; }
+.tgsBox { width: 100%; height: 100%; }
+.tgs[data-state="failed"] .tgsBox { display: none; }
+.tgsFailed { color: var(--text-3); font-size: var(--fs-small); text-align: center; }
+
+.editor { width: min(64rem, calc(100vw - 2rem)); height: min(90vh, 52rem); max-width: none; max-height: none; padding: 0; border: 0; border-radius: var(--r-sheet); background: var(--surface); color: var(--text); box-shadow: var(--shadow-pop); overflow: hidden; }
+.editor[open] { display: flex; flex-direction: column; }
+.editor::backdrop { background: var(--scrim); }
+@media (max-width: 767px) { .editor { width: 100%; height: 100%; border-radius: 0; } }
+.editorTools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); }
+.tool { min-height: 40px; padding: 0 var(--s3); border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-body); cursor: pointer; }
+.tool[aria-pressed="true"] { background: var(--selected); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+@media (pointer: coarse) { .tool { min-height: 44px; } }
+.textInput { min-height: 40px; padding: 0 var(--s2); border: 1px solid var(--control-border); border-radius: 8px; font: inherit; background: var(--surface); color: var(--text); }
+.inline { display: inline-flex; align-items: center; }
+.inline input[type="color"] { width: 40px; height: 40px; border: 0; background: transparent; padding: 0; }
+.size { display: inline-flex; align-items: center; gap: var(--s1); }
+.size input { width: 5rem; min-height: 40px; padding: 0 var(--s2); border: 1px solid var(--control-border); border-radius: 8px; font: inherit; background: var(--surface); color: var(--text); }
+.stage { flex: 1; min-height: 0; overflow: auto; display: grid; place-items: center; padding: var(--s3); background: var(--surface-sunken); }
+.canvas { max-width: 100%; max-height: 100%; touch-action: none; cursor: crosshair; background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0 / 16px 16px; }
+.editorFoot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-top: 1px solid var(--border); }
+.hint { margin-right: auto; color: var(--text-3); font-size: var(--fs-small); }

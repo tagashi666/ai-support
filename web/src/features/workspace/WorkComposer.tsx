@@ -1,3 +1,5 @@
+import { ImageEditor } from '@/features/media/ImageEditor';
+import { isMod, layerOpen, modLabel } from '@/lib/keys';
 import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { InboxItem, ThreadHead } from '@shared/api-types';
@@ -52,6 +54,36 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
   const closed = head.window.applies && !head.window.open;
   const offline = connection.value === 'offline';
   const suggestion = threads.value.get(id)?.suggestion ?? null;
+  const [editing, setEditing] = useState<File | null>(null);
+  const canCapture = canFiles && isDesktop.value && typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices?.getDisplayMedia);
+
+  /** Снимок экрана → редактор → файл клиенту (как в классике, Ctrl+Shift+S). */
+  const capture = async (): Promise<void> => {
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      await video.play();
+      const shot = document.createElement('canvas');
+      shot.width = video.videoWidth; shot.height = video.videoHeight;
+      shot.getContext('2d')?.drawImage(video, 0, 0);
+      stream.getTracks().forEach((track) => track.stop());
+      shot.toBlob((blob) => { if (blob) setEditing(new File([blob], `screenshot-${Date.now()}.png`, { type: 'image/png' })); }, 'image/png');
+    } catch (err) {
+      if ((err as Error).name !== 'NotAllowedError') showToast({ text: t('editor.captureFailed'), kind: 'error', ttl: null });
+    }
+  };
+
+  // Ctrl+Shift+U — файл, Ctrl+Shift+S — снимок (7.3, как сейчас); по физической клавише.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (!isMod(event) || !event.shiftKey || layerOpen() || mode !== 'reply') return;
+      if (event.code === 'KeyU' && canFiles) { event.preventDefault(); fileInput.current?.click(); }
+      else if (event.code === 'KeyS' && canCapture) { event.preventDefault(); void capture(); }
+    };
+    addEventListener('keydown', onKey);
+    return () => removeEventListener('keydown', onKey);
+  }, [canFiles, canCapture, mode]);
 
   // Чужие изменения черновика («Править», «Вернуть в поле», цитата из ленты) — в поле.
   const wantFocus = useRef(false);
@@ -187,6 +219,7 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
             {canFiles ? (
               <Button variant="quiet" size="sm" icon="plus" onClick={() => fileInput.current?.click()} title={t('composer.attachHint')}>{t('composer.attach')}</Button>
             ) : !head.attachments ? <span class={w.toolNote}>{t('composer.textOnly')}</span> : null}
+            {canCapture && <Button variant="quiet" size="sm" onClick={() => { void capture(); }} title={t('editor.captureHint', { mod: modLabel(), keys: '⇧S' })}>{t('editor.capture')}</Button>}
             <input ref={fileInput} type="file" multiple hidden onChange={(event) => {
               const input = event.target as HTMLInputElement;
               addFiles(input.files);
@@ -265,6 +298,10 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
           }}>{t('file.dangerYes')}</Button>
         </div>
       </Sheet>
+      {editing && (
+        <ImageEditor file={editing} saveLabel={t('editor.send')} onClose={() => setEditing(null)}
+          onSave={(edited) => { setEditing(null); void sendFile(id, edited, { dangerousConfirmed: false, quote: draft.quote }); }} />
+      )}
     </div>
   );
 }

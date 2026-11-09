@@ -3,6 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { LiveClient } from '@/features/client/LiveClient';
 import { LiveSummary } from '@/features/live/LiveSummary';
 import { t } from '@/i18n/ru';
+import { layerOpen } from '@/lib/keys';
 import { isHuge, isSplit, isWide } from '@/lib/media';
 import { navigate } from '@/lib/router';
 import { clientPinned } from '@/lib/store/state';
@@ -40,6 +41,7 @@ export function Workspace({ id, client = false }: { id: string | null; client?: 
     const onKey = (event: KeyboardEvent): void => {
       if (event.code !== 'KeyZ' || !(event.metaKey || event.ctrlKey) || event.shiftKey) return;
       if ((event.target as HTMLElement | null)?.closest('input, textarea, [contenteditable="true"]')) return;
+      if (event.defaultPrevented || layerOpen()) return;
       if (undoLast()) event.preventDefault();
     };
     addEventListener('keydown', onKey);

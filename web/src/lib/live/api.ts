@@ -81,7 +81,9 @@ export async function uploadFile<T>(path: string, token: string, file: Blob & { 
       method: 'POST',
       headers: {
         authorization: `Bearer ${token}`,
-        'content-type': 'application/octet-stream',
+        // Только этот тип сервер принимает потоком с пределом 45 МБ (server.ts);
+        // octet-stream разбирается буфером до 1 МБ и ломал загрузку (ошибка этапа 3а).
+        'content-type': 'application/vnd.ai-support.attachment',
         'x-file-name': encodeURIComponent(file.name ?? 'file'),
         'x-file-type': encodeURIComponent(file.type || 'application/octet-stream'),
         ...headers,

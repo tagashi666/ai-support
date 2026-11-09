@@ -52,7 +52,8 @@ test('«?» — список клавиш, «]» — следующий диал
   // E по умолчанию ничего не делает (14.7).
   const url = page.url();
   await page.keyboard.press('KeyE');
-  await expect(page.getByText(/Решено ·|решён/)).toHaveCount(0);
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('button', { name: 'Отменить' })).toHaveCount(0);
   expect(page.url()).toBe(url);
 });
 
