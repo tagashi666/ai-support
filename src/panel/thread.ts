@@ -73,10 +73,10 @@ function attachmentsOf(db: Database.Database, ids: readonly number[]): Map<numbe
   return grouped;
 }
 
-/** Авторы-люди исходящих сообщений по событиям журнала. */
+/** Авторы-люди исходящих сообщений и заметок по событиям журнала. */
 function authorsOf(db: Database.Database, conversationId: number, messages: readonly Message[], names: Names): Map<number, { id: string; name: string }> {
   const found = new Map<number, { id: string; name: string }>();
-  const own = messages.filter((message) => message.direction === 'out' && message.author === 'agent');
+  const own = messages.filter((message) => message.direction === 'note' || (message.direction === 'out' && message.author === 'agent'));
   if (own.length === 0) return found;
   const from = Math.min(...own.map((message) => message.created_at));
   const rows = db.prepare(`SELECT payload FROM event WHERE kind = ? AND conversation_id = ? AND created_at >= ?`)

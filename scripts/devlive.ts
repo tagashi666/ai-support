@@ -6,7 +6,11 @@
  *   открыть http://127.0.0.1:8195/next/?live=1 и войти ключом dev-live-0123456789abcdef
  *
  * Каждые 7 с приходит сообщение клиента, иногда отвечает помощник или
- * оператор. Данные вымышленные; база удаляется при выходе (Ctrl+C).
+ * оператор. Отправка уходит в поддельный канал (ничего не покидает машину):
+ * ответы, файлы и смена статуса заявок проходят как настоящие. Есть
+ * черновики разной уверенности, картинка, Business-диалог с закрытым окном
+ * 24 ч и коллега с закреплением. Данные вымышленные; база удаляется при
+ * выходе (Ctrl+C). DEVLIVE_QUIET=1 — без потока событий.
  */
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -32,9 +36,19 @@ const { Outbox } = await import('../src/core/outbox.js');
 const { Operations } = await import('../src/core/operations.js');
 const { startWeb } = await import('../src/panel/server.js');
 
+const { saveUploadedMedia } = await import('../src/core/media.js');
+const { config } = await import('../src/config.js');
+
 const db = openDatabase();
 const store = new Store(db);
 const operations = new Operations(store);
+const outbox = new Outbox(store);
+let sent = 0;
+// Поддельные каналы: отвечают как Telegram и Bedolaga, но ничего не отправляют.
+const fake = { send: async () => ({ externalMsgId: `dev-out-${++sent}` }), sendAttachment: async () => ({ externalMsgId: `dev-file-${++sent}` }) };
+outbox.register('tg_bot', fake);
+outbox.register('tg_dm', fake);
+outbox.register('bedolaga', { send: fake.send });
 const NAMES = ['Анна К.', 'Олег Т.', 'Ирина', 'Павел С.', 'Мария В.', 'Денис', 'Света Л.', 'Георгий', 'Ника', 'Тимур Р.', 'Ольга', 'Артём'];
 const TEXTS = ['Не подключается на телефоне', 'Как продлить подписку?', 'Скорость упала вечером', 'Позовите оператора',
   'Сколько устройств можно?', 'Оплатил, но доступа нет', 'Спасибо, заработало', 'Где взять ссылку подписки?'];
@@ -54,14 +68,33 @@ for (let i = 0; i < 40; i += 1) {
   if (i % 6 === 3) store.setHandoff(conversation.id, at + 10_000);
   if (i % 9 === 4) store.setEscalated(conversation.id, true, 'high');
   if (i % 8 === 5) store.createSuggestion({ conversationId: conversation.id, text: 'Черновик ответа', confidence: 0.5 });
+  if (i % 8 === 1) store.createSuggestion({ conversationId: conversation.id, text: 'Здравствуйте! Удалите профиль в приложении и добавьте его заново по ссылке из личного кабинета. Если не поможет — пришлите снимок ошибки.', confidence: 0.96, sources: ['Подключение iOS'] });
+  if (i % 8 === 3) store.createSuggestion({ conversationId: conversation.id, text: 'Скорость вечером может падать из-за загрузки сервера. Попробуйте другой сервер в приложении.', confidence: 0.86, sources: ['Скорость'], reason: 'нет статьи про этот сервер' });
   if (i % 11 === 6) operations.claim(conversation.id, colleague);
   if (i % 10 === 9) store.setStatus(conversation.id, 'resolved');
 }
 
-const app = await startWeb({ store, outbox: new Outbox(store) });
+// Картинка 2×1 пикселя (PNG), чтобы в ленте было фото с размерами.
+const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAYAAAD0In+KAAAAEUlEQVR4nGNgYPj/n4GBgQEAEgIC/2nUPxkAAAAASUVORK5CYII=', 'base64');
+const photoMsg = inbound(0, now - 30_000, 'Вот снимок ошибки')!.message;
+const saved = await saveUploadedMedia((async function* () { yield png; })(), config.mediaMaxFileBytes);
+store.addLocalAttachment(photoMsg.id, { fileRef: saved.fileRef, localPath: saved.localPath, mediaType: 'photo', mimeType: 'image/png',
+  originalName: 'ошибка.png', bytes: saved.bytes, sha256: saved.sha256, width: 640, height: 320 });
+store.addNote(photoMsg.conversation_id, 'Клиент на iOS 17, проверить профиль.');
+// Business-диалог: клиент писал больше суток назад — окно ответа закрыто.
+store.recordInbound({ channel: 'tg_dm', externalId: 'dev-biz', displayName: 'Дина С.', text: 'Верните деньги за месяц',
+  externalMsgId: 'dev-biz-1', sentAt: now - 26 * 60 * 60_000, tgUserId: 900001, businessConnectionId: 'dev-bc' });
+store.recordInbound({ channel: 'tg_dm', externalId: 'dev-biz2', displayName: 'Елена П.', text: 'Можно на второй телефон?',
+  externalMsgId: 'dev-biz2-1', sentAt: now - 21 * 60 * 60_000 - 30 * 60_000, tgUserId: 900002, businessConnectionId: 'dev-bc' });
+store.upsertTemplate('привет', 'Приветствие', 'Здравствуйте! Сейчас посмотрю.');
+
+const app = await startWeb({ store, outbox });
+// После startWeb: он ставит синхронизацию заявок без клиента Bedolaga (503).
+outbox.registerStatusSync('bedolaga', async () => undefined);
 console.log(`Панель: http://127.0.0.1:${process.env.PANEL_PORT}/next/?live=1  ключ: ${process.env.PANEL_TOKEN}`);
 
 const timer = setInterval(() => {
+  if (process.env.DEVLIVE_QUIET === '1') return;
   const i = Math.floor(Math.random() * 40);
   const result = inbound(i, Date.now(), TEXTS[Math.floor(Math.random() * TEXTS.length)]!);
   if (result && Math.random() < 0.3) {

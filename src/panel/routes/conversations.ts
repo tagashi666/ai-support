@@ -6,6 +6,7 @@ import { queueAutoLearn, requeueAutoLearn } from '../../ai/mining.js';
 import { channelAvailability, decorate, livePendingSuggestion } from '../helpers.js';
 import type { RouteContext } from '../context.js';
 import { apiError } from '../errors.js';
+import { AUTHOR_EVENT } from '../thread.js';
 
 /** Диалоги: список, папки, история, прочтение, присутствие, удержание, заметки и статус. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
@@ -161,6 +162,8 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       const id = Number(request.params.id);
       if (!store.getConversation(id)) return reply.code(404).send({ error: 'Диалог не найден' });
       const added = store.addNote(id, text);
+      // Автор заметки — подпись «Мария, 14:02» в ленте новой панели (без миграции, как у ответов).
+      try { store.logEvent(AUTHOR_EVENT, id, { message_id: added.message.id, actor: actorOf(request).key }); } catch { /* подпись не обязательна */ }
       return { ok: true, message: added.message };
     },
   );

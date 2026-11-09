@@ -17,6 +17,7 @@ import type { Section } from '../shared/attention.js';
  */
 
 const PREVIEW_MAX = 140;
+const CHANNEL_VIEW: Record<string, InboxProjection['channel']> = { tg_bot: 'telegram', tg_dm: 'business', bedolaga: 'bedolaga', minishop: 'minishop' };
 const AUTHOR: Record<string, LastAuthor> = { agent: 'operator', ai: 'assistant', system: 'system', client: 'client' };
 
 export interface Names { name(key: string): string }
@@ -92,6 +93,7 @@ export function projectRows(db: Database.Database, rows: readonly FactsRow[], no
       priority: row.priority,
       status: row.status,
       source: source ? { id: source.id, kind: source.kind, name: source.name } : null,
+      channel: CHANNEL_VIEW[row.channel] ?? 'telegram',
       folder_ids: folderIds,
       customer: {
         name: row.display_name,

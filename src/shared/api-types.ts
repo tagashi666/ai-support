@@ -56,6 +56,8 @@ export interface InboxProjection {
   priority: string;
   status: string;
   source: { id: string; kind: string; name: string } | null;
+  /** Канал диалога словами панели (у бота и Business источник по умолчанию общий, по нему канал не понять). */
+  channel: 'telegram' | 'business' | 'bedolaga' | 'minishop';
   folder_ids: number[];
   customer: { name: string | null; username: string | null; avatar_version: string | null };
   /** Последняя активность (для времени в строке). */

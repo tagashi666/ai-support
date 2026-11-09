@@ -244,7 +244,7 @@ console.log('\n[ порядок /api/inbox = сортировка функцие
 console.log('\n[ форма ответа (контракт api-types.ts) ]');
 {
   const ITEM_KEYS = ['id', 'rank', 'section', 'state', 'tier', 'reason', 'waiting_since', 'sla', 'last', 'unread', 'owner',
-    'assignee', 'ai', 'window', 'flags', 'priority', 'status', 'source', 'folder_ids', 'customer', 'activity_at', 'updated_at'] as const;
+    'assignee', 'ai', 'window', 'flags', 'priority', 'status', 'source', 'channel', 'folder_ids', 'customer', 'activity_at', 'updated_at'] as const;
   type Missing = Exclude<keyof InboxItem, (typeof ITEM_KEYS)[number]>;
   const exhaustive: [Missing] extends [never] ? true : never = true;
   void exhaustive;

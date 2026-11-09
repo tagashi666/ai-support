@@ -127,7 +127,7 @@ try {
   const oneBody = await one.json() as { thread?: { id: number; author?: { name: string } }; repeated?: boolean; client_msg_id?: string };
   const twoBody = await two.json() as { thread?: { id: number }; repeated?: boolean };
   check('два одинаковых запроса — одно сообщение клиенту', delivered - before === 1, delivered - before);
-  check('повтор отдаёт то же сообщение с repeated', oneBody.thread?.id === twoBody.thread?.id && (oneBody.repeated || twoBody.repeated), [oneBody, twoBody]);
+  check('повтор отдаёт то же сообщение с repeated', oneBody.thread?.id === twoBody.thread?.id && Boolean(oneBody.repeated || twoBody.repeated), [oneBody, twoBody]);
   check('ответ несёт проекцию с автором «Иван»', oneBody.thread?.author?.name === 'Иван' && oneBody.client_msg_id === 'cm-abcdef12', oneBody);
   const third = await post(`/api/conversations/${conversationId}/reply`, body);
   check('повтор позже — тоже без дубля', third.status === 200 && delivered - before === 1);
