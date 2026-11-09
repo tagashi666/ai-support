@@ -17,7 +17,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     },
     cursors: { bedolaga: store.getState('bedolaga:last_poll') ?? null, minishop: store.getState('minishop:last_poll') ?? null },
     kb: store.kbCount(),
-    settingOverrides: settingOverrides().filter((item) => !['replyStyle', 'handoffMessage'].includes(item.key)),
+    settingOverrides: settingOverrides().filter((item) => !['replyStyle', 'handoffMessage', 'customerLinks'].includes(item.key)),
   }));
 
   app.get('/api/health', async () => ({

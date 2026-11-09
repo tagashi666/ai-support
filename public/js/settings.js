@@ -458,6 +458,14 @@ export async function loadSettings() {
           <button class="btn" id="handoffSave">Сохранить текст</button>
         </div>
       </div>
+    </section>
+    <section class="settings-cluster" data-cluster="links">
+      <header class="settings-cluster-head"><span class="cluster-mark" aria-hidden="true"></span><div><h3>Ссылки для клиентов</h3><p>Прокси, бот, сайт — AI даст их сам, когда клиент попросит</p></div></header>
+      <div class="settings-panel links-editor">
+        <span class="hint">AI вставляет в ответ метку, а точный адрес подставляет сервер — секрет прокси не исказится. Своими словами AI адресов по-прежнему не пишет. В поле «Когда давать» отличите похожее: например, «прокси для Telegram, не VPN-подписка».</span>
+        <div id="linksRows"></div>
+        <div class="links-actions"><button class="btn" id="linksAdd">Добавить ссылку</button><button class="btn primary" id="linksSave">Сохранить ссылки</button></div>
+      </div>
     </section>`;
   if (!FIELDS.some((field) => canPermission(`setting:${field.key}`))) {
     $('aiSettings').insertAdjacentHTML('afterbegin', '<div class="ops-note"><b>Режим просмотра</b><span class="hint">У роли нет прав на изменение этих параметров.</span></div>');
@@ -558,6 +566,7 @@ export async function loadSettings() {
       $('handoffSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
     };
   } else { $('handoffBox').disabled = true; $('handoffSave').disabled = true; }
+  renderLinksEditor();
 
   const caps = state.settings.remnawave;
   const business = state.settings.businessConnectionLive;
@@ -591,4 +600,45 @@ export async function loadSettings() {
   }
   requestAnimationFrame(() => scrollToSettingsCategory(requestedSettingsSection, false));
   void loadUpdateState();
+}
+
+/** Ссылки для клиентов: строки редактируются на месте, сохраняются одним пакетом. */
+function renderLinksEditor() {
+  const editable = canPermission('setting:customerLinks');
+  let rows = (state.settings.runtime.customerLinks ?? []).map((link) => ({ ...link }));
+  const read = () => [...$('linksRows').querySelectorAll('.link-row')].map((row) => ({
+    key: row.querySelector('[data-f="key"]').value.trim().toLowerCase(),
+    title: row.querySelector('[data-f="title"]').value.trim(),
+    url: row.querySelector('[data-f="url"]').value.trim(),
+    when: row.querySelector('[data-f="when"]').value.trim(),
+  }));
+  const paint = () => {
+    $('linksRows').innerHTML = rows.length ? rows.map((link, index) => `<div class="link-row" data-i="${index}">
+      <label>Ключ<input data-f="key" maxlength="32" placeholder="proxy" value="${esc(link.key)}" autocomplete="off" spellcheck="false"></label>
+      <label>Что это<input data-f="title" maxlength="80" placeholder="Прокси для Telegram" value="${esc(link.title)}"></label>
+      <label class="wide">Адрес<input data-f="url" maxlength="600" placeholder="https://t.me/proxy?server=…" value="${esc(link.url)}" autocomplete="off" spellcheck="false"></label>
+      <label class="wide">Когда давать<input data-f="when" maxlength="300" placeholder="Просит прокси для Telegram (не VPN)" value="${esc(link.when)}"></label>
+      <span class="link-tag">метка <code>[[link:${esc(link.key || '…')}]]</code></span>
+      <button class="btn ghost" data-remove="${index}">Удалить</button>
+    </div>`).join('') : '<span class="hint">Ссылок пока нет.</span>';
+    for (const el of $('linksRows').querySelectorAll('input')) el.disabled = !editable;
+    for (const btn of $('linksRows').querySelectorAll('[data-remove]')) {
+      btn.disabled = !editable;
+      btn.onclick = () => { rows = read(); rows.splice(Number(btn.dataset.remove), 1); paint(); };
+    }
+  };
+  paint();
+  $('linksAdd').disabled = !editable; $('linksSave').disabled = !editable;
+  if (!editable) return;
+  $('linksAdd').onclick = () => { rows = read(); rows.push({ key:'', title:'', url:'', when:'' }); paint(); };
+  $('linksSave').onclick = async () => {
+    const links = read().filter((link) => link.key || link.title || link.url || link.when);
+    const bad = links.find((link) => !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(link.key) || !link.title || !/^(?:https?|tg):\/\/\S+$/i.test(link.url));
+    if (bad) { toast('Нужны ключ латиницей, название и адрес вида https://… или tg://…'); return; }
+    if (new Set(links.map((link) => link.key)).size !== links.length) { toast('Ключи ссылок не должны повторяться'); return; }
+    showSettingsSaveState('saving', 'Сохраняю…'); $('linksSave').disabled = true;
+    const saved = await mutate('/api/settings', { method:'POST', body: JSON.stringify({ customerLinks: links }) }, 'Ссылки сохранены');
+    $('linksSave').disabled = false; showSettingsSaveState(saved ? 'saved' : 'error', saved ? 'Сохранено' : 'Не сохранено');
+    if (saved) { state.settings.runtime.customerLinks = links; rows = links.map((link) => ({ ...link })); paint(); }
+  };
 }

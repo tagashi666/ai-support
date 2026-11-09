@@ -49,6 +49,7 @@ export const PERMISSION_CATALOG = [
     model: 'Основная модель AI', fallbackModel: 'Запасная модель AI', brand: 'Название сервиса',
     replyStyle: 'Манера ответа', handoffMessage: 'Текст передачи оператору',
     modelKey: 'Ключ основной модели', fallbackKey: 'Ключ запасной модели',
+    customerLinks: 'Ссылки для клиентов',
   }).map(([key, label]) => ({ id: `setting:${key}`, group: 'Параметры AI', label })),
 ] as const;
 

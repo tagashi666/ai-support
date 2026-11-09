@@ -1142,6 +1142,14 @@ input[readonly],textarea[readonly] { color:var(--text-secondary); background:var
 .copy-setting-head { display:flex; justify-content:space-between; gap:8px; }
 .copy-setting-head label { font-size:12px; font-weight:600; }
 .copy-setting-head span { color:var(--text-tertiary); font-size:10px; }
+.links-editor { padding:14px 4px; display:grid; gap:10px; }
+.link-row { padding:10px 0; display:grid; grid-template-columns:minmax(0,1fr) minmax(0,2fr); gap:8px; border-top:1px solid var(--separator); }
+.link-row label { display:grid; gap:4px; min-width:0; font-size:12px; font-weight:600; }
+.link-row label.wide { grid-column:1 / -1; }
+.link-row input { min-width:0; font-weight:400; }
+.link-tag { align-self:center; color:var(--text-tertiary); font-size:11px; overflow-wrap:anywhere; }
+.link-row [data-remove] { justify-self:end; }
+.links-actions { display:flex; flex-wrap:wrap; gap:8px; }
 .copy-setting .btn { justify-self:start; }
 .save-state[data-state="saving"] i { background:var(--warning); }
 .save-state[data-state="saved"] i { background:var(--success); }

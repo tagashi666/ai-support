@@ -69,6 +69,7 @@ src/ai/examples.ts
 src/ai/gate.ts
 src/ai/interface-kb.ts
 src/ai/kb.ts
+src/ai/links.ts
 src/ai/mining.ts
 src/ai/outbound.ts
 src/ai/provider.ts

@@ -950,6 +950,45 @@ console.log('\n[ передача человеку ]');
   check('неразобранный ответ модели не превращается в игнор',
     sent.length === beforeMalformed + 1 && sent.at(-1)!.includes('специалисту'), sent.slice(beforeMalformed));
 
+  // Ссылки для клиентов: модель ставит метку, адрес подставляет сервер.
+  {
+    const proxyUrl = 'https://t.me/proxy?server=203.0.113.5&port=443&secret=ee0123456789abcdef0123456789abcdef';
+    rt3.customerLinks = [{ key: 'proxy', title: 'Прокси для Telegram', url: proxyUrl, when: 'просит прокси для телеграма, не VPN' }];
+    let seenPrompt = '';
+    let replyText = 'Вот прокси для Telegram: [[link:proxy]] — откройте и нажмите «Подключить».';
+    const linkProvider = {
+      lastModel: 'link-model',
+      complete: async (messages: { content: unknown }[]) => {
+        seenPrompt = String(messages[1]!.content);
+        return JSON.stringify({ reply: replyText, confidence: 0.9, used: [] });
+      },
+    } as never;
+    const linkResponder = new Responder(store, box, customersStub, undefined, undefined, linkProvider);
+    const lc = store.upsertConversation({ channel:'tg_dm', externalId:'proxy-link', tgUserId:8650, businessConnectionId:'b1' });
+    store.recordInbound({ channel:'tg_dm', externalId:'proxy-link', text:'дайте прокси для телеграма', externalMsgId:'pl1', sentAt: Date.now() });
+    const before = sent.length;
+    await linkResponder.handleInbound(store.getConversation(lc.id)!);
+    check('в промпте есть блок ссылок с меткой', seenPrompt.includes('[[link:proxy]] — Прокси для Telegram') && !seenPrompt.includes(proxyUrl), seenPrompt.slice(0, 300));
+    check('клиенту уходит настоящий адрес прокси', sent.length === before + 1 && sent.at(-1)!.includes(proxyUrl) && !sent.at(-1)!.includes('[['), sent.slice(before));
+    const sug = store.db.prepare('SELECT text, sources FROM ai_suggestion WHERE conversation_id = ? ORDER BY id DESC').get(lc.id) as { text: string; sources: string };
+    check('предложка хранит адрес, источник — ссылка', sug.text.includes(proxyUrl) && sug.sources.includes('Ссылка: Прокси для Telegram'), sug);
+
+    replyText = 'Держите: [[link:vpnkey]]';
+    const lc2 = store.upsertConversation({ channel:'tg_dm', externalId:'proxy-link2', tgUserId:8651, businessConnectionId:'b1' });
+    store.recordInbound({ channel:'tg_dm', externalId:'proxy-link2', text:'дайте ссылку', externalMsgId:'pl2', sentAt: Date.now() });
+    const before2 = sent.length;
+    await linkResponder.handleInbound(store.getConversation(lc2.id)!);
+    check('выдуманная метка клиенту не уходит', !sent.slice(before2).some((t) => t.includes('[[')), sent.slice(before2));
+
+    replyText = `Держите: ${proxyUrl}`;
+    const lc3 = store.upsertConversation({ channel:'tg_dm', externalId:'proxy-link3', tgUserId:8652, businessConnectionId:'b1' });
+    store.recordInbound({ channel:'tg_dm', externalId:'proxy-link3', text:'а прокси?', externalMsgId:'pl3', sentAt: Date.now() });
+    const before3 = sent.length;
+    await linkResponder.handleInbound(store.getConversation(lc3.id)!);
+    check('адрес, написанный моделью сам, по-прежнему задерживается', !sent.slice(before3).some((t) => t.includes(proxyUrl)), sent.slice(before3));
+    rt3.customerLinks = [];
+  }
+
   // Ошибка API модели имеет тот же безопасный путь.
   const failed = store.upsertConversation({ channel:'tg_dm', externalId:'failed-ai', tgUserId:8640, businessConnectionId:'b1' });
   store.recordInbound({ channel:'tg_dm', externalId:'failed-ai', text:'не работает подключение', externalMsgId:'fa1', sentAt: Date.now() });
@@ -1180,6 +1219,23 @@ console.log('\n[ KB кусками ]');
   check('экран — компактно одной строкой', compactScreen({ id: 'x', title: 'Продление', routeDescription: 'Подписка → Продлить', keywords: [], instructions: ['Выберите срок', 'Оплатите'] })
     === 'Экран «Продление» (Подписка → Продлить): 1) Выберите срок; 2) Оплатите');
   check('база в промпте укладывается в бюджет', kb.length < 3500 + 1200 + 200, kb.length);
+  check('без ссылок блока ссылок нет', !user.includes('# Ссылки'));
+}
+
+{
+  const { normalizeLinks, expandLinks, maskLinks } = await import('../src/ai/links.js');
+  const { checkOutbound } = await import('../src/ai/outbound.js');
+  const url = 'tg://proxy?server=203.0.113.9&port=443&secret=dd00112233445566778899aabbccddeeff';
+  const links = normalizeLinks([{ key: 'Proxy', title: ' Прокси ', url, when: '' }])!;
+  check('ссылка нормализуется', links?.[0]?.key === 'proxy' && links[0].title === 'Прокси', links);
+  check('ключ с кириллицей отклоняется', normalizeLinks([{ key: 'прокси', title: 'x', url }]) === undefined);
+  check('повтор ключа отклоняется', normalizeLinks([{ key: 'a', title: 'x', url }, { key: 'a', title: 'y', url }]) === undefined);
+  check('javascript: не адрес', normalizeLinks([{ key: 'a', title: 'x', url: 'javascript:alert(1)' }]) === undefined);
+  const out = expandLinks('Вот: [[link:proxy]], и [[ PROXY ]]. А это [[link:nope]]', links);
+  check('метки раскрываются, регистр и пробелы терпим', out.text === `Вот: ${url}, и ${url}. А это [[link:nope]]`, out.text);
+  check('замок пропускает известную ссылку и ловит неизвестную',
+    checkOutbound(expandLinks('Вот: [[link:proxy]]', links).probe).ok && checkOutbound(out.probe).found.includes('неизвестная ссылка'), out.probe);
+  check('адрес в истории прячется за метку', maskLinks(`оператор: ${url}`, links) === 'оператор: [[link:proxy]]');
 }
 
 // ---------- без лишних запросов к модели ----------

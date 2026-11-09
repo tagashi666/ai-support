@@ -6,6 +6,7 @@ import type { CustomerDirectory, Profile } from '../integrations/customers.js';
 import { resolveService, runtime, withServiceGreeting } from '../core/settings.js';
 import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
+import { expandLinks, linksBlock, maskLinks, type CustomerLink } from './links.js';
 import { decide, personalTopics, resolveMode, type PersonalTopic } from './gate.js';
 import { AiProvider, completeDraft, DRAFT_EXAMPLE, type ChatMessage, type ContentPart } from './provider.js';
 import { activeInterfaceKnowledge, effectiveInterfaceMode, type InterfaceScreen } from './interface-kb.js';
@@ -391,6 +392,8 @@ export interface ReplyInput {
   history?: string;
   clientText: string;
   images?: string[];
+  /** Ссылки для клиента; по умолчанию — из настроек панели. */
+  links?: CustomerLink[];
 }
 
 /**
@@ -424,14 +427,16 @@ export function buildReplyMessages(input: ReplyInput): { messages: ChatMessage[]
     ...shownScreens.map((screen) => `Интерфейс Bedolaga: ${screen.title}`),
   ];
 
-  const prompt = [
+  const links = input.links ?? runtime.customerLinks;
+  const prompt = maskLinks([
     `# Выдержки из базы знаний\n${knowledge}`,
+    linksBlock(links),
     `# Клиент\n${input.customer}`,
     `# Состояние серверов\n${input.nodes ?? 'Сведений о серверах нет. Не утверждай ничего об авариях.'}`,
     input.examples ?? '',
     input.history ? `# История диалога\n${input.history}` : '',
     `# Последнее сообщение клиента\n${fenceClient(input.clientText)}`,
-  ].filter(Boolean).join('\n\n');
+  ].filter(Boolean).join('\n\n'), links);
 
   const images = input.images ?? [];
   const content: string | ContentPart[] = images.length
@@ -737,11 +742,19 @@ export class Responder {
       // модель могла бы так «обосновать» любой общий ответ.
       const profileGrounded = !!snapshot?.found && topics.length > 0 && draft.used.includes(0);
       const usedKb = draft.used.filter((n) => n >= 1 && n <= knowledgeSources.length);
+      // Метки [[link:…]] раскрываются здесь, до предложки: оператор видит и
+      // отправляет настоящий адрес. Замок ниже проверяет текст без адресов.
+      const linked = expandLinks(
+        withServiceGreeting(draft.reply, service.greetingMessage, !liveConversation.first_response_at),
+        runtime.customerLinks,
+      );
+      // Ссылку и описание «когда давать» завёл владелец — это опора, как статья.
+      const linkGrounded = linked.used.length > 0;
       const effectiveDraft = {
         ...draft,
         // Уточняющему вопросу опора не нужна: в нём нет фактов.
-        needsHuman: draft.needsHuman || (knowledgeSources.length === 0 && !draft.clarify && !profileGrounded),
-        reply: withServiceGreeting(draft.reply, service.greetingMessage, !liveConversation.first_response_at),
+        needsHuman: draft.needsHuman || (knowledgeSources.length === 0 && !draft.clarify && !profileGrounded && !linkGrounded),
+        reply: linked.text,
       };
 
       const suggestion = this.store.createSuggestion({
@@ -757,6 +770,7 @@ export class Responder {
         sources: [...new Set([
           ...(profileGrounded ? ['Карточка клиента'] : []),
           ...usedKb.map((n) => knowledgeSources[n - 1]!),
+          ...linked.used.map((link) => `Ссылка: ${link.title}`),
         ])],
       });
 
@@ -764,7 +778,7 @@ export class Responder {
       // Раньше хватало любого совпадения по словам: на вопрос «всё ли в
       // порядке с сервером Германии» поиск цеплялся за статью про скорость,
       // проверка пропускала, и модель дописывала правдоподобное от себя.
-      const grounded = usedKb.length + (profileGrounded ? 1 : 0);
+      const grounded = usedKb.length + (profileGrounded ? 1 : 0) + linked.used.length;
       // Режим и передачу читаем заново: за время генерации их могли сменить.
       const current = this.store.getConversation(conversation.id) ?? liveConversation;
       const verdict = decide(this.store, current, clientText, effectiveDraft, grounded);
@@ -787,7 +801,7 @@ export class Responder {
       // Замок перед отправкой: в тексте не должно быть внутреннего —
       // адресов, ключей, идентификаторов. Промпт об этом просит, а здесь
       // проверяется по факту.
-      const outbound = checkOutbound(effectiveDraft.reply, config.ai.allowedDomains);
+      const outbound = checkOutbound(linked.probe, config.ai.allowedDomains);
       if (!outbound.ok) {
         log.warn(`Диалог ${conversation.id}: ответ задержан, в нём ${outbound.found.join(', ')}`);
         this.store.logEvent('ai_blocked', conversation.id, { found: outbound.found });

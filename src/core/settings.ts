@@ -1,5 +1,6 @@
 import { config, log } from '../config.js';
 import type { Conversation, Store } from './store.js';
+import { normalizeLinks, type CustomerLink } from '../ai/links.js';
 
 /**
  * Настройки, которые меняются из панели без перезапуска.
@@ -32,6 +33,8 @@ export interface Runtime {
   bedolagaInterfaceKb: boolean;
   /** Вид кабинета Bedolaga для справочника: auto — спросить у самого кабинета. */
   bedolagaInterfaceMode: 'auto' | 'full' | 'lite';
+  /** Ссылки, которые AI вставляет в ответ меткой [[link:key]]. */
+  customerLinks: CustomerLink[];
 }
 
 export const runtime: Runtime = {
@@ -54,6 +57,7 @@ export const runtime: Runtime = {
   autoLearn: config.ai.autoLearn,
   bedolagaInterfaceKb: false,
   bedolagaInterfaceMode: 'auto',
+  customerLinks: [],
 };
 
 export interface ResolvedService {
@@ -163,7 +167,9 @@ const FIELDS: Record<keyof Runtime, Validator> = {
     if (['true','1','on','yes','да'].includes(text)) return true;
     if (['false','0','off','no','нет'].includes(text)) return false;
     return undefined;
-  },  bedolagaInterfaceMode: (value) => (['auto', 'full', 'lite'] as const).find((mode) => mode === value),
+  },
+  bedolagaInterfaceMode: (value) => (['auto', 'full', 'lite'] as const).find((mode) => mode === value),
+  customerLinks: normalizeLinks,
 };
 
 // Значения из .env до наложения настроек панели — чтобы показывать, что
@@ -241,6 +247,6 @@ export function applySettings(
     return { ok: false, error: `Настройки не сохранены: ${(err as Error).message}` };
   }
 
-  for (const setting of pending) log.info(`Настройка ${setting.key} → ${String(setting.value)}`);
+  for (const setting of pending) log.info(`Настройка ${setting.key} → ${Array.isArray(setting.value) ? `${setting.value.length} шт.` : String(setting.value)}`);
   return { ok: true };
 }
