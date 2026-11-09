@@ -1,12 +1,20 @@
 import type { FastifyInstance } from 'fastify';
+import { config } from '../../config.js';
 import { runtime } from '../../core/settings.js';
 import { clearPause, pauseState, setPause, validPauseUntil } from '../../core/pause.js';
-import type { ActivityResponse, AssistantPauseResponse, FeedbackReason, FeedbackResponse } from '../../shared/api-types.js';
+import type {
+  ActivityResponse, AssistantPauseResponse, AssistantSettingsResponse, FeedbackReason, FeedbackResponse,
+} from '../../shared/api-types.js';
 import { ACTIVITY_LIMIT_MAX, listActivity, pauseView } from '../assistant.js';
 import type { RouteContext } from '../context.js';
 import { apiError } from '../errors.js';
 
 const DAY_MS = 24 * 60 * 60_000;
+/** Ключи runtime, которые правит раздел «Помощник» (6.7). */
+const ASSISTANT_KEYS = [
+  'aiMode', 'minConfidence', 'requireKb', 'humanHoldMinutes', 'maxAgeMinutes', 'autoPerHour', 'handoffRepeatMinutes',
+  'autoLearn', 'brand', 'replyStyle', 'handoffMessage', 'model', 'fallbackModel', 'customerLinks',
+] as const satisfies ReadonlyArray<keyof typeof runtime>;
 const FEEDBACK_REASONS: readonly FeedbackReason[] = ['fact', 'tone', 'topic', 'no_kb'];
 
 /**
@@ -23,6 +31,14 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       actor: { id: actor.key, name: actor.name }, pause: pauseView(pauseState()),
     });
   };
+
+  // Настройки помощника без сетевых вызовов: GET /api/settings спрашивает Telegram
+  // о бизнес-подключении и без связи с ним отвечает долго. Право — settings:read.
+  app.get('/api/assistant/settings', async (): Promise<AssistantSettingsResponse> => ({
+    runtime: Object.fromEntries(ASSISTANT_KEYS.map((key) => [key, runtime[key]])) as AssistantSettingsResponse['runtime'],
+    ai: { keys: config.ai.apiKeys.length },
+    kb: store.kbCount(),
+  }));
 
   // Право — как у режима (setting:aiMode): пауза меняет то, что получают клиенты.
   app.post<{ Body: { until?: unknown } }>('/api/assistant/pause', async (request, reply): Promise<AssistantPauseResponse | void> => {

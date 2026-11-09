@@ -281,6 +281,18 @@ export interface AssistantPauseView {
   by: { id: string; name: string } | null;
 }
 
+/** GET /api/assistant/settings — ключи помощника из runtime, без сетевых вызовов. */
+export interface AssistantSettingsResponse {
+  runtime: {
+    aiMode: AiMode; minConfidence: number; requireKb: boolean; humanHoldMinutes: number; maxAgeMinutes: number;
+    autoPerHour: number; handoffRepeatMinutes: number; autoLearn: boolean; brand: string; replyStyle: string;
+    handoffMessage: string; model: string; fallbackModel: string;
+    customerLinks: Array<{ key: string; title: string; url: string; when: string }>;
+  };
+  ai: { keys: number };
+  kb: number;
+}
+
 export interface AssistantPauseResponse {
   ok: true;
   pause: AssistantPauseView | null;

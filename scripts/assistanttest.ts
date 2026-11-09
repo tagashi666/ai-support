@@ -183,6 +183,10 @@ try {
   console.log('Права и причины');
   check('пауза: settings:read на входе', permissionFor('POST', '/api/assistant/pause') === 'settings:read'
     && permissionFor('DELETE', '/api/assistant/pause') === 'settings:read');
+  check('настройки помощника: settings:read', permissionFor('GET', '/api/assistant/settings') === 'settings:read');
+  const own = await getJson<{ runtime: Record<string, unknown>; ai: { keys: number } }>('/api/assistant/settings', agent);
+  check('настройки помощника — только ключи помощника', own.runtime['aiMode'] === 'auto' && own.ai.keys === 1
+    && !('notifyLevel' in own.runtime) && Array.isArray(own.runtime['customerLinks']));
   check('лента: stats:read', permissionFor('GET', '/api/assistant/activity?since=1') === 'stats:read');
   check('«Это неверно»: conversation:reply', permissionFor('POST', '/api/messages/5/feedback') === 'conversation:reply');
   check('коды причин гейта', reasonCode('пауза помощника: только предложка') === 'pause'

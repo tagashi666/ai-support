@@ -26,7 +26,7 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   }
   if (url.startsWith('/api/ai/try')) return 'settings:ai_tools';
   // Помощник (10.4): пауза — settings:read на входе, setting:aiMode проверяет обработчик.
-  if (/^\/api\/assistant\/pause(?:\?|$)/.test(url)) return 'settings:read';
+  if (/^\/api\/assistant\/(?:pause|settings)(?:\?|$)/.test(url)) return 'settings:read';
   if ((method === 'GET' || method === 'HEAD') && /^\/api\/assistant\/activity(?:\?|$)/.test(url)) return 'stats:read';
   if (method === 'POST' && /^\/api\/messages\/\d+\/feedback(?:\?|$)/.test(url)) return 'conversation:reply';
   if (url.startsWith('/api/stats/reset')) return 'stats:reset';
