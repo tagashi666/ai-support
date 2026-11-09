@@ -11,7 +11,11 @@ import { LiveSummary } from '@/features/live/LiveSummary';
 import { SignIn } from '@/features/live/SignIn';
 import { mode, session } from '@/lib/live/store';
 import { Workspace } from '@/features/workspace/Workspace';
+import { DeviceScreen } from '@/features/device/DeviceScreen';
+import { KeysHelp } from '@/features/palette/KeysHelp';
+import { Palette } from '@/features/palette/Palette';
 import { DemoBar } from './DemoBar';
+import { useGlobalKeys } from './useGlobalKeys';
 import { Rail, TabBar } from './Nav';
 import s from './shell.module.css';
 
@@ -25,6 +29,7 @@ function resolveHome(current: Route, desktop: boolean, live: boolean): Route {
 }
 
 export function App(): JSX.Element {
+  useGlobalKeys();
   const desktop = isDesktop.value;
   const live = mode.value === 'live';
   const current = resolveHome(route.value, desktop, live);
@@ -38,7 +43,7 @@ export function App(): JSX.Element {
       case 'today': screen = live ? <LiveSummary wide /> : <Today />; break;
       case 'chats': screen = live ? <Workspace id={current.id} client={current.client === true} /> : <ChatsScreen id={current.id} />; break;
       case 'more': screen = <MoreScreen />; break;
-      case 'section': screen = <Placeholder section={current.key} />; break;
+      case 'section': screen = current.key === 'device' ? <DeviceScreen /> : <Placeholder section={current.key} />; break;
       default: screen = live ? <LiveSummary wide /> : <Today />;
     }
   }
@@ -50,6 +55,7 @@ export function App(): JSX.Element {
         <main class={s.main}>{screen}</main>
       </div>
       {!desktop && !inThread ? <TabBar current={current} /> : <span />}
+      {live && session.value !== 'expired' && <><Palette /><KeysHelp /></>}
       <Toaster />
       <div class="visually-hidden" aria-live="polite" aria-atomic="true">{announcement.value}</div>
     </div>

@@ -14,6 +14,9 @@ import { liveOpen, connect, rotateTicket } from './live.js';
 
 /** Ссылка из уведомления вида /#c12 открывает нужный диалог сразу. */
 async function openFromHash() {
+  // #v=<раздел> — ссылка «Открыть в классической» из новой панели (план, раздел 12).
+  const view = /^#v=([a-z]+)$/.exec(location.hash)?.[1];
+  if (view && document.querySelector(`.nav[data-view="${view}"]`)) { show(view); return; }
   const match = /^#c(\d+)$/.exec(location.hash);
   if (!match) return;
   show('inbox');

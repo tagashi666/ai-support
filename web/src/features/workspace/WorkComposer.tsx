@@ -9,7 +9,7 @@ import { isDesktop } from '@/lib/media';
 import { now } from '@/lib/store/state';
 import {
   drafts, draftTick, FILE_MAX_BYTES, FILES_MAX, isDangerous, permissions, resolve, saveNote, sendFile, sendReply,
-  SEND_UNDO_OWN_MS, typingKey, waitClient,
+  ownUndoMs, typingKey, waitClient,
 } from '@/lib/workspace/actions';
 import type { LocalDraft } from '@/lib/workspace/drafts';
 import { availability } from '@/lib/workspace/registry';
@@ -111,7 +111,7 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
       suggestionId: fromSuggestion,
       edited,
       quote: draft.quote,
-      delay: SEND_UNDO_OWN_MS,
+      delay: ownUndoMs(),
     });
     drafts.clear(id);
     setDraftState(drafts.get(id));
@@ -204,6 +204,7 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
       <div class={s.inputRow}>
         <textarea
           ref={area}
+          id="composer-input"
           class={s.input}
           rows={1}
           value={draft.text}

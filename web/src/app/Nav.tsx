@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { ME } from '@/demo/seed';
 import { t, type Key } from '@/i18n/ru';
+import { paletteOpen } from '@/lib/palette/run';
 import { href, navigate, type Route, type SectionKey } from '@/lib/router';
 import { bootstrap, liveMine, mode } from '@/lib/live/store';
 import { pausedUntil, waitingYou } from '@/lib/store/state';
@@ -78,7 +79,9 @@ export function Rail({ current }: { current: Route }): JSX.Element {
     <nav class={s.rail} aria-label={t('nav.main')}>
       <ul class={s.railList}>
         <li>
-          <button type="button" class={s.railItem} onClick={() => {
+          <button type="button" class={s.railItem} aria-keyshortcuts={live ? 'Control+K Meta+K' : undefined} onClick={() => {
+            // Живой режим — палитра ⌘K (6.5); прототип — поиск в списке.
+            if (live) { paletteOpen.value = true; return; }
             navigate({ name: 'chats', id: null });
             requestAnimationFrame(() => document.getElementById('chat-search')?.focus());
           }}>
@@ -95,11 +98,14 @@ export function Rail({ current }: { current: Route }): JSX.Element {
       <ul class={s.railList}>
         {RARE.map((item) => <li key={item.target}><NavLink item={item} current={current} class={`${s.railItem} ${s.railRare}`} iconSize={20} /></li>)}
       </ul>
-      <div class={s.railFoot}>
+      {/* Профиль внизу рейки ведёт в «Это устройство» (6.12). */}
+      <a class={s.railFoot} href={href({ name: 'section', key: 'device' })} title={t('nav.device')}
+        aria-current={current.name === 'section' && current.key === 'device' ? 'page' : undefined}
+        onClick={(event) => { event.preventDefault(); navigate({ name: 'section', key: 'device' }); }}>
         <Avatar name={live?.name ?? ME.name} size="s" />
         <span class={s.railName}>{live?.name ?? ME.name}</span>
         <span class={s.railRole}>{live ? roleLabel(live.role) : t('nav.role.owner')}</span>
-      </div>
+      </a>
     </nav>
   );
 }

@@ -14,7 +14,7 @@ export type ActionId =
   | 'conv.copyLink' | 'msg.quote' | 'msg.copy';
 
 /** Где действие видно. Ширина не прячет действие: на телефоне оно в другом месте, но есть. */
-export type Place = 'row' | 'rowMenu' | 'head' | 'headMenu' | 'chip' | 'draft' | 'composer' | 'message';
+export type Place = 'row' | 'rowMenu' | 'head' | 'headMenu' | 'chip' | 'draft' | 'composer' | 'message' | 'swipe' | 'bulk';
 
 export interface ActionDef {
   id: ActionId;
@@ -42,17 +42,17 @@ export const ACTIONS: Readonly<Record<ActionId, ActionDef>> = {
   'draft.reject': A({ id: 'draft.reject', label: 'draft.reject', permission: 'conversation:reply', tier: 0, deferred: true, noRight: 'hide', desktop: ['draft'], phone: ['draft'] }),
   'conv.open': A({ id: 'conv.open', label: 'action.open', permission: null, tier: 0, noRight: 'hide', desktop: ['row'], phone: ['row'], key: 'Enter' }),
   'conv.read': A({ id: 'conv.read', label: 'action.read', permission: null, tier: 0, noRight: 'hide', desktop: ['rowMenu'], phone: ['rowMenu'] }),
-  'conv.resolve': A({ id: 'conv.resolve', label: 'thread.resolve', permission: 'conversation:status', tier: 0, deferred: true, noRight: 'explain', desktop: ['head', 'rowMenu'], phone: ['head', 'rowMenu'] }),
+  'conv.resolve': A({ id: 'conv.resolve', label: 'thread.resolve', permission: 'conversation:status', tier: 0, deferred: true, noRight: 'explain', desktop: ['head', 'rowMenu'], phone: ['head', 'rowMenu', 'swipe'], key: 'KeyE' }),
   'conv.reopen': A({ id: 'conv.reopen', label: 'thread.reopen', permission: 'conversation:status', tier: 0, noRight: 'explain', desktop: ['chip', 'rowMenu'], phone: ['chip', 'rowMenu'] }),
   'conv.status': A({ id: 'conv.status', label: 'thread.statusWaitClient', permission: 'conversation:status', tier: 0, noRight: 'explain', desktop: ['headMenu'], phone: ['headMenu'] }),
-  'conv.important': A({ id: 'conv.important', label: 'thread.markImportant', permission: 'conversation:status', tier: 0, deferred: true, noRight: 'hide', desktop: ['headMenu', 'rowMenu'], phone: ['headMenu', 'rowMenu'] }),
-  'conv.hide': A({ id: 'conv.hide', label: 'thread.hide', permission: 'conversation:status', tier: 0, deferred: true, noRight: 'hide', desktop: ['headMenu', 'rowMenu'], phone: ['headMenu', 'rowMenu'] }),
+  'conv.important': A({ id: 'conv.important', label: 'thread.markImportant', permission: 'conversation:status', tier: 0, deferred: true, noRight: 'hide', desktop: ['headMenu', 'rowMenu'], phone: ['headMenu', 'rowMenu', 'swipe'] }),
+  'conv.hide': A({ id: 'conv.hide', label: 'thread.hide', permission: 'conversation:status', tier: 0, deferred: true, noRight: 'hide', desktop: ['headMenu', 'rowMenu'], phone: ['headMenu', 'rowMenu', 'swipe'] }),
   'conv.unhide': A({ id: 'conv.unhide', label: 'thread.unhide', permission: 'conversation:status', tier: 0, noRight: 'hide', desktop: ['head'], phone: ['head'] }),
-  'conv.take': A({ id: 'conv.take', label: 'who.take', permission: 'conversation:status', tier: 0, noRight: 'explain', desktop: ['chip'], phone: ['chip'] }),
+  'conv.take': A({ id: 'conv.take', label: 'who.take', permission: 'conversation:status', tier: 0, noRight: 'explain', desktop: ['chip'], phone: ['chip'], key: 'KeyT' }),
   'conv.return': A({ id: 'conv.return', label: 'who.giveBack', permission: 'conversation:status', tier: 0, noRight: 'explain', desktop: ['chip'], phone: ['chip'] }),
   'conv.takeover': A({ id: 'conv.takeover', label: 'who.intercept', permission: 'conversation:assign', tier: 2, noRight: 'hide', desktop: ['chip'], phone: ['chip'] }),
   'conv.aimode': A({ id: 'conv.aimode', label: 'thread.aiMode', permission: 'conversation:status', tier: 0, noRight: 'explain', desktop: ['chip', 'headMenu'], phone: ['chip', 'headMenu'] }),
-  'conv.note': A({ id: 'conv.note', label: 'composer.note', permission: 'conversation:notes', tier: 0, noRight: 'explain', desktop: ['composer'], phone: ['composer'] }),
+  'conv.note': A({ id: 'conv.note', label: 'composer.note', permission: 'conversation:notes', tier: 0, noRight: 'explain', desktop: ['composer'], phone: ['composer'], key: 'KeyN' }),
   'conv.attach': A({ id: 'conv.attach', label: 'composer.attach', permission: 'conversation:attachments', tier: 0, noRight: 'explain', desktop: ['composer'], phone: ['composer'], key: 'Mod+Shift+KeyU' }),
   'conv.template': A({ id: 'conv.template', label: 'composer.templates', permission: 'templates:read', tier: 0, noRight: 'hide', desktop: ['composer'], phone: ['composer'], key: 'Slash' }),
   'conv.copyLink': A({ id: 'conv.copyLink', label: 'thread.copyLink', permission: null, tier: 0, noRight: 'hide', desktop: ['headMenu'], phone: ['headMenu'] }),

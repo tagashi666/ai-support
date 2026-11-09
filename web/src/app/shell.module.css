@@ -92,7 +92,8 @@
 .railItem[aria-current="page"] .railIcon { color: var(--accent-text); }
 .railIcon { position: relative; display: grid; place-items: center; }
 .railRare { color: var(--text-3); }
-.railFoot { margin-top: auto; padding-top: var(--s3); display: grid; justify-items: center; gap: 4px; text-align: center; }
+.railFoot { margin-top: auto; padding: var(--s2) 0; display: grid; justify-items: center; gap: 4px; text-align: center; color: inherit; text-decoration: none; border-radius: 10px; }
+.railFoot:hover, .railFoot[aria-current="page"] { background: var(--surface-hover); }
 .railName { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; color: var(--text); }
 .railRole { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-3); }
 

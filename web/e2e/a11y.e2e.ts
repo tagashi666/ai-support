@@ -1,6 +1,6 @@
 /**
  * axe на главных экранах (план, 11.6 «Доступность»): список, диалог,
- * «Клиент» — в светлой и тёмной теме. Серьёзных и критических нарушений нет.
+ * «Клиент», палитра, «Это устройство» — в светлой и тёмной теме. Серьёзных и критических нарушений нет.
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -36,6 +36,16 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto(`/next/chats/${id}/client`);
       await expect(page.getByRole('heading', { name: 'Клиент' }).first()).toBeVisible();
       await expect(page.getByText('Подписка', { exact: true }).first()).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+    });
+
+    test('палитра и «Это устройство»', async ({ page }) => {
+      await page.goto('/next/device');
+      await expect(page.getByRole('heading', { name: 'Это устройство' })).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+      await page.goto('/next/chats');
+      await page.keyboard.press('ControlOrMeta+KeyK');
+      await expect(page.getByRole('dialog', { name: 'Поиск и команды' })).toBeVisible();
       expect(await serious(page)).toEqual([]);
     });
   });

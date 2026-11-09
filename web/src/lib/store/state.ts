@@ -5,6 +5,7 @@
  */
 import { computed, signal } from '@preact/signals';
 import { seedChats } from '@/demo/seed';
+import { readSharedTheme, writeSharedTheme, type Theme as DeviceTheme } from '@/lib/device';
 import { isUrgent } from '@/lib/labels';
 import { route } from '@/lib/router';
 import type { Chat, Who } from '@/lib/types';
@@ -84,20 +85,12 @@ export function upsertChat(next: Chat): void {
 /** Объявление для экранного диктора (polite): «Новое сообщение от …». */
 export const announcement = signal('');
 
-/** Тема: Авто / Светлая / Тёмная (вопрос 14.1а). Хранится на устройстве. */
-export type Theme = 'auto' | 'light' | 'dark';
-const readTheme = (): Theme => {
-  try {
-    const value = localStorage.getItem('next.theme');
-    return value === 'light' || value === 'dark' ? value : 'auto';
-  } catch {
-    return 'auto';
-  }
-};
-export const theme = signal<Theme>(readTheme());
+/** Тема: Авто / Светлая / Тёмная (вопрос 14.1а). Ключ `theme` общий с классикой (src/lib/device.ts). */
+export type Theme = DeviceTheme;
+export const theme = signal<Theme>(readSharedTheme());
 export function setTheme(value: Theme): void {
   theme.value = value;
-  try { localStorage.setItem('next.theme', value); } catch { /* панель работает и без хранилища */ }
+  writeSharedTheme(value);
   applyTheme();
 }
 export function applyTheme(): void {

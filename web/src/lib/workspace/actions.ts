@@ -21,9 +21,8 @@ import { TypingSignal } from './typing';
 import { modeLabel } from './labels';
 import type { HereMode } from './who';
 
-/** Окно отмены отправки (6.3.5, вопрос 14.2): черновик помощника — 5 с, свой текст — сразу. */
-export const SEND_UNDO_DRAFT_MS = 5000;
-export const SEND_UNDO_OWN_MS = 0;
+/** Окно отмены отправки (6.3.5, вопрос 14.2) — из «Этого устройства»: по умолчанию черновик 5 с, свой текст сразу. */
+export { draftUndoMs, ownUndoMs } from '@/lib/device';
 const LEASE_MS = 15 * 60_000;
 
 export const permissions = computed(() => new Set(bootstrap.value?.me.permissions ?? []));

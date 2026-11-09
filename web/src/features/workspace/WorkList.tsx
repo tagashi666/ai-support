@@ -10,7 +10,8 @@ import { sectionLabel } from '@/lib/labels';
 import { getJson, readToken } from '@/lib/live/api';
 import { isUrgentCode, liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, liveCounts, liveItems, loadError, loading, startLive } from '@/lib/live/store';
-import { isSplit, reducedMotion } from '@/lib/media';
+import { isDesktop, isSplit, reducedMotion } from '@/lib/media';
+import { listOrder, paletteOpen } from '@/lib/palette/run';
 import { navigate } from '@/lib/router';
 import { applyServer, pendingChanges, removeShown, type Placed } from '@/lib/store/order';
 import { now } from '@/lib/store/state';
@@ -162,6 +163,9 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
   const visible = searchRows ?? sections.flatMap((group) => (isCollapsed(group.section, group.rows.length) ? [] : group.rows));
   const focusId = active && visible.some((item) => String(item.id) === active) ? active
     : pinned && visible.some((item) => String(item.id) === pinned) ? pinned : visible[0] ? String(visible[0].id) : null;
+  // Порядок видимых строк — для [ и ] в открытом диалоге (7.3).
+  const visibleKey = visible.map((item) => item.id).join(',');
+  useEffect(() => { listOrder.value = visible.map((item) => item.id); }, [visibleKey]);
   const onRowKey = (event: KeyboardEvent): void => { const next = list.onRowKey(event); if (next) setActive(next); };
 
   const rowItem = sheet && typeof sheet === 'object' && 'row' in sheet ? itemFor(sheet.row) : undefined;
@@ -194,6 +198,7 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
       <header class={s.listHead}>
         <div class={w.titleRow}>
           <h1 class={s.title}>{t('chats.title')}</h1>
+          {!isDesktop.value && <Button variant="quiet" size="sm" icon="search" label={t('nav.search')} aria-haspopup="dialog" onClick={() => { paletteOpen.value = true; }} />}
           <Button variant="quiet" size="sm" icon="filter" aria-haspopup="dialog" onClick={() => setSheet('filter')}>
             {activeFilters > 0 ? t('filter.buttonActive', { n: activeFilters }) : t('filter.button')}
           </Button>

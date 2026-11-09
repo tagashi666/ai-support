@@ -5,7 +5,7 @@ import { t } from '@/i18n/ru';
 import { levelLabel } from '@/lib/labels';
 import { connection } from '@/lib/live/store';
 import { isDesktop } from '@/lib/media';
-import { editDraft, permissions, rejectDraft, sendReply, SEND_UNDO_DRAFT_MS } from '@/lib/workspace/actions';
+import { editDraft, permissions, rejectDraft, sendReply, draftUndoMs } from '@/lib/workspace/actions';
 import { availability } from '@/lib/workspace/registry';
 import { threads, updateThread } from '@/lib/workspace/thread';
 import { Button } from '@/ui/Button';
@@ -27,7 +27,7 @@ const REASONS = [
 export function sendSuggestion(id: number): boolean {
   const suggestion = threads.peek().get(id)?.suggestion;
   if (!suggestion || suggestion.level === 'unsure' || !suggestion.text.trim()) return false;
-  sendReply(id, { text: suggestion.text, suggestionId: suggestion.id, edited: false, quote: null, delay: SEND_UNDO_DRAFT_MS, restore: suggestion });
+  sendReply(id, { text: suggestion.text, suggestionId: suggestion.id, edited: false, quote: null, delay: draftUndoMs(), restore: suggestion });
   updateThread(id, (current) => ({ ...current, suggestion: null }));
   return true;
 }
