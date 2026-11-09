@@ -3,6 +3,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { InboxItem, ThreadAttachment, ThreadEvent, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
 import { ImageEditor } from '@/features/media/ImageEditor';
 import { TgsSticker } from '@/features/media/TgsSticker';
+import { WrongSheet } from '@/features/assistant/WrongSheet';
+import { markedWrong } from '@/lib/assistant/store';
 import { t, type Key } from '@/i18n/ru';
 import { clock, dayDivider, sameDay } from '@/lib/format/format';
 import { liveName } from '@/lib/live/labels';
@@ -149,6 +151,8 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   const today = now.value;
   const [unseen, setUnseen] = useState(0);
   const [menu, setMenu] = useState<ThreadMessage | null>(null);
+  // «Это неверно» на ответе помощника (6.3.2, 10.4 п.6).
+  const [wrongFor, setWrongFor] = useState<number | null>(null);
   const [viewer, setViewer] = useState<ThreadAttachment | null>(null);
   const [editing, setEditing] = useState<File | null>(null);
   const [why, setWhy] = useState<{ state: 'loading' | 'error' } | { state: 'ready'; data: ThreadSuggestion } | null>(null);
@@ -347,9 +351,13 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
               : <Option label={t('message.quote')} hint={t('message.quoteUnavailable')} onSelect={() => setMenu(null)} />)}
             {menu.text && <Option label={t('message.copy')} onSelect={() => copy(menu)} />}
             {menu.voice === 'assistant' && canWhy && <Option label={t('why.title')} onSelect={() => explain(menu)} />}
+            {menu.voice === 'assistant' && canWhy && !markedWrong.value.has(menu.id) && (
+              <Option label={t('today.wrong')} onSelect={() => { setWrongFor(menu.id); setMenu(null); }} />
+            )}
           </div>
         )}
       </Sheet>
+      <WrongSheet messageId={wrongFor} onClose={() => setWrongFor(null)} />
 
       <Sheet open={why !== null} onClose={() => setWhy(null)} title={t('why.title')}>
         {why?.state === 'loading' && <p>{t('live.loading')}</p>}

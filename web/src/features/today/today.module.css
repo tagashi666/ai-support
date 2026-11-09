@@ -51,3 +51,6 @@
 .system { display: flex; align-items: center; gap: var(--s2); padding: var(--s2) var(--s1); color: var(--text-2); font-size: var(--fs-body); }
 .system strong { font-weight: 600; color: var(--text); }
 .okDot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
+.warnDot { width: 8px; height: 8px; border-radius: 50%; background: var(--attention); flex: none; }
+.link { color: var(--accent-text); font-size: var(--fs-body); min-height: 44px; display: inline-flex; align-items: center; text-decoration: underline; }
+.skeletonLine { height: 1.75rem; max-width: 28rem; border-radius: var(--r-tag); background: var(--surface-sunken); }

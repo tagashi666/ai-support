@@ -45,6 +45,9 @@ export const liveCounts = computed<InboxCounts | null>(() => inbox.value.counts)
 export const liveMine = computed(() => inbox.value.counts?.sections.mine ?? bootstrap.value?.counts.mine ?? 0);
 
 let client: LiveClient | null = null;
+/** Кадр settings (10.4 п.7): раздел «Помощник» перечитывает настройки и говорит, кто менял. */
+let onSettingsFrame: ((frame: Extract<LiveFrame, { type: 'settings' }>) => void) | null = null;
+export function listenSettings(listener: typeof onSettingsFrame): void { onSettingsFrame = listener; }
 let snapshotEpoch = '';
 let queue: { frames: LiveFrame[]; counts?: InboxCounts }[] = [];
 let scheduled = false;
@@ -61,7 +64,13 @@ function flush(): void {
     for (const frame of frames) {
       if (frame.type !== 'settings') continue;
       const current = bootstrap.peek();
-      if (current) bootstrap.value = { ...current, assistant: { ...current.assistant, mode: frame.aiMode, minConfidence: frame.minConfidence } };
+      if (current) {
+        bootstrap.value = { ...current, assistant: {
+          ...current.assistant, mode: frame.aiMode, minConfidence: frame.minConfidence,
+          ...(frame.pause !== undefined ? { pause: frame.pause } : {}),
+        } };
+      }
+      onSettingsFrame?.(frame);
     }
   }
   inbox.value = state;

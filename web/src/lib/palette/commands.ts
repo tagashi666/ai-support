@@ -21,6 +21,8 @@ export interface CommandDef {
   keys?: string;
   /** Старые слова классики, по которым тоже находится (6.5). */
   words?: readonly string[];
+  /** Пауза помощника (10.4 п.1): показывается по праву setting:aiMode и состоянию паузы. */
+  pause?: 'set' | 'resume';
 }
 
 /** Команды в порядке показа. Клавиши одной буквой показаны, только если включены в «Этом устройстве». */
@@ -38,6 +40,10 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'go.today', label: 'palette.goToday', group: 'actions', keys: 'G S', words: ['сводка'] },
   { id: 'go.knowledge', label: 'palette.goKnowledge', group: 'actions', keys: 'G K', words: ['база знаний', 'статьи'] },
   { id: 'go.assistant', label: 'palette.goAssistant', group: 'actions', keys: 'G A', words: ['ai', 'ии', 'нейросеть'] },
+  { id: 'assistant.pauseHour', label: 'palette.pauseHour', group: 'actions', pause: 'set', words: ['пауза', 'остановить', 'выключить ии'] },
+  { id: 'assistant.pauseMorning', label: 'palette.pauseMorning', group: 'actions', pause: 'set', words: ['пауза', 'ночь', 'утро'] },
+  { id: 'assistant.pauseForever', label: 'palette.pauseForever', group: 'actions', pause: 'set', words: ['пауза', 'остановить', 'выключить ии'] },
+  { id: 'assistant.resume', label: 'palette.resume', group: 'actions', pause: 'resume', words: ['возобновить', 'пауза', 'включить помощника'] },
   { id: 'go.device', label: 'palette.goDevice', group: 'actions', words: ['тема', 'шрифт', 'оформление'] },
   { id: 'theme.light', label: 'palette.themeLight', group: 'actions', words: ['светлая', 'тема'] },
   { id: 'theme.dark', label: 'palette.themeDark', group: 'actions', words: ['тёмная', 'темная', 'ночь', 'тема'] },
@@ -63,8 +69,13 @@ export const LETTERS: Readonly<Record<string, string>> = {
 
 /** Раздел классики для команды настроек (#v=<раздел>). */
 export const CLASSIC_VIEW: Record<string, string> = {
-  'set.assistant': 'settings', 'set.lab': 'lab', 'set.knowledge': 'kb', 'set.sla': 'queue', 'set.reports': 'stats',
-  'set.nodes': 'nodes', 'set.team': 'team', 'set.system': 'diagnostics', 'set.connections': 'settings', 'go.knowledge': 'kb', 'go.assistant': 'settings',
+  'set.knowledge': 'kb', 'set.sla': 'queue', 'set.reports': 'stats',
+  'set.nodes': 'nodes', 'set.team': 'team', 'set.system': 'diagnostics', 'set.connections': 'settings', 'go.knowledge': 'kb',
+};
+
+/** Разделы, которые уже есть в новой панели (этап 4): «Помощник» и его подразделы. */
+export const NEXT_VIEW: Record<string, { key: 'assistant'; sub?: string }> = {
+  'go.assistant': { key: 'assistant' }, 'set.assistant': { key: 'assistant' }, 'set.lab': { key: 'assistant', sub: 'try' },
 };
 
 const norm = (text: string): string => text.toLowerCase().replace(/ё/g, 'е').trim();

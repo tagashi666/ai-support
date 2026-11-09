@@ -7,7 +7,8 @@ import { navigate, route } from '@/lib/router';
 import { setTheme } from '@/lib/store/state';
 import { drafts, draftTick, giveBack, hide, itemOf, meKey, permissions, resolve, setImportant, take } from '@/lib/workspace/actions';
 import { availability } from '@/lib/workspace/registry';
-import { CLASSIC_VIEW, COMMANDS, type CommandDef } from './commands';
+import { canPause, pause, pauseFor, resumeAssistant } from '@/lib/assistant/store';
+import { CLASSIC_VIEW, COMMANDS, NEXT_VIEW, type CommandDef } from './commands';
 export { LETTERS } from './commands';
 
 export const paletteOpen = signal(false);
@@ -27,6 +28,7 @@ export function openThreadId(): number | null {
 /** Доступно ли действие тому, кто смотрит: без права команда не показывается. */
 export function commandAllowed(def: CommandDef, inThread: boolean): boolean {
   if (def.inThread && !inThread) return false;
+  if (def.pause) return canPause.peek() && (def.pause === 'resume') === (pause.peek() !== null);
   if (!def.action) return true;
   return availability(def.action, permissions.peek()) === 'show';
 }
@@ -54,6 +56,7 @@ export function runCommand(id: string): void {
   const thread = openThreadId();
   const item = thread !== null ? itemOf(thread) : undefined;
   const classic = CLASSIC_VIEW[id];
+  const next = NEXT_VIEW[id];
   switch (id) {
     case 'thread.resolve':
       if (thread !== null) resolve(thread);
@@ -73,6 +76,10 @@ export function runCommand(id: string): void {
     case 'go.chats': navigate({ name: 'chats', id: null }); return;
     case 'go.today': navigate({ name: 'today' }); return;
     case 'go.device': navigate({ name: 'section', key: 'device' }); return;
+    case 'assistant.pauseHour': void pauseFor('hour'); return;
+    case 'assistant.pauseMorning': void pauseFor('morning'); return;
+    case 'assistant.pauseForever': void pauseFor('forever'); return;
+    case 'assistant.resume': void resumeAssistant(); return;
     case 'theme.light': setTheme('light'); return;
     case 'theme.dark': setTheme('dark'); return;
     case 'theme.auto': setTheme('auto'); return;
@@ -80,7 +87,8 @@ export function runCommand(id: string): void {
     case 'list.select': selectTick.value += 1; return;
     case 'classic': location.assign(`/?ui=classic${thread !== null ? `#c${thread}` : ''}`); return;
     default:
-      if (classic) location.assign(`/?ui=classic#v=${classic}`);
+      if (next) navigate({ name: 'section', key: next.key, ...(next.sub ? { sub: next.sub } : {}) });
+      else if (classic) location.assign(`/?ui=classic#v=${classic}`);
   }
 }
 

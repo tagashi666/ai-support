@@ -1,7 +1,7 @@
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { LiveClient } from '@/features/client/LiveClient';
-import { LiveSummary } from '@/features/live/LiveSummary';
+import { LiveToday } from '@/features/today/LiveToday';
 import { t } from '@/i18n/ru';
 import { layerOpen } from '@/lib/keys';
 import { isHuge, isSplit, isWide } from '@/lib/media';
@@ -54,7 +54,7 @@ export function Workspace({ id, client = false }: { id: string | null; client?: 
         <WorkList openId={open} />
       </section>
       <section class={s.threadCol}>
-        {open !== null ? <WorkThread key={open} id={open} /> : <div class={s.summary}><LiveSummary /></div>}
+        {open !== null ? <WorkThread key={open} id={open} /> : <div class={s.summary}><LiveToday compact /></div>}
       </section>
       {column && item && open !== null && (
         <aside class={s.clientCol} aria-label={t('client.title')}>

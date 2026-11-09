@@ -11,7 +11,8 @@ export type Route =
   | { name: 'today' }
   | { name: 'chats'; id: string | null; client?: boolean }
   | { name: 'more' }
-  | { name: 'section'; key: SectionKey };
+  /** sub — подраздел: /next/assistant/activity (6.7). */
+  | { name: 'section'; key: SectionKey; sub?: string };
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const SECTIONS: readonly SectionKey[] = ['knowledge', 'assistant', 'reports', 'connections', 'team', 'system', 'device'];
@@ -27,7 +28,9 @@ export function parse(pathname: string): Route {
     return id && third === 'client' ? { name: 'chats', id, client: true } : { name: 'chats', id };
   }
   if (head === 'more') return { name: 'more' };
-  if ((SECTIONS as readonly string[]).includes(head)) return { name: 'section', key: head as SectionKey };
+  if ((SECTIONS as readonly string[]).includes(head)) {
+    return second ? { name: 'section', key: head as SectionKey, sub: decodeURIComponent(second) } : { name: 'section', key: head as SectionKey };
+  }
   return { name: 'home' };
 }
 
@@ -37,7 +40,7 @@ export function href(route: Route): string {
     case 'today': return `${BASE}/today`;
     case 'chats': return route.id ? `${BASE}/chats/${encodeURIComponent(route.id)}${route.client ? '/client' : ''}` : `${BASE}/chats`;
     case 'more': return `${BASE}/more`;
-    case 'section': return `${BASE}/${route.key}`;
+    case 'section': return `${BASE}/${route.key}${route.sub ? `/${encodeURIComponent(route.sub)}` : ''}`;
   }
 }
 
