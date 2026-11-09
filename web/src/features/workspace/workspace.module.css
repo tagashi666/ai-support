@@ -44,19 +44,6 @@
   .headActions { flex: 1 1 100%; justify-content: flex-end; }
 }
 .fullName { white-space: normal; overflow-wrap: anywhere; }
-.classicLink {
-  display: inline-flex;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 var(--s2);
-  border-radius: var(--r-control);
-  color: var(--text-2);
-  font-size: var(--fs-small);
-  font-weight: 600;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-@media (pointer: coarse) { .classicLink { min-height: 44px; } }
 .ledBy { color: var(--text-3); font-size: var(--fs-small); }
 .presence { color: var(--text-2); font-size: var(--fs-small); }
 .quietLine { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); }

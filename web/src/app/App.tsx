@@ -36,7 +36,7 @@ export function App(): JSX.Element {
   } else {
     switch (current.name) {
       case 'today': screen = live ? <LiveSummary wide /> : <Today />; break;
-      case 'chats': screen = live ? <Workspace id={current.id} /> : <ChatsScreen id={current.id} />; break;
+      case 'chats': screen = live ? <Workspace id={current.id} client={current.client === true} /> : <ChatsScreen id={current.id} />; break;
       case 'more': screen = <MoreScreen />; break;
       case 'section': screen = <Placeholder section={current.key} />; break;
       default: screen = live ? <LiveSummary wide /> : <Today />;

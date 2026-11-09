@@ -9,6 +9,8 @@ interface SheetProps {
   onClose: () => void;
   title: string;
   side?: 'center' | 'right';
+  /** wide — широкий лист (карточка Bedolaga); pane — боковая панель «Клиент». */
+  size?: 'wide' | 'pane';
   children: ComponentChildren;
 }
 
@@ -16,7 +18,7 @@ interface SheetProps {
  * Лист на нативном <dialog>: ловушка фокуса и возврат фокуса даёт браузер,
  * Esc закрывает только верхний слой (6.0). На телефоне — нижний лист.
  */
-export function Sheet({ open, onClose, title, side = 'center', children }: SheetProps): JSX.Element {
+export function Sheet({ open, onClose, title, side = 'center', size, children }: SheetProps): JSX.Element {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   useEffect(() => {
@@ -30,6 +32,7 @@ export function Sheet({ open, onClose, title, side = 'center', children }: Sheet
       ref={ref}
       class={s.sheet}
       data-side={side}
+      data-size={size}
       aria-labelledby={titleId}
       onClose={onClose}
       onClick={(event) => { if (event.target === ref.current) onClose(); }}

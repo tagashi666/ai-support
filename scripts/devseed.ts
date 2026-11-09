@@ -75,7 +75,7 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
 
   let n = 0;
   const inboundAt = (i: number, at: number, text: string) => store.recordInbound({
-    channel: i % 4 === 0 ? 'tg_bot' : 'bedolaga', externalId: `dev-${i}`, displayName: NAMES[i % NAMES.length],
+    channel: i % 4 === 0 ? 'tg_bot' : 'bedolaga', externalId: i % 4 === 0 ? `dev-${i}` : String(4400 + i), displayName: NAMES[i % NAMES.length],
     text, externalMsgId: `dev-${i}-${++n}`, sentAt: at,
   });
 

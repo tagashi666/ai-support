@@ -9,7 +9,7 @@ export type SectionKey = 'knowledge' | 'assistant' | 'reports' | 'connections' |
 export type Route =
   | { name: 'home' }
   | { name: 'today' }
-  | { name: 'chats'; id: string | null }
+  | { name: 'chats'; id: string | null; client?: boolean }
   | { name: 'more' }
   | { name: 'section'; key: SectionKey };
 
@@ -19,10 +19,13 @@ const SECTIONS: readonly SectionKey[] = ['knowledge', 'assistant', 'reports', 'c
 export function parse(pathname: string): Route {
   const path = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
   const parts = path.split('/').filter(Boolean);
-  const [head, second] = parts;
+  const [head, second, third] = parts;
   if (!head) return { name: 'home' };
   if (head === 'today') return { name: 'today' };
-  if (head === 'chats') return { name: 'chats', id: second ? decodeURIComponent(second) : null };
+  if (head === 'chats') {
+    const id = second ? decodeURIComponent(second) : null;
+    return id && third === 'client' ? { name: 'chats', id, client: true } : { name: 'chats', id };
+  }
   if (head === 'more') return { name: 'more' };
   if ((SECTIONS as readonly string[]).includes(head)) return { name: 'section', key: head as SectionKey };
   return { name: 'home' };
@@ -32,7 +35,7 @@ export function href(route: Route): string {
   switch (route.name) {
     case 'home': return `${BASE}/`;
     case 'today': return `${BASE}/today`;
-    case 'chats': return route.id ? `${BASE}/chats/${encodeURIComponent(route.id)}` : `${BASE}/chats`;
+    case 'chats': return route.id ? `${BASE}/chats/${encodeURIComponent(route.id)}${route.client ? '/client' : ''}` : `${BASE}/chats`;
     case 'more': return `${BASE}/more`;
     case 'section': return `${BASE}/${route.key}`;
   }

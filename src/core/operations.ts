@@ -394,6 +394,8 @@ export class Operations {
     const notes = this.db.prepare(`
       SELECT id, actor_key, text, created_at FROM customer_note WHERE customer_id = ? ORDER BY id DESC LIMIT 100
     `).all(id) as Array<Record<string, unknown>>;
+    // Имя автора вместо ключа op:N (10.3 п.4): ключ остаётся для совместимости.
+    for (const note of notes) note.author_name = this.actorName(String(note.actor_key));
     const related = this.db.prepare(`
       SELECT id, channel, external_id, username, display_name, status, priority, last_message_at
         FROM conversation WHERE customer_profile_id = ? ORDER BY last_message_at DESC
@@ -456,7 +458,8 @@ export class Operations {
     const like = `%${query.replace(/[\\%_]/g, '\\$&')}%`;
     const n = Math.min(100, Math.max(1, limit));
     const conversations = this.db.prepare(`
-      SELECT id, channel, username, display_name, subject, status, priority, last_message_at
+      SELECT id, channel, username, display_name, subject, status, priority, last_message_at,
+             CASE WHEN hidden_at IS NULL THEN 0 ELSE 1 END AS hidden
         FROM conversation
        WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\'
           OR subject LIKE ? ESCAPE '\\' OR external_id LIKE ? ESCAPE '\\'
@@ -467,14 +470,16 @@ export class Operations {
         FROM message WHERE text LIKE ? ESCAPE '\\' ORDER BY id DESC LIMIT ?
     `).all(like, n);
     const customers = this.can(actor, 'conversation:profile') ? this.db.prepare(`
-      SELECT id, username, display_name, email, phone, company
-        FROM customer_profile
+      SELECT p.id, p.username, p.display_name, p.email, p.phone, p.company,
+             (SELECT c.id FROM conversation c WHERE c.customer_profile_id = p.id
+               ORDER BY c.last_message_at DESC LIMIT 1) AS conversation_id
+        FROM customer_profile p
        WHERE username LIKE ? ESCAPE '\\' OR display_name LIKE ? ESCAPE '\\'
           OR email LIKE ? ESCAPE '\\' OR phone LIKE ? ESCAPE '\\' OR company LIKE ? ESCAPE '\\'
        ORDER BY updated_at DESC LIMIT ?
     `).all(like, like, like, like, like, n) : [];
     const knowledge = this.can(actor, 'knowledge:read') ? this.db.prepare(`
-      SELECT id, title, substr(body, 1, 300) AS excerpt FROM kb_doc
+      SELECT id, title, source, ext_id, substr(body, 1, 300) AS excerpt FROM kb_doc
        WHERE title LIKE ? ESCAPE '\\' OR body LIKE ? ESCAPE '\\' ORDER BY updated_at DESC LIMIT ?
     `).all(like, like, n) : [];
     return { query, conversations, messages, customers, knowledge };

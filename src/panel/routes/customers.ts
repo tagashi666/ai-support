@@ -44,14 +44,16 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const conversation = store.getConversation(Number(request.params.id));
     if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
     if (!customers) return reply.code(501).send({ error: 'Источники карточки не настроены' });
-    return { customer: await customers.get(conversation).catch(() => null) };
+    const customer = await customers.get(conversation).catch(() => null);
+    return { customer, checkedAt: customers.checkedAt(conversation) };
   });
 
   app.post<{ Params: { id: string } }>('/api/conversations/:id/customer/refresh', async (request, reply) => {
     const conversation = store.getConversation(Number(request.params.id));
     if (!conversation) return reply.code(404).send({ error: 'Диалог не найден' });
     if (!customers) return reply.code(501).send({ error: 'Источники карточки не настроены' });
-    return { ok: true, customer: await customers.build(conversation) };
+    const customer = await customers.build(conversation);
+    return { ok: true, customer, checkedAt: customers.checkedAt(conversation) ?? Date.now() };
   });
 
   /**

@@ -8,7 +8,7 @@ import { readToken, sendJson } from '@/lib/live/api';
 import { liveChannel, liveName } from '@/lib/live/labels';
 import { bootstrap, inbox } from '@/lib/live/store';
 import { isSplit } from '@/lib/media';
-import { navigate } from '@/lib/router';
+import { navigate, route } from '@/lib/router';
 import { now } from '@/lib/store/state';
 import {
   askHandover, copyLink, drafts, draftTick, giveBack, hide, itemOf, meKey, permissions, reopen, resolve, setImportant, setMode,
@@ -169,7 +169,11 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
               </Button>
             )}
             <Button variant="quiet" size="sm" icon="more" label={t('thread.more')} aria-haspopup="dialog" onClick={() => setSheet('more')} />
-            <a class={w.classicLink} href={`/?ui=classic#c${id}`} title={t('thread.clientInClassic')}>{t('thread.client')}</a>
+            {/* На телефоне — только значок: шапка не шире экрана. */}
+            <Button variant="quiet" size="sm" icon="client" aria-haspopup="dialog" label={isSplit.value ? undefined : t('thread.client')}
+              onClick={() => navigate({ name: 'chats', id: String(id), client: !(route.value.name === 'chats' && route.value.client) })}>
+              {isSplit.value ? t('thread.client') : undefined}
+            </Button>
           </div>
         </div>
         <div class={s.chipRow}>

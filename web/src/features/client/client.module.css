@@ -21,3 +21,47 @@
 .meterFill[data-p="70"] { width: 70%; } .meterFill[data-p="80"] { width: 80%; } .meterFill[data-p="90"] { width: 90%; }
 .meterFill[data-p="100"] { width: 100%; }
 .later { color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }
+
+/* Панель «Клиент» на живых данных (6.4) */
+.pane { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: var(--s4); padding: var(--s4) var(--s5) var(--s6); }
+.pane[data-sheet="true"] { padding: 0; overflow: visible; }
+.pane .name { overflow-wrap: anywhere; }
+.skeleton { height: 9rem; border-radius: var(--r-card); background: var(--surface-sunken); }
+.notice { display: grid; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface-sunken); font-size: var(--fs-body); line-height: var(--lh-body); }
+.actionsRow { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.source { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); margin-top: calc(-1 * var(--s2)); }
+.source[data-aged="true"] { color: var(--attention); }
+.fold { border-top: 1px solid var(--border); padding-top: var(--s2); }
+.foldHead { cursor: pointer; min-height: 44px; display: flex; align-items: center; font-weight: 600; font-size: var(--fs-body); list-style: none; }
+.foldHead::-webkit-details-marker { display: none; }
+.foldHead::before { content: '▸'; width: 1.25rem; color: var(--text-3); }
+.fold[open] > .foldHead::before { content: '▾'; }
+.foldBody { display: grid; gap: var(--s3); padding: 0 0 var(--s3); }
+.noteItem { font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
+.links, .devices, .trace, .bedRows { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s1); }
+.linkBtn { min-height: 44px; width: 100%; text-align: left; padding: var(--s2) var(--s3); border: 0; border-radius: var(--r-control, 8px); background: transparent; color: var(--accent-text); font: inherit; font-size: var(--fs-body); cursor: pointer; }
+.linkBtn:hover { background: var(--surface-hover); }
+.device { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); font-size: var(--fs-body); min-height: 44px; }
+.trace li { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-2); overflow-wrap: anywhere; }
+.danger { display: grid; gap: var(--s2); justify-items: start; border-top: 1px solid var(--border); padding-top: var(--s3); }
+.subhead { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
+.field { display: grid; gap: var(--s1); font-size: var(--fs-body); }
+.field input, .field textarea { font: inherit; font-size: 1rem; padding: var(--s2) var(--s3); border: 1px solid var(--control-border); border-radius: 8px; background: var(--surface); color: var(--text); min-height: 44px; width: 100%; }
+.radios { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s2); font-size: var(--fs-body); }
+.radios label { display: flex; align-items: center; gap: var(--s2); min-height: 44px; }
+.warn { padding: var(--s2) var(--s3); border-radius: 8px; background: var(--attention-bg); color: var(--attention); font-size: var(--fs-body); }
+.empty { color: var(--text-3); font-size: var(--fs-body); }
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s2); margin: 0; }
+.kpi { padding: var(--s2) var(--s3); border: 1px solid var(--border); border-radius: 8px; }
+.kpi dt { color: var(--text-3); font-size: var(--fs-small); }
+.kpi dd { margin: 0; font-weight: 600; font-size: var(--fs-body); overflow-wrap: anywhere; }
+.bedRow { display: grid; gap: var(--s1); padding: var(--s2) 0; border-bottom: 1px solid var(--border); font-size: var(--fs-body); justify-items: start; }
+.bedRow b { overflow-wrap: anywhere; }
+.bedMeta { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s3); color: var(--text-3); font-size: var(--fs-small); }
+.bed { display: grid; gap: var(--s3); min-width: 0; }
+.bedSummary { display: flex; justify-content: space-between; gap: var(--s3); align-items: start; }
+.bedSummary > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.bedBalance { display: grid; text-align: right; font-size: var(--fs-small); color: var(--text-3); }
+.bedBalance b { color: var(--text); font-size: var(--fs-card); }
+.tabsScroll { overflow-x: auto; max-width: 100%; scrollbar-width: thin; }
+.tabsScroll > [role="tablist"] { width: max-content; min-width: 100%; }

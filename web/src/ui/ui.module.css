@@ -251,6 +251,12 @@
   border-radius: var(--r-sheet) 0 0 var(--r-sheet);
 }
 .sheet[data-side="right"][open] { animation-name: sheetLeft; }
+.sheet[data-size="wide"] { width: min(52rem, calc(100vw - 2rem)); max-height: min(88vh, 52rem); }
+.sheet[data-side="right"][data-size="pane"] { width: min(24rem, 100vw); }
+@media (max-width: 767px) {
+  .sheet[data-size="wide"], .sheet[data-size="pane"] { width: 100%; max-height: 92vh; }
+  .sheet[data-side="right"] { height: auto; max-height: 92vh; margin: auto 0 0; width: 100%; border-radius: var(--r-sheet) var(--r-sheet) 0 0; }
+}
 .sheetHead {
   position: sticky;
   top: 0;

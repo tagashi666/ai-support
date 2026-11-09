@@ -63,6 +63,8 @@ export interface Profile {
   sources: string[];
   /** Почему не нашли — чтобы оператор не гадал, а видел место обрыва. */
   trace?: string[];
+  /** Хотя бы один источник не ответил: «не смогли проверить», а не «не найден». */
+  sourceFailed?: boolean;
 }
 
 const num = (value: unknown): number | undefined => {
@@ -323,6 +325,7 @@ export class CustomerDirectory {
     // нельзя: так выглядят и чужие люди, и попытки выманить чужую подписку.
     // Но если хоть один источник упал — не знаем, найден ли он на самом деле:
     // флаг не трогаем и «не найден» в кэш не пишем.
+    if (sourceFailed) profile.sourceFailed = true;
     if (profile.found || !sourceFailed) {
       this.store.setSuspicious(conversation.id, !profile.found);
       if (telegramId) this.store.saveCustomer(telegramId, profile.found ? profile : null);
@@ -368,6 +371,12 @@ export class CustomerDirectory {
    * пересборка индекса на полторы тысячи записей. Оператор получает тред
    * мгновенно, а карточка догружается следом.
    */
+  /** Когда карточку собирали в последний раз (для «3 мин назад»); null — не собирали. */
+  checkedAt(conversation: Conversation): number | null {
+    if (!conversation.tg_user_id) return null;
+    return this.store.getCustomer(conversation.tg_user_id)?.snapshot_at ?? null;
+  }
+
   peek(conversation: Conversation): { profile: Profile | null; stale: boolean } {
     if (!conversation.tg_user_id) return { profile: null, stale: true };
     const cached = this.store.getCustomer(conversation.tg_user_id);
