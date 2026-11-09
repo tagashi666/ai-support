@@ -426,6 +426,10 @@ console.log('\n[ WebSocket ?v=2 и GET /api/events ]');
   const item = v2Frames.find((frame) => frame.type === 'inbox_item') as { seq: number; epoch: string; item: InboxItem } | undefined;
   check('новое сообщение — кадр inbox_item с seq = hello + 1', item?.item.id === fresh.id && item.seq === hello.seq + 1 && item.epoch === hello.epoch, item);
   check('секция и ранг посчитаны для получателя', item?.item.section === 'mine' && /^0\|/.test(item.item.rank));
+  const live = item as { counts?: { waiting: number; sections: { mine: number } } } | undefined;
+  const snapshot = await getJson<InboxResponse>('/api/inbox?limit=1', as(ivanToken));
+  check('кадр несёт счётчики получателя = счётчики /api/inbox', live?.counts?.sections.mine === snapshot.counts.sections.mine
+    && live.counts.waiting === snapshot.counts.waiting, [live?.counts, snapshot.counts]);
   await wait(() => classicFrames.some((frame) => frame.type === 'message'));
   check('классика получает свои кадры и не получает inbox_item', classicFrames.some((frame) => frame.type === 'message')
     && !classicFrames.some((frame) => frame.type === 'inbox_item'));
@@ -434,6 +438,7 @@ console.log('\n[ WebSocket ?v=2 и GET /api/events ]');
   const caught = await getJson<EventsResponse>(`/api/events?since=${hello.seq}&epoch=${hello.epoch}`, as(ivanToken));
   check('догон возвращает те же кадры', !caught.reset && caught.events.some((frame) => frame.type === 'inbox_item' && frame.seq === item?.seq)
     && caught.events.every((frame, index) => frame.seq === hello.seq + 1 + index), caught);
+  check('догон несёт текущие счётчики', !caught.reset && caught.counts.waiting === (await getJson<InboxResponse>('/api/inbox?limit=1', as(ivanToken))).counts.waiting);
   const reset = await getJson<EventsResponse>(`/api/events?since=0&epoch=other`, as(ivanToken));
   check('чужая эпоха — reset', reset.reset === true && reset.epoch === hello.epoch);
 

@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { factsQuery, LISTED_SQL, type FactsRow } from '../core/attention.js';
 import type { AiMode } from '../shared/attention.js';
-import type { InboxProjection, LiveFrame } from '../shared/api-types.js';
+import type { InboxCounts, InboxProjection, LiveFrame } from '../shared/api-types.js';
 import { materialize, openProjections, projectRows } from './inbox.js';
 
 /**
@@ -65,12 +65,12 @@ export class EventLog {
   }
 }
 
-/** Кадр для конкретного получателя. */
-export function frameFor(entry: { seq: number; frame: StoredFrame }, epoch: string, viewerKey: string): LiveFrame {
+/** Кадр для конкретного получателя; counts — его счётчики на момент отправки. */
+export function frameFor(entry: { seq: number; frame: StoredFrame }, epoch: string, viewerKey: string, counts?: InboxCounts): LiveFrame {
   const { frame, seq } = entry;
   switch (frame.type) {
-    case 'inbox_item': return { type: 'inbox_item', seq, epoch, item: materialize(frame.item, viewerKey) };
-    case 'inbox_remove': return { type: 'inbox_remove', seq, epoch, id: frame.id };
+    case 'inbox_item': return { type: 'inbox_item', seq, epoch, item: materialize(frame.item, viewerKey), ...(counts ? { counts } : {}) };
+    case 'inbox_remove': return { type: 'inbox_remove', seq, epoch, id: frame.id, ...(counts ? { counts } : {}) };
     case 'settings': return { type: 'settings', seq, epoch, aiMode: frame.aiMode, minConfidence: frame.minConfidence };
   }
 }
@@ -84,7 +84,7 @@ const DONE_MEMORY = 2000;
  * на следующем шаге.
  */
 export class AttentionWatcher {
-  private readonly sent = new Map<number, string>();
+  private readonly sent = new Map<number, { json: string; item: InboxProjection }>();
   /** Последние отправленные решённые строки: повторный повод без изменений кадра не даёт. */
   private readonly doneSent = new Map<number, string>();
   private readonly dirty = new Set<number>();
@@ -98,7 +98,7 @@ export class AttentionWatcher {
     private readonly clock: () => number = Date.now,
   ) {
     // Стартовая проекция без кадров: панель всё равно начинает со снимка /api/inbox.
-    for (const item of openProjections(db, clock())) this.sent.set(item.id, JSON.stringify(item));
+    for (const item of openProjections(db, clock())) this.sent.set(item.id, { json: JSON.stringify(item), item });
   }
 
   start(stepMs = ATTENTION_STEP_MS): void {
@@ -144,8 +144,12 @@ export class AttentionWatcher {
 
   /** Последняя отправленная проекция (сверка в тестах). */
   sentProjection(id: number): InboxProjection | undefined {
-    const raw = this.sent.get(id);
-    return raw ? JSON.parse(raw) as InboxProjection : undefined;
+    return this.sent.get(id)?.item;
+  }
+
+  /** Все открытые строки, как их видят панели: по ним сервер считает счётчики в кадрах. */
+  projections(): InboxProjection[] {
+    return [...this.sent.values()].map((entry) => entry.item);
   }
 
   get size(): number { return this.sent.size; }
@@ -158,8 +162,8 @@ export class AttentionWatcher {
       seen.add(item.id);
       this.doneSent.delete(item.id);
       const json = JSON.stringify(item);
-      if (this.sent.get(item.id) === json) continue;
-      this.sent.set(item.id, json);
+      if (this.sent.get(item.id)?.json === json) continue;
+      this.sent.set(item.id, { json, item });
       this.emit({ type: 'inbox_item', item });
     }
     const gone = (ids ?? [...this.sent.keys()]).filter((id) => !seen.has(id));

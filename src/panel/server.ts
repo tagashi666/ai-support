@@ -29,6 +29,7 @@ import { register as registerKnowledge } from './routes/knowledge.js';
 import { register as registerInterfaceKb } from './routes/interface-kb.js';
 import { register as registerInbox } from './routes/inbox.js';
 import { createLiveHub, frameFor } from './live.js';
+import { countsFor } from './inbox.js';
 import { apiError } from './errors.js';
 import { registerWebApp } from './webapp.js';
 import { DENY_BY_DEFAULT, permissionFor, registeredApiRoutes, routeSample } from './permissions.js';
@@ -273,7 +274,9 @@ export async function startWeb(deps: WebDeps) {
         socket.close(1008, 'Permission revoked');
         continue;
       }
-      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(frameFor(entry, epoch, actor.key)));
+      if (socket.readyState !== socket.OPEN) continue;
+      const counts = entry.frame.type === 'settings' ? undefined : countsFor(live.watcher.projections(), actor.key);
+      socket.send(JSON.stringify(frameFor(entry, epoch, actor.key, counts)));
     }
   });
   live.watcher.start();

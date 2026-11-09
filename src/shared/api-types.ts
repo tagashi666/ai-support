@@ -128,8 +128,9 @@ export interface BootstrapResponse {
 
 /** Кадр WebSocket новой панели (сокет с ?v=2). seq растёт на 1, без пропусков. */
 export type LiveFrame =
-  | { type: 'inbox_item'; seq: number; epoch: string; item: InboxItem }
-  | { type: 'inbox_remove'; seq: number; epoch: string; id: number }
+  /** counts — счётчики получателя на момент отправки (в кадрах сокета; в догоне — общие в ответе). */
+  | { type: 'inbox_item'; seq: number; epoch: string; item: InboxItem; counts?: InboxCounts }
+  | { type: 'inbox_remove'; seq: number; epoch: string; id: number; counts?: InboxCounts }
   | { type: 'settings'; seq: number; epoch: string; aiMode: AiMode; minConfidence: number }
   /** Кадр, который этому получателю не положен по правам: держит seq без пропуска. */
   | { type: 'noop'; seq: number; epoch: string };
@@ -140,5 +141,5 @@ export type ControlFrame =
   | { type: 'tick'; at: number; seq: number; epoch: string };
 
 export type EventsResponse =
-  | { reset?: false; epoch: string; seq: number; events: LiveFrame[] }
+  | { reset?: false; epoch: string; seq: number; events: LiveFrame[]; counts: InboxCounts }
   | { reset: true; epoch: string; seq: number };

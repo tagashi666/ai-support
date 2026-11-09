@@ -66,7 +66,12 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const entries = events.since(since, String(request.query?.epoch ?? ''));
     if (!entries) return { reset: true, epoch: events.epoch, seq: events.seq };
     const viewer = actorOf(request).key;
-    return { epoch: events.epoch, seq: events.seq, events: entries.map((entry) => frameFor(entry, events.epoch, viewer)) };
+    return {
+      epoch: events.epoch,
+      seq: events.seq,
+      events: entries.map((entry) => frameFor(entry, events.epoch, viewer)),
+      counts: countsFor(live.watcher.projections(), viewer),
+    };
   });
 
   // Без сетевых вызовов: GET /api/settings спрашивает Telegram о бизнес-подключении.
