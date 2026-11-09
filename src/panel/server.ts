@@ -27,6 +27,7 @@ import { register as registerSettings } from './routes/settings.js';
 import { register as registerNodes } from './routes/nodes.js';
 import { register as registerKnowledge } from './routes/knowledge.js';
 import { register as registerInterfaceKb } from './routes/interface-kb.js';
+import { registerWebApp } from './webapp.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Панель лежит в корне проекта, а этот файл — в src/panel и dist/panel.
@@ -223,6 +224,9 @@ export async function startWeb(deps: WebDeps) {
     .header('cache-control', 'public, max-age=31536000, immutable')
     .type('application/javascript; charset=utf-8')
     .send(lottiePlayer));
+
+  // Новая панель (этап 1 редизайна — прототип) рядом с классикой: /next.
+  registerWebApp(app);
 
   const sockets = new Set<WebSocket>();
   const socketIps = new Map<string, number>();
