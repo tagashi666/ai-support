@@ -116,7 +116,7 @@ export function renderList(force = false) {
   const box = $('list');
   const frag = document.createDocumentFragment();
   const waiting = state.conversations.filter(c => c.unread > 0).length;
-  $('cntInbox').textContent = waiting || state.conversations.length;
+  $('cntInbox').textContent = String(waiting);
   renderBoard();
   if (!items.length) { box.replaceChildren(Object.assign(document.createElement('p'), { className:'empty', textContent:state.listQuery ? 'Ничего не найдено.' : 'Здесь пока пусто.' })); return; }
   // Уже загруженные аватарки переносим в новые строки как есть: новый <img>
@@ -139,7 +139,7 @@ export function renderList(force = false) {
         <div class="snippet">${closed ? 'Окно ответа закрыто' : esc(c.subject || conversationStatus(c.status))}</div>
         <div class="chips"><span class="chip channel">${esc(channelLabel(c))}</span>
           ${closed ? '<span class="chip hot">24 ч закрыто</span>' : ''}
-          ${c.suspicious ? '<span class="chip hot">нет в базах</span>' : ''}
+          ${c.suspicious ? '<span class="chip hot" title="Клиента не нашли ни в одной подключённой базе подписчиков">нет в базе подписчиков</span>' : ''}
           ${c.escalated ? '<span class="chip hot">важно</span>' : ''}
           ${c.handoff_at ? '<span class="chip hot">у человека</span>' : ''}
           ${c.ai_mode === 'auto' ? '<span class="chip ai">AI авто</span>' : ''}

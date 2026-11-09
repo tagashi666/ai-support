@@ -14,7 +14,7 @@ import {
   renderCustomer, renderCollaboration, loadUnifiedProfile, renderSubscription, renderAiNote,
 } from './inspector.js';
 import { renderPendingFiles } from './composer.js';
-import { listable } from './rules.js';
+import { listable, isStale, mergeSnapshot, upsertConversation } from './rules.js';
 
 /**
  * Открытие диалога.
@@ -90,7 +90,7 @@ export function paintHeader(c, { keepError = false } = {}) {
     $(id).disabled = !canPermission('conversation:status');
     $(id).title = canPermission('conversation:status') ? '' : 'Действие запрещено настройками роли';
   }
-  $('foldClient').textContent = c.suspicious ? 'нет в базах' : '';
+  $('foldClient').textContent = c.suspicious ? 'нет в базе подписчиков' : '';
   if (!keepError) $('err').textContent = '';
 }
 
@@ -242,21 +242,29 @@ export const refreshSoon = () => { if (!refreshTimer) refreshTimer = setTimeout(
 let refreshPromise = null, refreshAgain = false;
 let currentSyncPromise = null, currentSyncId = null;
 let readTimer = null;
+// Прочтение, ещё не подтверждённое сервером: снимок и кадры не возвращают точку.
+const pendingRead = new Set();
+// Номер живого кадра: строки, пришедшие после запроса снимка, снимок не удаляет.
+let liveSeq = 0;
+const liveSeen = new Map();
 
 export function markOpenConversationRead(id = state.current?.id) {
   if (!canPermission('conversation:read') || !id || state.current?.id !== id) return;
   state.current = { ...state.current, unread:0 };
   const index = state.conversations.findIndex((item) => item.id === id);
   if (index >= 0) state.conversations[index] = { ...state.conversations[index], unread:0 };
+  pendingRead.add(id);
   renderList();
   clearTimeout(readTimer);
   readTimer = setTimeout(async () => {
-    if (state.current?.id !== id) return;
+    if (state.current?.id !== id) { pendingRead.delete(id); return; }
     try {
       const response = await api(`/api/conversations/${id}/read`, { method:'POST' });
       const data = response.ok ? await response.json().catch(() => null) : null;
+      pendingRead.delete(id);
       if (data?.conversation) mergeLiveConversation(data.conversation);
     } catch (error) {
+      pendingRead.delete(id);
       console.warn('Не удалось подтвердить прочтение диалога', error);
     }
   }, 120);
@@ -336,12 +344,17 @@ export async function refresh({ fullThread = false } = {}) {
   refreshPromise = (async () => {
     const full = refreshFullThread;
     refreshFullThread = false;
+    const requestedAt = liveSeq;
     const data = await json('/api/conversations');
     if (!data) return;
     const openId = state.current?.id;
     const previousLastMessageAt = Number(state.current?.last_message_at ?? 0);
     const previousUpdatedAt = Number(state.current?.updated_at ?? 0);
-    state.conversations = data.conversations;
+    // Снимок не затирает кадры, пришедшие, пока он летел (раньше устаревший
+    // ответ откатывал свежие строки, и список дёргался).
+    const keep = new Set([...liveSeen].filter(([, seq]) => seq > requestedAt).map(([id]) => id));
+    if (openId) keep.add(openId);
+    state.conversations = mergeSnapshot(state.conversations, data.conversations, { keep, pendingRead });
     if (state.current) state.current = state.conversations.find(c => c.id === state.current.id) ?? state.current;
     renderList();
     // Контрольный опрос раньше обновлял только левый список. Если push-кадр
@@ -362,13 +375,15 @@ export async function refresh({ fullThread = false } = {}) {
 /** Событие попадает в список сразу, не дожидаясь контрольного HTTP-запроса. */
 export function mergeLiveConversation(conversation) {
   if (!conversation?.id) return;
-  const index = state.conversations.findIndex((item) => item.id === conversation.id);
+  const existing = state.conversations.find((item) => item.id === conversation.id);
+  // Кадр старше уже показанной строки (обгон ответов) ничего не откатывает.
+  if (isStale(conversation, existing ?? (state.current?.id === conversation.id ? state.current : null))) return;
+  liveSeen.set(conversation.id, ++liveSeq);
+  if (pendingRead.has(conversation.id) && conversation.unread) conversation = { ...conversation, unread:0 };
   // Скрытый диалог (скрыт в другой вкладке, а кадр пришёл от фонового
   // обновления профиля или прочтения) в список не возвращаем: сервер его не отдаёт.
-  if (!listable(conversation)) { if (index >= 0) state.conversations.splice(index, 1); }
-  else if (index >= 0) state.conversations[index] = { ...state.conversations[index], ...conversation };
-  else state.conversations.push(conversation);
-  state.conversations.sort((a, b) => Number(b.last_message_at ?? b.created_at ?? 0) - Number(a.last_message_at ?? a.created_at ?? 0));
+  if (!listable(conversation)) state.conversations = state.conversations.filter((item) => item.id !== conversation.id);
+  else state.conversations = upsertConversation(state.conversations, { ...existing, ...conversation });
   if (state.current?.id === conversation.id) {
     state.current = { ...state.current, ...conversation };
     // Статус, режим AI и передача могли смениться не здесь: другой оператор,

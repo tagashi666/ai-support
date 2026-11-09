@@ -371,15 +371,77 @@ console.log('\n[ клиент не найден ]');
   store.setSuspicious(unknown.id, true);
   check('диалог помечен подозрительным', store.getConversation(unknown.id)!.suspicious === 1);
 
-  // Подозрительные должны быть выше в списке: их разбирают первыми.
+  // Пометка «нет в базе» в порядке не участвует: раньше она навечно
+  // закрепляла диалог наверху, и список «скакал» (сервер и браузер
+  // сортировали по-разному). Порядок — важные, потом по времени, потом id.
+  store.recordInbound({ channel:'tg_dm', externalId:'unknown', text:'старое', externalMsgId:'u1', sentAt: Date.now() - 60_000 });
   const plain = store.upsertConversation({ channel:'tg_dm', externalId:'plain', tgUserId:9200 });
   store.recordInbound({ channel:'tg_dm', externalId:'plain', text:'обычный', externalMsgId:'p1', sentAt: Date.now() });
   const order = store.listConversations(50).map((c) => c.id);
-  check('подозрительный идёт раньше обычного',
-    order.indexOf(unknown.id) < order.indexOf(plain.id), order.slice(0, 4));
+  check('пометка «нет в базе» не влияет на порядок',
+    order.indexOf(plain.id) < order.indexOf(unknown.id), order.slice(0, 4));
+
+  // Кадр уходит только при настоящей смене флага.
+  let frames = 0;
+  const onFrame = (c: { id: number }) => { if (c.id === unknown.id) frames++; };
+  store.on('conversation', onFrame);
+  store.setSuspicious(unknown.id, true);
+  check('тот же флаг — без кадра', frames === 0, frames);
+  store.setSuspicious(unknown.id, false);
+  store.setSuspicious(unknown.id, true);
+  check('смена флага — ровно один кадр на смену', frames === 2, frames);
+  const before = store.getConversation(unknown.id)!.updated_at;
+  store.setEscalated(unknown.id, true);
+  store.setEscalated(unknown.id, false);
+  check('updated_at растёт строго даже в одну миллисекунду', store.getConversation(unknown.id)!.updated_at >= before + 2);
+  store.off('conversation', onFrame);
 
   store.setSuspicious(unknown.id, false);
   check('пометка снимается', store.getConversation(unknown.id)!.suspicious === 0);
+}
+
+// Сбой источника (таймаут, 5xx) не равен «клиент не найден»: флаг не трогаем.
+console.log('\n[ сбой источника ≠ не найден ]');
+{
+  const { CustomerDirectory } = await import('../src/integrations/customers.js');
+  // Найденный в Remnawave клиент привязывается к источнику — источник должен существовать.
+  store.syncSource({ id: 'remnawave-default', kind: 'remnawave', name: 'Remnawave' });
+  const boom = async () => { throw new Error('boom'); };
+  const bedOk = { userByTelegramId: async () => null, searchUsers: async () => [], userTransactions: async () => [] } as never;
+  const bedFail = { userByTelegramId: boom, searchUsers: boom, userTransactions: async () => [] } as never;
+  const rwNone = { findUser: async () => undefined, profile: async () => undefined, devices: async () => undefined } as never;
+  const rwDown = { findUser: boom, profile: boom, devices: async () => undefined } as never;
+  const rwProfile500 = { findUser: async () => 'u1', profile: boom, devices: async () => undefined } as never;
+
+  const run = async (tg: number, bed: unknown, rw: unknown, initial: boolean) => {
+    const c = store.upsertConversation({ channel: 'tg_dm', externalId: `sf-${tg}`, tgUserId: tg });
+    store.setSuspicious(c.id, initial);
+    const dir = new CustomerDirectory(store, bed as never, rw as never);
+    const profile = await dir.build(store.getConversation(c.id)!);
+    return { profile, suspicious: store.getConversation(c.id)!.suspicious, cached: store.getCustomer(tg) };
+  }
+
+  const a = await run(9301, bedFail, rwNone, false);
+  check('сбой Бедолаги: suspicious не выставлен', a.suspicious === 0, a.suspicious);
+  check('сбой Бедолаги: null в кэш не пишется', !a.cached?.snapshot_at, a.cached);
+  const a2 = await run(9302, bedFail, rwNone, true);
+  check('сбой Бедолаги: прежний suspicious=1 остаётся', a2.suspicious === 1, a2.suspicious);
+
+  const b = await run(9303, bedOk, rwDown, false);
+  check('таймаут/5xx Remnawave: build не падает, suspicious не меняется', b.suspicious === 0 && !b.profile.found, b.suspicious);
+  check('таймаут/5xx Remnawave: null в кэш не пишется', !b.cached?.snapshot_at, b.cached);
+
+  const b2 = await run(9304, bedOk, rwProfile500, false);
+  check('профиль Remnawave отдал ошибку: suspicious не меняется', b2.suspicious === 0, b2.suspicious);
+
+  const c = await run(9305, bedOk, rwNone, false);
+  check('все источники ответили «нет»: suspicious=1', c.suspicious === 1, c.suspicious);
+  check('все источники ответили «нет»: в кэш пишется null', !!c.cached?.snapshot_at, c.cached);
+
+  // Сбой одного источника не мешает найти клиента в другом.
+  const rwFound = { findUser: async () => 'u1', profile: async () => ({ userRef: 'u1', status: 'ACTIVE' }), devices: async () => undefined, usage: async () => undefined, nodes: async () => undefined } as never;
+  const d = await run(9306, bedFail, rwFound, true);
+  check('клиент найден в Remnawave при сбое Бедолаги: suspicious снят', d.profile.found && d.suspicious === 0, d.suspicious);
 }
 
 // ---------- чувствительные темы ----------

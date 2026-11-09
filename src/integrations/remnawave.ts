@@ -145,6 +145,8 @@ export class RemnawaveClient {
   private caps: Capabilities = { ...EMPTY_CAPS };
   private index: IndexEntry[] = [];
   private indexedAt = 0;
+  /** Последняя сборка индекса оборвалась из-за ошибки панели, а не потому, что записей нет. */
+  private indexFailed = false;
 
   constructor(
     private readonly baseUrl = config.remnawave.url,
@@ -193,7 +195,9 @@ export class RemnawaveClient {
       `/api/users/${encodeURIComponent(userRef)}`,
       `/api/users/by-uuid/${encodeURIComponent(userRef)}`,
     ]);
-    if (!found || found.status >= 400) return undefined;
+    if (!found) return undefined;
+    // Ответ панели с ошибкой (5xx, 401…) — это сбой источника, а не «нет такого».
+    if (found.status >= 400) throw new Error(`Remnawave: HTTP ${found.status} на ${found.path}`);
 
     const user = unwrap(found.body);
     if (!user) return undefined;
@@ -309,6 +313,7 @@ export class RemnawaveClient {
   private async buildIndex(force = false, log_?: (m: string) => void): Promise<IndexEntry[]> {
     if (!force && this.index.length && Date.now() - this.indexedAt < 3_600_000) return this.index;
     const say = log_ ?? ((m: string) => log.debug(m));
+    this.indexFailed = false;
 
     // Размер страницы подбираем: панели по-разному ограничивают size, и
     // отказ на большой странице раньше молча обрывал индекс на нуле.
@@ -319,6 +324,7 @@ export class RemnawaveClient {
       say(`size=${candidate} отклонён (HTTP ${probe.status})`);
     }
     if (!PAGE) {
+      this.indexFailed = true;
       say('Панель не отдаёт список пользователей — индекс не построен');
       return this.index;
     }
@@ -332,6 +338,7 @@ export class RemnawaveClient {
         `/api/users?offset=${page * PAGE}&limit=${PAGE}`,
       ]);
       if (!found || found.status >= 400) {
+        this.indexFailed = true;
         say(`Страница ${page} не прочиталась (HTTP ${found?.status ?? '—'})`);
         break;
       }
@@ -426,6 +433,8 @@ export class RemnawaveClient {
     // 1. Точные ручки, если панель их поддерживает.
     if (telegramId) {
       const direct = await this.firstWorking([`/api/users/by-telegram-id/${telegramId}`]);
+      // Ошибка точной ручки — не повод бросать поиск: полный индекс ниже
+      // скажет «нет» достоверно, а его сбой отмечается отдельно (indexFailed).
       if (direct && direct.status < 400) {
         const body = unwrap(direct.body);
         const list = Array.isArray(direct.body) ? (direct.body as Record<string, unknown>[])
@@ -437,6 +446,8 @@ export class RemnawaveClient {
     }
     if (nick) {
       const byName = await this.firstWorking([`/api/users/by-username/${encodeURIComponent(nick)}`]);
+      // Ошибка точной ручки — не повод бросать поиск: полный индекс ниже
+      // скажет «нет» достоверно, а его сбой отмечается отдельно (indexFailed).
       if (byName && byName.status < 400) {
         const ref = asString(pick(unwrap(byName.body) ?? {}, 'uuid', 'id', 'userId'));
         if (ref) return ref;
@@ -473,6 +484,8 @@ export class RemnawaveClient {
       if (byHint) return byHint.ref;
     }
 
+    // Индекс не собрался — «не нашли» здесь ничего не значит.
+    if (this.indexFailed) throw new Error('Remnawave: список пользователей недоступен, индекс не построен');
     return undefined;
   }
 

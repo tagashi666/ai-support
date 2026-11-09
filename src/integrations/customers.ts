@@ -115,6 +115,10 @@ export class CustomerDirectory {
       builtBy: version,
     };
 
+    // Хоть один источник ответил ошибкой/таймаутом: «не найден» по такому
+    // профилю ничего не доказывает.
+    let sourceFailed = false;
+
     // --- MiniShop: карточка тикета уже содержит пользователя и снимок подписки ---
     if (conversation.channel === 'minishop' && this.minishop) {
       const ticketId = Number(conversation.remote_external_id ?? conversation.external_id);
@@ -124,6 +128,7 @@ export class CustomerDirectory {
           : undefined;
         if (detail) this.mergeMinishopProfile(profile, detail);
       } catch (err) {
+        sourceFailed = true;
         profile.trace!.push(`MiniShop не отдал карточку тикета: ${(err as Error).message}`);
         log.debug('MiniShop не отдал карточку клиента', err);
       }
@@ -132,16 +137,21 @@ export class CustomerDirectory {
     // --- собственный Support API ---
     if (config.supportApi.enabled && telegramId) {
       const data = await this.fromSupportApi(telegramId);
-      if (data) {
+      if ('failed' in data) {
+        sourceFailed = true;
+        profile.trace!.push('Support API не ответил');
+      } else if (data.user) {
+        const user = data.user;
         profile.found = true;
         profile.sources.push('support api');
-        profile.subscription = { ...profile.subscription, ...this.readSubscription(data) };
-        profile.balance = this.readBalance(data);
+        profile.subscription = { ...profile.subscription, ...this.readSubscription(user) };
+        profile.balance = this.readBalance(user);
       }
     }
 
     // --- бедолага: сначала по id, потом по нику ---
     let bedolagaUser: Record<string, unknown> | undefined;
+    let bedolagaFailed = false;
     if (this.bedolaga) {
       try {
         if (telegramId) bedolagaUser = (await this.bedolaga.userByTelegramId(telegramId)) ?? undefined;
@@ -151,11 +161,14 @@ export class CustomerDirectory {
             String(pick(item, 'username') ?? '').toLowerCase() === username.replace(/^@/, '').toLowerCase());
         }
       } catch (err) {
+        bedolagaFailed = true;
+        sourceFailed = true;
+        profile.trace!.push(`бедолага не ответила: ${(err as Error).message}`);
         log.debug('Бедолага не отдала клиента', err);
       }
     }
 
-    if (!bedolagaUser && this.bedolaga) {
+    if (!bedolagaUser && this.bedolaga && !bedolagaFailed) {
       profile.trace!.push(`в бедолаге не найден по ${telegramId ?? 'id'}${username ? ` и @${username.replace(/^@/, '')}` : ''}`);
     }
 
@@ -207,15 +220,24 @@ export class CustomerDirectory {
           return tail?.[1] ?? v;
         });
 
-      const ref =
-        remnawaveRefFrom(bedolagaUser) ??
-        (await panel.client.findUser(
-          profile.identity.telegramId,
-          profile.identity.username,
-          [...(linkRef ? [linkRef] : []), ...extra],
-        ));
-
+      let ref: string | undefined = remnawaveRefFrom(bedolagaUser);
+      let panelFailed = false;
       if (!ref) {
+        try {
+          ref = await panel.client.findUser(
+            profile.identity.telegramId,
+            profile.identity.username,
+            [...(linkRef ? [linkRef] : []), ...extra],
+          );
+        } catch (err) {
+          panelFailed = true;
+          sourceFailed = true;
+          profile.trace!.push(`${panel.name} не ответила при поиске: ${(err as Error).message}`);
+          log.debug('Remnawave: поиск клиента не удался', err);
+        }
+      }
+
+      if (!ref && !panelFailed) {
         profile.trace!.push(
           `в ${panel.name} не найден по ${[profile.identity.telegramId, profile.identity.username && '@' + profile.identity.username.replace(/^@/, '')].filter(Boolean).join(', ') || 'известным данным'}`,
         );
@@ -224,7 +246,14 @@ export class CustomerDirectory {
         profile.remnawaveRef ??= ref;
         (profile.remnawaveRefs ??= []).push({ sourceId: panel.id, name: panel.name, ref });
         this.store.linkConversationSource(conversation.id, panel.id);
-        const panelProfile = await panel.client.profile(ref);
+        let panelProfile: Awaited<ReturnType<typeof panel.client.profile>>;
+        try {
+          panelProfile = await panel.client.profile(ref);
+        } catch (err) {
+          sourceFailed = true;
+          profile.trace!.push(`${panel.name} не отдала профиль ${ref}: ${(err as Error).message}`);
+          log.debug('Remnawave: профиль не прочитан', err);
+        }
         if (panelProfile) {
           profile.found = true;
           profile.sources.push(panel.name);
@@ -274,7 +303,7 @@ export class CustomerDirectory {
               profile.activity = { ...profile.activity, lastNode: nodeLabel(node.rawName) };
             }
           }
-        } else {
+        } else if (!sourceFailed) {
           profile.trace!.push(`запись ${ref} в ${panel.name} найдена, но профиль не читается`);
         }
       }
@@ -292,9 +321,12 @@ export class CustomerDirectory {
 
     // Клиента нет ни в одной базе — это не эскалация, но отвечать вслепую
     // нельзя: так выглядят и чужие люди, и попытки выманить чужую подписку.
-    this.store.setSuspicious(conversation.id, !profile.found);
-
-    if (telegramId) this.store.saveCustomer(telegramId, profile.found ? profile : null);
+    // Но если хоть один источник упал — не знаем, найден ли он на самом деле:
+    // флаг не трогаем и «не найден» в кэш не пишем.
+    if (profile.found || !sourceFailed) {
+      this.store.setSuspicious(conversation.id, !profile.found);
+      if (telegramId) this.store.saveCustomer(telegramId, profile.found ? profile : null);
+    }
     return profile;
   }
 
@@ -362,7 +394,8 @@ export class CustomerDirectory {
     return this.build(conversation);
   }
 
-  private async fromSupportApi(telegramId: number): Promise<Record<string, unknown> | undefined> {
+  /** `{}` без user — клиента нет; `{ failed: true }` — источник не ответил. */
+  private async fromSupportApi(telegramId: number): Promise<{ user?: Record<string, unknown> } | { failed: true }> {
     try {
       const response = await fetch(config.supportApi.url.replace(/\/+$/, '') + config.supportApi.userPath, {
         method: 'POST',
@@ -370,13 +403,14 @@ export class CustomerDirectory {
         body: JSON.stringify({ telegram_id: telegramId }),
         signal: AbortSignal.timeout(15_000),
       });
-      if (!response.ok) return undefined;
+      if (response.status === 404) return {};
+      if (!response.ok) return { failed: true };
       const body = (await response.json()) as Record<string, unknown>;
-      if (body['ok'] === false) return undefined;
-      return (body['user'] as Record<string, unknown>) ?? body;
+      if (body['ok'] === false) return {};
+      return { user: (body['user'] as Record<string, unknown>) ?? body };
     } catch (err) {
       log.debug('Support API недоступен', err);
-      return undefined;
+      return { failed: true };
     }
   }
 

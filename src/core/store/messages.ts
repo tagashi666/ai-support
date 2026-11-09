@@ -90,7 +90,7 @@ export class MessageRepo {
                   status          = CASE WHEN ? = 1 THEN status
                                          ELSE 'open' END,
                   hidden_at       = CASE WHEN ? = 1 THEN hidden_at ELSE NULL END,
-                  updated_at      = ?
+                  updated_at      = MAX(updated_at + 1, ?)
             WHERE id = ?`,
         )
         .run(input.sentAt, input.sentAt, input.sentAt, backfill, backfill, backfill, backfill, Date.now(), conversation.id);
@@ -190,7 +190,7 @@ export class MessageRepo {
                 unread            = 0,
                 resolved_at       = CASE WHEN ? = 1 THEN resolved_at ELSE NULL END,
                 status            = CASE WHEN ? = 1 THEN status ELSE 'pending' END,
-                updated_at        = ?
+                updated_at        = MAX(updated_at + 1, ?)
           WHERE id = ?`,
       )
       .run(

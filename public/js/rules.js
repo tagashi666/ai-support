@@ -16,6 +16,59 @@ export const unanswered = (c) => !c.first_response_at && Boolean(c.last_inbound_
 /** Скрытый диалог сервер в список не отдаёт — живой кадр его туда не возвращает. */
 export const listable = (c) => !c.hidden_at;
 
+const time = (c) => Number(c.last_message_at ?? c.created_at ?? 0);
+
+/**
+ * Порядок списка — ровно как ORDER BY в listConversations
+ * (src/core/store/conversations.ts): важные выше, потом по последнему
+ * сообщению, при равном времени — по id. Пометка «нет в базе» в порядке не
+ * участвует. Раньше сервер и браузер сортировали по-разному, и верхний диалог
+ * «скакал» между живым кадром и полной загрузкой.
+ */
+export function compareConversations(a, b) {
+  return (Number(b.escalated ?? 0) - Number(a.escalated ?? 0))
+    || (time(b) - time(a))
+    || (Number(b.id) - Number(a.id));
+}
+
+/** Вставляет или заменяет строку на её место без пересортировки всего списка. */
+export function upsertConversation(list, conversation) {
+  const rest = list.filter((item) => item.id !== conversation.id);
+  let low = 0, high = rest.length;
+  while (low < high) {
+    const mid = (low + high) >> 1;
+    if (compareConversations(rest[mid], conversation) <= 0) low = mid + 1; else high = mid;
+  }
+  rest.splice(low, 0, conversation);
+  return rest;
+}
+
+/** Кадр старше того, что уже на экране, не откатывает строку назад. */
+export const isStale = (incoming, existing) =>
+  Boolean(existing) && Number(incoming.updated_at ?? 0) < Number(existing.updated_at ?? 0);
+
+/**
+ * Слияние полного снимка с тем, что уже пришло живыми кадрами.
+ * - строка новее снимка (больший updated_at) остаётся местной;
+ * - строки, которой нет в снимке, нет и в списке — кроме открытого диалога и
+ *   строк, пришедших кадром уже после отправки запроса снимка (keep);
+ * - неподтверждённое сервером прочтение (pendingRead) не мигает точкой.
+ */
+export function mergeSnapshot(local, snapshot, { keep = new Set(), pendingRead = new Set() } = {}) {
+  const byId = new Map(local.map((item) => [item.id, item]));
+  const merged = new Map();
+  for (const row of snapshot) {
+    const mine = byId.get(row.id);
+    let next = mine && isStale(row, mine) ? mine : row;
+    if (pendingRead.has(next.id) && next.unread) next = { ...next, unread: 0 };
+    merged.set(next.id, next);
+  }
+  for (const item of local) {
+    if (!merged.has(item.id) && keep.has(item.id) && listable(item)) merged.set(item.id, item);
+  }
+  return [...merged.values()].sort(compareConversations);
+}
+
 /**
  * Какая предложка остаётся на экране после живого кадра открытого диалога.
  * Устаревшей она становится, когда клиент написал снова, человек ответил сам

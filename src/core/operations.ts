@@ -256,7 +256,7 @@ export class Operations {
     }
     this.db.prepare(`
       UPDATE conversation
-         SET assignee = ?, assigned_operator_id = ?, claimed_at = ?, operator_active_at = ?, updated_at = ?
+         SET assignee = ?, assigned_operator_id = ?, claimed_at = ?, operator_active_at = ?, updated_at = MAX(updated_at + 1, ?)
        WHERE id = ?
     `).run(actor.key, actor.id, now, now, now, conversationId);
     this.presence(conversationId, actor, 'viewing');
@@ -267,7 +267,7 @@ export class Operations {
     const current = this.db.prepare(`SELECT assignee FROM conversation WHERE id = ?`).get(conversationId) as { assignee: string | null } | undefined;
     if (!current || (current.assignee && current.assignee !== actor.key && !force)) return false;
     const result = this.db.prepare(`
-      UPDATE conversation SET assignee = NULL, assigned_operator_id = NULL, claimed_at = NULL, updated_at = ? WHERE id = ?
+      UPDATE conversation SET assignee = NULL, assigned_operator_id = NULL, claimed_at = NULL, updated_at = MAX(updated_at + 1, ?) WHERE id = ?
     `).run(Date.now(), conversationId);
     this.db.prepare(`DELETE FROM operator_presence WHERE actor_key = ? AND conversation_id = ?`).run(actor.key, conversationId);
     return result.changes > 0;

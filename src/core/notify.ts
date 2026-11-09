@@ -24,7 +24,7 @@ const TITLES: Record<EventKind, string> = {
   needs_human: 'AI просит человека',
   escalated: 'Диалог эскалирован',
   aggressive: 'Клиент на взводе',
-  suspicious: 'Клиента нет в базах',
+  suspicious: 'Клиента нет в базе подписчиков',
   sla: 'Клиент ждёт ответа',
   ai_error: 'AI не смог ответить',
 };

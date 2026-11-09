@@ -210,12 +210,9 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
           });
         }
       }
+      // Кадр `conversation` шлёт само хранилище при настоящей смене режима,
+      // передачи или важности — здесь второй кадр не нужен.
       const after = store.getConversation(id)!;
-      // Режим AI, передача и важность пишутся без события хранилища: другие
-      // вкладки и операторы видели старую шапку и старый режим до перезагрузки.
-      if (aiMode !== undefined || typeof handoff === 'boolean' || typeof escalated === 'boolean') {
-        store.emit('conversation', after);
-      }
       return { ok: true, conversation: decorate(after, store, operations) };
     },
   );

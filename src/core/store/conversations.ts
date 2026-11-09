@@ -39,7 +39,7 @@ export class ConversationRepo {
         `SELECT * FROM conversation
           WHERE hidden_at IS NULL
             AND EXISTS (SELECT 1 FROM message WHERE message.conversation_id = conversation.id)
-          ORDER BY suspicious DESC, escalated DESC, COALESCE(last_message_at, created_at) DESC
+          ORDER BY escalated DESC, COALESCE(last_message_at, created_at) DESC, id DESC
           LIMIT ?`,
       )
       .all(limit) as Conversation[];
@@ -137,7 +137,7 @@ export class ConversationRepo {
            display_name           = COALESCE(excluded.display_name, conversation.display_name),
            subject                = COALESCE(excluded.subject, conversation.subject),
            avatar_file_id         = COALESCE(excluded.avatar_file_id, conversation.avatar_file_id),
-           updated_at             = @now`,
+           updated_at             = MAX(conversation.updated_at + 1, @now)`,
       )
       .run({
         channel: input.channel,
@@ -183,7 +183,7 @@ export class ConversationRepo {
    */
   markOperatorActive(this: Store, conversationId: number, at = Date.now()): void {
     this.db
-      .prepare('UPDATE conversation SET operator_active_at = ?, updated_at = ? WHERE id = ?')
+      .prepare('UPDATE conversation SET operator_active_at = ?, updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
       .run(at, at, conversationId);
   }
 
@@ -196,7 +196,7 @@ export class ConversationRepo {
 
   setConversationUser(this: Store, conversationId: number, tgUserId: number, username?: string): void {
     this.db
-      .prepare('UPDATE conversation SET tg_user_id = ?, username = COALESCE(?, username), updated_at = ? WHERE id = ?')
+      .prepare('UPDATE conversation SET tg_user_id = ?, username = COALESCE(?, username), updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
       .run(tgUserId, username ?? null, Date.now(), conversationId);
   }
 
@@ -215,7 +215,7 @@ export class ConversationRepo {
               display_name = COALESCE(NULLIF(?, ''), display_name),
               avatar_file_id = COALESCE(NULLIF(?, ''), avatar_file_id),
               avatar_source_id = COALESCE(NULLIF(?, ''), avatar_source_id),
-              updated_at = ?
+              updated_at = MAX(updated_at + 1, ?)
         WHERE id = ? AND tg_user_id = ?`,
     ).run(
       input.username ?? null,
@@ -231,7 +231,7 @@ export class ConversationRepo {
       `UPDATE customer_profile
           SET username = COALESCE(NULLIF(?, ''), username),
               display_name = COALESCE(NULLIF(?, ''), display_name),
-              updated_at = ?
+              updated_at = MAX(updated_at + 1, ?)
         WHERE id = (SELECT customer_profile_id FROM conversation WHERE id = ?)`,
     ).run(input.username ?? null, input.displayName ?? null, now, conversationId);
     const conversation = this.getConversation(conversationId);
@@ -241,7 +241,7 @@ export class ConversationRepo {
 
   setConversationAvatar(this: Store, conversationId: number, fileId: string, sourceId?: string): void {
     this.db
-      .prepare('UPDATE conversation SET avatar_file_id = ?, avatar_source_id = COALESCE(?, avatar_source_id), updated_at = ? WHERE id = ?')
+      .prepare('UPDATE conversation SET avatar_file_id = ?, avatar_source_id = COALESCE(?, avatar_source_id), updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
       .run(fileId, sourceId ?? null, Date.now(), conversationId);
     const conversation = this.getConversation(conversationId);
     if (conversation) this.emit('conversation', conversation);
@@ -249,13 +249,27 @@ export class ConversationRepo {
 
   /** Фото у клиента больше нет: панель покажет инициалы вместо битой картинки. */
   clearConversationAvatar(this: Store, conversationId: number): void {
-    this.db.prepare('UPDATE conversation SET avatar_file_id = NULL, updated_at = ? WHERE id = ?').run(Date.now(), conversationId);
+    this.db.prepare('UPDATE conversation SET avatar_file_id = NULL, updated_at = MAX(updated_at + 1, ?) WHERE id = ?').run(Date.now(), conversationId);
     const conversation = this.getConversation(conversationId);
     if (conversation) this.emit('conversation', conversation);
   }
 
   setAiMode(this: Store, conversationId: number, mode: 'inherit' | 'off' | 'shadow' | 'suggest' | 'auto'): void {
-    this.db.prepare('UPDATE conversation SET ai_mode = ?, updated_at = ? WHERE id = ?').run(mode, Date.now(), conversationId);
+    const result = this.db
+      .prepare('UPDATE conversation SET ai_mode = ?, updated_at = MAX(updated_at + 1, ?) WHERE id = ? AND ai_mode IS NOT ?')
+      .run(mode, Date.now(), conversationId, mode);
+    this.emitConversationIf(conversationId, result.changes > 0);
+  }
+
+  /**
+   * Кадр `conversation` уходит ровно один раз и только при настоящем изменении:
+   * флаги больше не меняются «тихо», а повторная запись того же значения не
+   * дёргает список у всех операторов.
+   */
+  emitConversationIf(this: Store, conversationId: number, changed: boolean): void {
+    if (!changed) return;
+    const conversation = this.getConversation(conversationId);
+    if (conversation) this.emit('conversation', conversation);
   }
 
   setStatus(this: Store, conversationId: number, status: string): boolean {
@@ -274,7 +288,7 @@ export class ConversationRepo {
       .prepare(`UPDATE conversation SET status = ?, resolved_at = ?, last_resolved_at = COALESCE(?, last_resolved_at),
                        handoff_at = CASE WHEN ? IS NULL THEN handoff_at ELSE NULL END,
                        claimed_at = CASE WHEN ? IS NULL THEN claimed_at ELSE NULL END,
-                       escalated = CASE WHEN ? IS NULL THEN escalated ELSE 0 END, updated_at = ? WHERE id = ?`)
+                       escalated = CASE WHEN ? IS NULL THEN escalated ELSE 0 END, updated_at = MAX(updated_at + 1, ?) WHERE id = ?`)
       .run(status, resolved, resolved, resolved, resolved, resolved, Date.now(), conversationId);
     // Черновик AI к закрытому разговору устарел: иначе он висел в карточке и
     // мог уйти клиенту уже после закрытия.
@@ -292,9 +306,10 @@ export class ConversationRepo {
    * только напоминает клиенту, что вопрос у специалиста.
    */
   setHandoff(this: Store, conversationId: number, at: number | null): void {
-    this.db
-      .prepare('UPDATE conversation SET handoff_at = ?, handoff_notified_at = NULL, updated_at = ? WHERE id = ?')
-      .run(at, Date.now(), conversationId);
+    const result = this.db
+      .prepare('UPDATE conversation SET handoff_at = ?, handoff_notified_at = NULL, updated_at = MAX(updated_at + 1, ?) WHERE id = ? AND handoff_at IS NOT ?')
+      .run(at, Date.now(), conversationId, at);
+    this.emitConversationIf(conversationId, result.changes > 0);
   }
 
   markHandoffNotified(this: Store, conversationId: number): void {
@@ -302,21 +317,26 @@ export class ConversationRepo {
   }
 
   setSuspicious(this: Store, conversationId: number, suspicious: boolean): void {
-    this.db
-      .prepare('UPDATE conversation SET suspicious = ?, updated_at = ? WHERE id = ?')
-      .run(suspicious ? 1 : 0, Date.now(), conversationId);
+    const value = suspicious ? 1 : 0;
+    const result = this.db
+      .prepare('UPDATE conversation SET suspicious = ?, updated_at = MAX(updated_at + 1, ?) WHERE id = ? AND suspicious IS NOT ?')
+      .run(value, Date.now(), conversationId, value);
+    this.emitConversationIf(conversationId, result.changes > 0);
   }
 
   /** Ссылка подписки, которую прислал сам клиент: по ней его можно найти. */
   setSubLink(this: Store, conversationId: number, link: string): void {
-    this.db.prepare('UPDATE conversation SET sub_link = ?, updated_at = ? WHERE id = ?')
+    this.db.prepare('UPDATE conversation SET sub_link = ?, updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
       .run(link, Date.now(), conversationId);
   }
 
   setEscalated(this: Store, conversationId: number, escalated: boolean, priority?: string): void {
-    this.db
-      .prepare('UPDATE conversation SET escalated = ?, priority = COALESCE(?, priority), updated_at = ? WHERE id = ?')
-      .run(escalated ? 1 : 0, priority ?? null, Date.now(), conversationId);
+    const value = escalated ? 1 : 0;
+    const result = this.db
+      .prepare(`UPDATE conversation SET escalated = ?, priority = COALESCE(?, priority), updated_at = MAX(updated_at + 1, ?)
+                 WHERE id = ? AND (escalated IS NOT ? OR (? IS NOT NULL AND priority IS NOT ?))`)
+      .run(value, priority ?? null, Date.now(), conversationId, value, priority ?? null, priority ?? null);
+    this.emitConversationIf(conversationId, result.changes > 0);
   }
 
   /**

@@ -288,7 +288,7 @@ check('вложение вписывается, а не обрезается', /
 check('песочница AI есть', /id="view-lab"/.test(html) && /\/api\/ai\/try/.test(html));
 check('связь проверяется кнопкой', /\/api\/ai\/ping/.test(html));
 check('модель выбирается из списка провайдера', /\/api\/ai\/models/.test(html));
-check('подозрительные видны в списке', /нет в базах/.test(html));
+check('подозрительные видны в списке', /нет в базе подписчиков/.test(html));
 
 // 38. Подключение источников должно быть обнаруживаемым действием в панели,
 // а не требовать ручного редактирования .env. Секрет вводится как пароль и
@@ -575,6 +575,46 @@ console.log('\n[ живое состояние панели ]');
   // импорте читает localStorage — подставляем пустой.
   (globalThis as any).localStorage ??= { getItem: () => null };
   const rules = await import(new URL('../public/js/rules.js', import.meta.url).href) as any;
+  // Баг «скачет верхний диалог»: сервер и браузер обязаны сортировать одинаково.
+  const storeSql = readFileSync(new URL('../src/core/store/conversations.ts', import.meta.url), 'utf8');
+  check('SQL списка: важные, время, id; без пометки «нет в базе»',
+    /ORDER BY escalated DESC, COALESCE\(last_message_at, created_at\) DESC, id DESC/.test(storeSql)
+    && !/ORDER BY suspicious/.test(storeSql));
+  {
+    const rows = [
+      { id: 1, escalated: 0, suspicious: 1, last_message_at: 100 },
+      { id: 2, escalated: 0, suspicious: 0, last_message_at: 300 },
+      { id: 3, escalated: 1, suspicious: 0, last_message_at: 50 },
+      { id: 4, escalated: 0, suspicious: 0, last_message_at: 300 },
+      { id: 5, escalated: 0, suspicious: 0, last_message_at: null, created_at: 200 },
+    ];
+    const order = [...rows].sort(rules.compareConversations).map((c: any) => c.id).join(',');
+    check('порядок в браузере как в SQL (важные → время → id, «нет в базе» не влияет)', order === '3,4,2,5,1', order);
+    let list: any[] = [...rows].sort(rules.compareConversations);
+    list = rules.upsertConversation(list, { ...rows[0], last_message_at: 400 });
+    check('живой кадр ставит строку на место без пересортировки',
+      list.map((c: any) => c.id).join(',') === '3,1,4,2,5', list.map((c: any) => c.id));
+    // Поток кадров и снимок дают один и тот же порядок — ничего не прыгает.
+    const snap = rules.mergeSnapshot(list, list.map((c: any) => ({ ...c })));
+    check('снимок после кадров порядок не меняет', snap.map((c: any) => c.id).join(',') === list.map((c: any) => c.id).join(','));
+    const local = [{ id: 9, updated_at: 20, unread: 0, last_message_at: 10 }, { id: 8, updated_at: 5, unread: 1, last_message_at: 9 }];
+    const merged = rules.mergeSnapshot(local, [{ id: 9, updated_at: 10, unread: 3, last_message_at: 5 }],
+      { keep: new Set([8]), pendingRead: new Set() });
+    check('устаревший снимок не откатывает строку, свежий кадр не пропадает',
+      merged.find((c: any) => c.id === 9)?.updated_at === 20 && merged.some((c: any) => c.id === 8));
+    const read = rules.mergeSnapshot([], [{ id: 9, updated_at: 10, unread: 3 }], { pendingRead: new Set([9]) });
+    check('неподтверждённое прочтение не возвращает точку', read[0].unread === 0);
+    check('кадр старше строки на экране её не откатывает',
+      rules.isStale({ updated_at: 1 }, { updated_at: 2 }) && !rules.isStale({ updated_at: 2 }, { updated_at: 2 }));
+  }
+  // Две правки в одну миллисекунду не должны давать равных версий.
+  {
+    const files = ['store/conversations.ts', 'store/messages.ts', 'operations.ts']
+      .map((f) => readFileSync(new URL(`../src/core/${f}`, import.meta.url), 'utf8'));
+    const bare = files.flatMap((src) => [...src.matchAll(/UPDATE conversation[\s\S]*?WHERE/g)].map((m) => m[0]))
+      .filter((sql) => /updated_at\s*=/.test(sql) && !/updated_at\s*=\s*MAX\(updated_at \+ 1,/.test(sql));
+    check('каждый UPDATE conversation повышает updated_at через MAX', bare.length === 0, bare.map((s) => s.slice(0, 80)));
+  }
   const pending = { id: 7, status: 'pending' };
   const conversation = { id: 1, status: 'open' };
   const after = (frame: any) => rules.suggestionAfterFrame(pending, { conversation, ...frame });
