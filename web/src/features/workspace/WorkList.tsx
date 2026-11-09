@@ -272,7 +272,6 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
             <section key={section} class={s.section} aria-labelledby={headId}>
               <h2 class={s.sectionHead} id={headId}>
                 <button type="button" class={s.sectionToggle} aria-expanded={!closed}
-                  aria-label={`${sectionLabel(section)} · ${total}. ${closed ? t('chats.expand') : t('chats.collapse')}`}
                   onClick={() => setCollapsed({ ...collapsed, [section]: !closed })}>
                   <span>{sectionLabel(section)}</span>
                   <span class={`${s.sectionCount} num`} data-tone={section === 'mine' ? 'attention' : undefined}>{total}</span>

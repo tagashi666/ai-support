@@ -29,3 +29,4 @@ AI_SUPPORT_HANDOFF.md
 # Данные мастера настройки конкретной инсталляции.
 .setup-facts.json
 docker-compose.override.yml
+test-results/

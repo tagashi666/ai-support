@@ -35,6 +35,7 @@
     "selfcheck": "tsx src/cli/selfcheck.ts",
     "test": "npm run -s test:web && node --import tsx scripts/uitest.ts && node --import tsx scripts/smoke.ts && node --import tsx scripts/webtest.ts && node --import tsx scripts/baretest.ts && node --import tsx scripts/mediatest.ts && node --import tsx scripts/aitest.ts && node --import tsx scripts/minishoptest.ts && node --import tsx scripts/minetest.ts && node --import tsx scripts/notifytest.ts && node --import tsx scripts/lifecycletest.ts && node --import tsx scripts/inboxtest.ts && node --import tsx scripts/threadtest.ts && node --import tsx scripts/sectest.ts && node --import tsx scripts/nexttest.ts && node --import tsx scripts/updatetest.ts && node --import tsx scripts/setuptest.ts",
     "test:web": "vitest run --config web/vite.config.ts",
+    "test:e2e": "npm run -s build:web && playwright test --config web/e2e/playwright.config.ts",
     "kb:mine": "tsx src/cli/kbmine.ts",
     "rwprobe": "tsx src/cli/rwprobe.ts",
     "pack": "bash scripts/pack.sh",
@@ -50,10 +51,13 @@
     "lottie-web": "^5.13.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.58.2",
     "@preact/signals": "^2.11.4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.0",
     "@types/ws": "^8.18.1",
+    "playwright-core": "1.58.2",
     "preact": "^10.29.8",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

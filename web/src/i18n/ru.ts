@@ -81,8 +81,6 @@ export const ru = {
   'chats.noneDone': 'Решённых диалогов пока нет.',
   'chats.updates': '{n} {updates}',
   'chats.updatesLabel': 'Показать новые изменения в списке',
-  'chats.collapse': 'Свернуть секцию',
-  'chats.expand': 'Развернуть секцию',
   'chats.unread': 'не прочитано',
 
   'section.mine': 'Ждут вас',

@@ -143,7 +143,6 @@ export function ChatList({ openId }: { openId: string | null }): JSX.Element {
                   type="button"
                   class={s.sectionToggle}
                   aria-expanded={!isCollapsed}
-                  aria-label={`${sectionLabel(section)} · ${items.length}. ${isCollapsed ? t('chats.expand') : t('chats.collapse')}`}
                   onClick={() => setCollapsed({ ...collapsed, [section]: !isCollapsed })}
                 >
                   <span>{sectionLabel(section)}</span>

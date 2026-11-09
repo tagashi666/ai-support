@@ -18,5 +18,5 @@
       "@shared/*": ["./src/shared/*"]
     }
   },
-  "include": ["web/src/**/*.ts", "web/src/**/*.tsx", "web/vite.config.ts", "src/shared/**/*.ts"]
+  "include": ["web/src/**/*.ts", "web/src/**/*.tsx", "web/vite.config.ts", "web/e2e/**/*.ts", "src/shared/**/*.ts"]
 }
