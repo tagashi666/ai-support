@@ -120,7 +120,10 @@ export function listActivity(db: Database.Database, query: ActivityQuery, now = 
            (SELECT m.id FROM message m WHERE m.suggestion_id = s.id AND m.direction = 'out' ORDER BY m.id DESC LIMIT 1) AS message_id,
            (SELECT m.author FROM message m WHERE m.suggestion_id = s.id AND m.direction = 'out' ORDER BY m.id DESC LIMIT 1) AS message_author
       FROM ai_suggestion s JOIN conversation c ON c.id = s.conversation_id
-     WHERE s.created_at >= ? AND s.created_at < ? AND s.status != 'superseded'
+     WHERE s.created_at >= ? AND s.created_at < ?
+       -- Заменённый черновик — не событие; но если помощник его отправил, это ответ.
+       AND (s.status != 'superseded'
+            OR EXISTS (SELECT 1 FROM message m WHERE m.suggestion_id = s.id AND m.direction = 'out' AND m.author = 'ai'))
      ORDER BY s.created_at DESC, s.id DESC LIMIT ?
   `).all(since, before, limit) as SuggestionRow[];
   const events = db.prepare(`

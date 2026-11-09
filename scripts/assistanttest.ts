@@ -154,6 +154,12 @@ try {
   check('черновик, вы правили', kinds.get(`s${sEdit.id}`)?.kind === 'draft_edited');
   check('черновик отклонён с причиной', kinds.get(`s${sRej.id}`)?.kind === 'draft_rejected' && kinds.get(`s${sRej.id}`)?.reject_reason === 'tone');
   check('заменённые черновики в ленту не попадают', !kinds.has(`s${sGone.id}`));
+  const sOld = store.createSuggestion({ conversationId: a.id, text: 'Ответ, потом заменённый' });
+  store.recordOutbound({ conversationId: a.id, author: 'ai', text: 'Ответ, потом заменённый', suggestionId: sOld.id });
+  store.decideSuggestion(sOld.id, 'superseded');
+  const again = await getJson<ActivityResponse>(`/api/assistant/activity?since=${t0 - 1000}`);
+  check('отправленный помощником остаётся ответом, даже если черновик потом заменён',
+    again.items.find((item) => item.id === `s${sOld.id}`)?.kind === 'auto');
   check('передал вам и пропустил старое — из журнала', feed.items.some((item) => item.kind === 'handoff' && item.reason === 'sensitive')
     && feed.items.some((item) => item.kind === 'skipped_old'));
   check('новые сверху', feed.items.every((item, i, all) => i === 0 || all[i - 1]!.at >= item.at));
