@@ -1,7 +1,8 @@
 import type { JSX } from 'preact';
-import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { t, tn } from '@/i18n/ru';
 import { sectionLabel } from '@/lib/labels';
+import { useFrozenList } from '@/lib/hooks/useFrozenList';
 import { reducedMotion } from '@/lib/media';
 import { navigate } from '@/lib/router';
 import {
@@ -20,8 +21,6 @@ const VIEW_SECTIONS: Record<View, readonly Section[]> = {
   open: ['mine', 'colleagues', 'ai', 'client'],
   done: ['done'],
 };
-const CALM_MS = 1500;
-const SCROLL_SETTLE_MS = 1000;
 
 const readView = (): View => {
   try {
@@ -49,67 +48,15 @@ export function ChatList({ openId }: { openId: string | null }): JSX.Element {
   const [query, setQuery] = useState('');
   const [collapsed, setCollapsed] = useState<Partial<Record<Section, boolean>>>({});
   const [active, setActive] = useState<string | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
-  const freeze = useRef({ hover: false, focus: false, touch: false, scrollAt: 0 });
-  const flipFrom = useRef<Map<string, number> | null>(null);
-
-  const recompute = (): void => {
-    const f = freeze.current;
-    const scrolled = (scroller.current?.scrollTop ?? 0) > 8;
-    listFrozen.value = f.hover || f.focus || f.touch || Date.now() - f.scrollAt < SCROLL_SETTLE_MS || scrolled;
-  };
-
-  // Свежий экран показывает свежий порядок; уход со списка снимает заморозку.
-  useEffect(() => {
-    applyPending();
-    return () => { listFrozen.value = false; };
-  }, []);
-
-  const applyWithFlip = (): void => {
-    const rows = scroller.current?.querySelectorAll<HTMLElement>('[data-row-id]') ?? [];
-    const before = new Map<string, number>();
-    rows.forEach((row) => before.set(row.dataset.rowId ?? '', row.getBoundingClientRect().top));
-    flipFrom.current = before;
-    applyPending();
-  };
-
-  // Спокойный момент: 1,5 с без условий заморозки, список наверху, вкладка видна (7.1 п.4).
-  const pendingKey = pending.value.join(',');
-  useEffect(() => {
-    if (!pendingKey || listFrozen.value) return undefined;
-    const timer = setTimeout(() => {
-      recompute();
-      if (!listFrozen.peek() && document.visibilityState === 'visible') applyWithFlip();
-    }, CALM_MS);
-    return () => clearTimeout(timer);
-  }, [pendingKey, listFrozen.value]);
-
-  // FLIP: строки переезжают 200 мс только через transform; при «меньше движения» — подсветка.
-  useLayoutEffect(() => {
-    const before = flipFrom.current;
-    if (!before) return;
-    flipFrom.current = null;
-    const rows = scroller.current?.querySelectorAll<HTMLElement>('[data-row-id]') ?? [];
-    rows.forEach((row) => {
-      const id = row.dataset.rowId ?? '';
-      const top = row.getBoundingClientRect().top;
-      const was = before.get(id);
-      if (reducedMotion.value) {
-        if (was === undefined || Math.abs(was - top) > 1) {
-          row.dataset.flash = 'true';
-          setTimeout(() => { delete row.dataset.flash; }, 1000);
-        }
-        return;
-      }
-      if (was === undefined) {
-        row.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }],
-          { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
-      } else if (Math.abs(was - top) > 1) {
-        row.animate([{ transform: `translateY(${was - top}px)` }, { transform: 'none' }],
-          { duration: 200, easing: 'cubic-bezier(.2,.8,.2,1)' });
-      }
-    });
-  }, [shown.value]);
+  // Свежий экран показывает свежий порядок.
+  useEffect(() => { applyPending(); }, []);
+  const list = useFrozenList({
+    pendingKey: pending.value.join(','),
+    apply: applyPending,
+    shown: shown.value,
+    onFrozen: (value) => { listFrozen.value = value; },
+  });
+  const { scroller } = list;
 
   const changeView = (next: View): void => {
     setView(next);
@@ -129,16 +76,8 @@ export function ChatList({ openId }: { openId: string | null }): JSX.Element {
     : openId && visible.some((chat) => chat.id === openId) ? openId : visible[0]?.id ?? null;
 
   const onRowKey = (event: KeyboardEvent): void => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
-    event.preventDefault();
-    const rows = [...(scroller.current?.querySelectorAll<HTMLElement>('[data-row-id]') ?? [])];
-    const index = rows.indexOf(document.activeElement as HTMLElement);
-    const next = event.key === 'Home' ? rows[0] : event.key === 'End' ? rows[rows.length - 1]
-      : rows[Math.max(0, Math.min(rows.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1)))];
-    if (next) {
-      setActive(next.dataset.rowId ?? null);
-      next.focus();
-    }
+    const next = list.onRowKey(event);
+    if (next) setActive(next);
   };
 
   const count = pending.value.length;
@@ -176,24 +115,7 @@ export function ChatList({ openId }: { openId: string | null }): JSX.Element {
       <div
         class={s.scroller}
         ref={scroller}
-        onMouseEnter={() => { freeze.current.hover = true; recompute(); }}
-        onMouseLeave={() => { freeze.current.hover = false; recompute(); }}
-        onFocusIn={() => { freeze.current.focus = true; recompute(); }}
-        onFocusOut={(event) => {
-          if (!scroller.current?.contains(event.relatedTarget as Node | null)) { freeze.current.focus = false; recompute(); }
-        }}
-        onTouchStart={() => { freeze.current.touch = true; recompute(); }}
-        onTouchEnd={() => {
-          freeze.current.touch = false;
-          freeze.current.scrollAt = Date.now();
-          recompute();
-          setTimeout(recompute, SCROLL_SETTLE_MS + 50);
-        }}
-        onScroll={() => {
-          freeze.current.scrollAt = Date.now();
-          recompute();
-          setTimeout(recompute, SCROLL_SETTLE_MS + 50);
-        }}
+        {...list.handlers}
       >
         {nothing && (
           <div class={s.empty}>
@@ -255,7 +177,7 @@ export function ChatList({ openId }: { openId: string | null }): JSX.Element {
           data-tone={pendingUrgent.value ? 'attention' : undefined}
           title={t('chats.updatesLabel')}
           onClick={() => {
-            applyWithFlip();
+            list.applyNow();
             scroller.current?.scrollTo({ top: 0, behavior: reducedMotion.value ? 'auto' : 'smooth' });
           }}
         >

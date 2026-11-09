@@ -2,6 +2,8 @@
 import { signal } from '@preact/signals';
 
 function watch(query: string) {
+  // Без окна (тесты логики в node) — «не совпадает».
+  if (typeof matchMedia !== 'function') return signal(false);
   const list = matchMedia(query);
   const value = signal(list.matches);
   list.addEventListener('change', () => { value.value = list.matches; });
