@@ -117,7 +117,8 @@ export interface BootstrapResponse {
     events: boolean;
     typingWithoutClaim: boolean;
   };
-  assistant: { mode: AiMode; minConfidence: number; keys: boolean };
+  /** pause — пауза помощника везде (10.4 п.1), null — паузы нет. */
+  assistant: { mode: AiMode; minConfidence: number; keys: boolean; pause?: AssistantPauseView | null };
   channels: Record<string, boolean>;
   sources: Array<{ id: string; kind: string; name: string; enabled: boolean }>;
   folders: Array<{ id: number; name: string; color: string | null; position: number; source_ids: string[] }>;
@@ -133,7 +134,12 @@ export type LiveFrame =
   /** counts — счётчики получателя на момент отправки (в кадрах сокета; в догоне — общие в ответе). */
   | { type: 'inbox_item'; seq: number; epoch: string; item: InboxItem; counts?: InboxCounts }
   | { type: 'inbox_remove'; seq: number; epoch: string; id: number; counts?: InboxCounts }
-  | { type: 'settings'; seq: number; epoch: string; aiMode: AiMode; minConfidence: number }
+  /**
+   * Смена режима или паузы помощника (10.4 п.7). keys — какие настройки менялись,
+   * actor — кто (имя для строки «Мария изменила режим…»), pause — пауза после смены.
+   */
+  | { type: 'settings'; seq: number; epoch: string; aiMode: AiMode; minConfidence: number;
+      keys?: string[]; actor?: { id: string; name: string } | null; pause?: AssistantPauseView | null }
   /** Кадр, который этому получателю не положен по правам: держит seq без пропуска. */
   | { type: 'noop'; seq: number; epoch: string };
 
@@ -263,4 +269,82 @@ export interface ReplyResponse {
   thread: ThreadMessage | null;
   client_msg_id: string | null;
   repeated: boolean;
+}
+
+// --- Помощник (этап 4, 10.4) ----------------------------------------------
+
+/** Пауза помощника везде: клиентам сам не отвечает, черновики пишет. */
+export interface AssistantPauseView {
+  /** Конец паузы; null — «пока не включу». */
+  until: number | null;
+  at: number;
+  by: { id: string; name: string } | null;
+}
+
+export interface AssistantPauseResponse {
+  ok: true;
+  pause: AssistantPauseView | null;
+}
+
+/**
+ * Что сделал помощник — строка ленты «Что делал помощник» (6.7):
+ * auto — ответил сам; draft — черновик ждёт; draft_sent — ушёл без правок;
+ * draft_edited — ушёл после правки; draft_rejected — отклонён; shadow —
+ * записал, что ответил бы (режим «Наблюдает»); handoff — передал человеку;
+ * yielded — уступил человеку, который начал отвечать; blocked — задержал
+ * ответ с внутренними данными; error — не смог ответить; skipped_old —
+ * пропустил старое сообщение.
+ */
+export type ActivityKind =
+  | 'auto' | 'draft' | 'draft_sent' | 'draft_edited' | 'draft_rejected' | 'shadow'
+  | 'handoff' | 'yielded' | 'blocked' | 'error' | 'skipped_old';
+
+/** Почему помощник не ответил сам — код; слова рисует панель. */
+export type ActivityReason =
+  | 'pause' | 'mode' | 'sensitive' | 'low_confidence' | 'no_kb' | 'asked_human' | 'tone' | 'important'
+  | 'hold' | 'waiting_human' | 'limit' | 'window' | 'clarify_again' | 'internal_data' | 'error' | 'other';
+
+/** Причины «Это неверно» (6.1, 6.7). */
+export type FeedbackReason = 'fact' | 'tone' | 'topic' | 'no_kb';
+
+export interface ActivityItem {
+  /** Уникален в ленте: `s<id>` — по черновику, `e<id>` — по событию. */
+  id: string;
+  at: number;
+  kind: ActivityKind;
+  conversation_id: number;
+  name: string;
+  /** Начало ответа помощника (до 200 знаков) — для auto и черновиков. */
+  text: string | null;
+  reason: ActivityReason | null;
+  /** Причина отказа от черновика («Не подходит»), как её выбрал человек. */
+  reject_reason: string | null;
+  /** Сообщение помощника клиенту — на него ставится «Это неверно». */
+  message_id: number | null;
+  suggestion_id: number | null;
+  /** На этом ответе уже стоит «Это неверно». */
+  wrong: boolean;
+}
+
+export interface ActivityTotals {
+  auto: number;
+  drafts: number;
+  draftsSent: number;
+  draftsEdited: number;
+  draftsRejected: number;
+  handoffs: number;
+}
+
+export interface ActivityResponse {
+  items: ActivityItem[];
+  /** Курсор следующей страницы (`before`) — время последней строки; null — дальше пусто. */
+  next: number | null;
+  /** Итоги за весь период [since, сейчас), а не только по странице. */
+  totals: ActivityTotals;
+  since: number;
+}
+
+export interface FeedbackResponse {
+  ok: true;
+  message_id: number;
 }

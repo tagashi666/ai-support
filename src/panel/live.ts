@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import { factsQuery, LISTED_SQL, type FactsRow } from '../core/attention.js';
 import type { AiMode } from '../shared/attention.js';
-import type { InboxCounts, InboxProjection, LiveFrame } from '../shared/api-types.js';
+import type { AssistantPauseView, InboxCounts, InboxProjection, LiveFrame } from '../shared/api-types.js';
 import { materialize, openProjections, projectRows } from './inbox.js';
 
 /**
@@ -20,7 +20,8 @@ import { materialize, openProjections, projectRows } from './inbox.js';
 export type StoredFrame =
   | { type: 'inbox_item'; item: InboxProjection }
   | { type: 'inbox_remove'; id: number }
-  | { type: 'settings'; aiMode: AiMode; minConfidence: number };
+  | { type: 'settings'; aiMode: AiMode; minConfidence: number; keys?: string[];
+      actor?: { id: string; name: string } | null; pause?: AssistantPauseView | null };
 
 interface Entry { seq: number; at: number; frame: StoredFrame }
 
@@ -71,7 +72,12 @@ export function frameFor(entry: { seq: number; frame: StoredFrame }, epoch: stri
   switch (frame.type) {
     case 'inbox_item': return { type: 'inbox_item', seq, epoch, item: materialize(frame.item, viewerKey), ...(counts ? { counts } : {}) };
     case 'inbox_remove': return { type: 'inbox_remove', seq, epoch, id: frame.id, ...(counts ? { counts } : {}) };
-    case 'settings': return { type: 'settings', seq, epoch, aiMode: frame.aiMode, minConfidence: frame.minConfidence };
+    case 'settings': return {
+      type: 'settings', seq, epoch, aiMode: frame.aiMode, minConfidence: frame.minConfidence,
+      ...(frame.keys ? { keys: frame.keys } : {}),
+      ...(frame.actor !== undefined ? { actor: frame.actor } : {}),
+      ...(frame.pause !== undefined ? { pause: frame.pause } : {}),
+    };
   }
 }
 
@@ -196,11 +202,21 @@ export interface LiveHub {
   /** Пересчитать строки этих диалогов (или всех открытых). */
   touch(ids?: readonly number[]): void;
   /** Изменились настройки: режим помощника меняет состояние сразу всех строк. */
-  settingsChanged(keys: readonly string[], values: { aiMode: AiMode; minConfidence: number }): void;
+  settingsChanged(keys: readonly string[], values: SettingsValues): void;
+}
+
+/** Что уходит в кадр settings: режим, порог и (10.4 п.7) кто менял и пауза. */
+export interface SettingsValues {
+  aiMode: AiMode;
+  minConfidence: number;
+  actor?: { id: string; name: string } | null;
+  pause?: AssistantPauseView | null;
 }
 
 /** Настройки, от которых зависит состояние строк (src/shared/attention.ts, src/core/attention.ts). */
-const ATTENTION_SETTINGS = new Set(['aiMode', 'minConfidence', 'humanHoldMinutes']);
+const ATTENTION_SETTINGS = new Set(['aiMode', 'minConfidence', 'humanHoldMinutes', 'aiPause']);
+/** Настройки, о смене которых панели узнают кадром settings. */
+const FRAME_SETTINGS = new Set(['aiMode', 'minConfidence', 'aiPause']);
 
 export function createLiveHub(db: Database.Database, send: (entry: { seq: number; frame: StoredFrame }, epoch: string) => void): LiveHub {
   const events = new EventLog();
@@ -214,8 +230,12 @@ export function createLiveHub(db: Database.Database, send: (entry: { seq: number
     watcher,
     touch: (ids) => watcher.touch(ids),
     settingsChanged(keys, values) {
-      if (keys.includes('aiMode') || keys.includes('minConfidence')) {
-        publish({ type: 'settings', aiMode: values.aiMode, minConfidence: values.minConfidence });
+      if (keys.some((key) => FRAME_SETTINGS.has(key))) {
+        publish({
+          type: 'settings', aiMode: values.aiMode, minConfidence: values.minConfidence, keys: [...keys],
+          ...(values.actor !== undefined ? { actor: values.actor } : {}),
+          ...(values.pause !== undefined ? { pause: values.pause } : {}),
+        });
       }
       if (keys.some((key) => ATTENTION_SETTINGS.has(key))) watcher.touch();
     },

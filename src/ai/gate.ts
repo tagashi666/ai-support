@@ -1,4 +1,5 @@
 import { runtime } from '../core/settings.js';
+import { isPaused } from '../core/pause.js';
 import { toneOf } from '../core/notify.js';
 import { replyWindow, type Conversation, type Store } from '../core/store.js';
 import type { AiDraft } from './provider.js';
@@ -135,17 +136,33 @@ export function resolveMode(conversation: Conversation): 'off' | 'shadow' | 'sug
  * Решение принимается ПОСЛЕ генерации: черновик всё равно сохраняется как
  * предложка, вопрос только в том, уходит ли он клиенту сам.
  */
+export interface DecideOptions {
+  /**
+   * Проверка «как бы ответил в режиме «Отвечает сам»» (песочница, 6.7):
+   * режим считается auto, общий рубильник и пауза помощника не учитываются.
+   */
+  assumeAuto?: boolean;
+}
+
 export function decide(
   store: Store,
   conversation: Conversation,
   clientText: string,
   draft: AiDraft,
   kbHits = 1,
+  options: DecideOptions = {},
 ): GateDecision {
-  const mode = resolveMode(conversation);
+  const mode = options.assumeAuto ? 'auto' : resolveMode(conversation);
   // Режим могли выключить, пока модель думала: клиенту в нём не уходит
   // ничего, включая «передал специалисту» из ветки предложки.
   if (mode === 'off') return { action: 'skip', reason: 'AI выключен' };
+
+  // Пауза помощника везде (10.4 п.1, 14.6а): клиенту не уходит ничего, черновик
+  // для человека пишется. Настроенный режим не меняется — после паузы всё как было.
+  if (!options.assumeAuto && isPaused()) {
+    return mode === 'shadow' ? { action: 'shadow', reason: 'теневой режим: только внутренний черновик' }
+      : { action: 'suggest', reason: 'пауза помощника: только предложка' };
+  }
 
   // Ответ человека важнее любых свойств черновика. Раньше эта проверка
   // стояла после базы знаний, confidence и sensitive: первая сработавшая

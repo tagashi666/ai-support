@@ -8,6 +8,7 @@ import { toneOf, type Notifier, type NotifyDetails } from '../core/notify.js';
 import { checkOutbound } from './outbound.js';
 import { expandLinks, linksBlock, maskLinks, type CustomerLink } from './links.js';
 import { decide, personalTopics, resolveMode, type PersonalTopic } from './gate.js';
+import { isPaused } from '../core/pause.js';
 import { AiProvider, completeDraft, DRAFT_EXAMPLE, type ChatMessage, type ContentPart } from './provider.js';
 import { activeInterfaceKnowledge, effectiveInterfaceMode, type InterfaceScreen } from './interface-kb.js';
 import { selectChunks } from './chunks.js';
@@ -622,6 +623,8 @@ export class Responder {
     const ageMinutes = (Date.now() - message.created_at) / 60_000;
     if (ageMinutes > runtime.maxAgeMinutes) {
       log.debug(`Диалог ${conversation.id}: сообщению ${Math.round(ageMinutes)} мин — AI пропускает`);
+      // След для ленты «Что делал помощник» (10.4 п.5): раньше пропуск был виден только в отладке.
+      this.store.logEvent('ai_skip_old', conversation.id, { message: message.id, minutes: Math.round(ageMinutes) });
       return;
     }
 
@@ -934,6 +937,7 @@ export class Responder {
       return;
     }
     this.store.setHandoff(conversation.id, Date.now());
+    this.store.logEvent('ai_handoff', conversation.id, { reason: details.reason?.split('; оператору:')[0] ?? null });
 
     // Порядок важен: сперва зовём человека, потом обещаем его клиенту.
     // Иначе клиент слышит «передал специалисту», а специалист об этом
@@ -953,6 +957,12 @@ export class Responder {
       this.store.addNote(conversation.id, `AI передал диалог человеку, но ${why}`);
     }
 
+    // Пауза помощника (14.6а): человека зовём, а «ожидайте» клиенту не шлём.
+    // Метка уведомления остаётся пустой — после паузы напоминание уйдёт как обычно.
+    if (isPaused()) {
+      log.info(`Диалог ${conversation.id}: пауза помощника — сообщение о передаче не отправляется`);
+      return;
+    }
     try {
       const service = resolveService(this.store, this.store.getConversation(conversation.id) ?? conversation);
       await this.outbox.send(conversation.id, { text: service.handoffMessage }, 'ai');
@@ -971,6 +981,8 @@ export class Responder {
   private async remindWaiting(conversation: Conversation): Promise<void> {
     // Теневой режим не пишет клиенту ничего, в том числе напоминаний.
     if (resolveMode(conversation) === 'shadow') return;
+    // Пауза помощника: «ожидайте» не шлём (14.6а).
+    if (isPaused()) return;
     // Если первая отправка не состоялась, handoff_notified_at остаётся NULL:
     // следующий входящий должен повторить попытку сразу, а не ждать час от
     // внутренней метки handoff_at.

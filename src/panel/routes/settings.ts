@@ -2,6 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { join } from 'node:path';
 import { config, log, version } from '../../config.js';
 import { applySettings, runtime } from '../../core/settings.js';
+import { pauseState } from '../../core/pause.js';
+import { pauseView } from '../assistant.js';
 import type { Permission } from '../../core/operations.js';
 import type { RouteContext } from '../context.js';
 import { channelAvailability } from '../helpers.js';
@@ -64,7 +66,10 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const result = applySettings(store, values);
     if (!result.ok) return reply.code(400).send({ error: result.error });
     // Смена режима помощника меняет состояние сразу всех строк списка.
-    live.settingsChanged(Object.keys(values), { aiMode: runtime.aiMode, minConfidence: runtime.minConfidence });
+    live.settingsChanged(Object.keys(values), {
+      aiMode: runtime.aiMode, minConfidence: runtime.minConfidence,
+      actor: { id: actor.key, name: actor.name }, pause: pauseView(pauseState()),
+    });
     return { ok: true, runtime };
   });
 

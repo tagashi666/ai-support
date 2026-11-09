@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import { computeAttention, unknownAttention, type Attention, type AttentionContext, type AttentionFacts } from '../shared/attention.js';
 import { confidenceLevel } from '../shared/confidence.js';
 import { runtime } from './settings.js';
+import { pauseState } from './pause.js';
 import { CHANNELS } from './channels.js';
 import { REPLY_WINDOW_MS, type Channel, type Conversation } from './store/types.js';
 
@@ -120,7 +121,10 @@ export function factsOf(row: FactsRow): AttentionFacts {
   };
 }
 
-export const attentionContext = (now = Date.now()): AttentionContext => ({ now, globalAiMode: runtime.aiMode });
+export const attentionContext = (now = Date.now()): AttentionContext => {
+  const pause = pauseState(now);
+  return { now, globalAiMode: runtime.aiMode, paused: pause ? { until: pause.until } : null };
+};
 
 /** Состояние с «ошибкой в сторону внимания»: сбой расчёта не прячет диалог. */
 export function attentionOf(facts: AttentionFacts, ctx: AttentionContext): Attention {

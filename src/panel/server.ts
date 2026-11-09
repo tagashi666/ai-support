@@ -30,6 +30,7 @@ import { register as registerKnowledge } from './routes/knowledge.js';
 import { register as registerInterfaceKb } from './routes/interface-kb.js';
 import { register as registerInbox } from './routes/inbox.js';
 import { register as registerThread } from './routes/thread.js';
+import { register as registerAssistant } from './routes/assistant.js';
 import { projectMessages, projectSuggestion } from './thread.js';
 import { createLiveHub, frameFor } from './live.js';
 import { countsFor } from './inbox.js';
@@ -461,6 +462,7 @@ export async function startWeb(deps: WebDeps) {
   registerInterfaceKb(app, ctx);
   registerInbox(app, ctx);
   registerThread(app, ctx);
+  registerAssistant(app, ctx);
 
   // --- билет для медиа и WS -----------------------------------------
 

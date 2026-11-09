@@ -1,6 +1,7 @@
 import { config, log } from '../config.js';
 import type { Conversation, Store } from './store.js';
 import { normalizeLinks, type CustomerLink } from '../ai/links.js';
+import { loadPause } from './pause.js';
 
 /**
  * Настройки, которые меняются из панели без перезапуска.
@@ -185,6 +186,8 @@ export function settingOverrides(): Array<{ key: keyof Runtime; value: unknown; 
 }
 
 export function loadSettings(store: Store): void {
+  // Пауза помощника живёт в своей записи, а не в Runtime: из /api/settings её не поставить (10.4 п.1).
+  loadPause(store);
   for (const key of Object.keys(FIELDS) as (keyof Runtime)[]) {
     let raw = store.getSetting(key);
     if (raw === undefined) continue;

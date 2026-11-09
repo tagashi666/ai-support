@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { config, version } from '../../config.js';
 import { runtime } from '../../core/settings.js';
+import { pauseState } from '../../core/pause.js';
+import { pauseView } from '../assistant.js';
 import type { BootstrapResponse, EventsResponse, InboxResponse, InboxView } from '../../shared/api-types.js';
 import { SECTION_ORDER } from '../../shared/conversation-order.js';
 import type { Section } from '../../shared/attention.js';
@@ -95,7 +97,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         events: true,
         typingWithoutClaim: true,
       },
-      assistant: { mode: runtime.aiMode, minConfidence: runtime.minConfidence, keys: aiKeys },
+      assistant: { mode: runtime.aiMode, minConfidence: runtime.minConfidence, keys: aiKeys, pause: pauseView(pauseState()) },
       channels: channelAvailability(outbox),
       sources: store.sourceAccounts().map(({ id, kind, name, enabled }) => ({ id, kind, name, enabled: Boolean(enabled) })),
       folders: store.folders(),

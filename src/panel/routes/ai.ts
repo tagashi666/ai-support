@@ -45,7 +45,9 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
    * Нужна, чтобы проверять правки промпта и базы знаний на реальных вопросах,
    * а не на живых людях.
    */
-  app.post<{ Body: { text?: string } }>('/api/ai/try', async (request, reply) => {
+  // assume: 'auto' — «Как бы он ответил» и «Попробовать» в новой панели (6.7): вердикт
+  // режима «Отвечает сам» при любом общем режиме и паузе. Без поля — как раньше.
+  app.post<{ Body: { text?: string; assume?: string } }>('/api/ai/try', async (request, reply) => {
     const text = request.body?.text?.trim();
     if (!text) return reply.code(400).send({ error: 'Пустой вопрос' });
     if (!config.ai.apiKeys.length) return reply.code(501).send({ error: 'AI_API_KEY не задан' });
@@ -69,7 +71,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         ai_mode: 'auto', last_inbound_at: Date.now(),
       } as Conversation;
       const grounded = draft.used.filter((n) => n >= 1 && n <= sources.length).length;
-      const verdict = decide(store, probe, text, draft, grounded);
+      const verdict = decide(store, probe, text, draft, grounded, { assumeAuto: request.body?.assume === 'auto' });
 
       return {
         draft,

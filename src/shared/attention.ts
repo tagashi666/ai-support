@@ -89,12 +89,18 @@ export interface AttentionContext {
   now: number;
   /** Общий режим помощника (runtime.aiMode). `off` гасит помощника везде. */
   globalAiMode: AiMode;
+  /**
+   * Пауза помощника везде (10.4 п.1): клиентам сам не отвечает, поэтому
+   * ответа от него не ждём. until — конец паузы, null — «пока не включу».
+   */
+  paused?: { until: number | null } | null;
 }
 
 export interface AttentionAi {
   configured: string;
   effective: AiMode;
-  paused_reason: 'handoff' | 'human_hold' | null;
+  /** pause — пауза помощника везде (10.4 п.1). */
+  paused_reason: 'handoff' | 'human_hold' | 'pause' | null;
   resume_at: number | null;
 }
 
@@ -138,11 +144,12 @@ export function computeAttention(facts: AttentionFacts, ctx: AttentionContext): 
   const handoff = facts.handoffAt !== null
     && (facts.lastAgentOutAt === null || facts.lastAgentOutAt <= facts.handoffAt);
   const holdActive = facts.holdUntil !== null && facts.holdUntil > now;
+  const paused = effective !== 'off' && Boolean(ctx.paused);
   const ai: AttentionAi = {
     configured: facts.aiMode,
     effective,
-    paused_reason: handoff ? 'handoff' : holdActive ? 'human_hold' : null,
-    resume_at: !handoff && holdActive ? facts.holdUntil : null,
+    paused_reason: handoff ? 'handoff' : holdActive ? 'human_hold' : paused ? 'pause' : null,
+    resume_at: handoff ? null : holdActive ? facts.holdUntil : paused ? ctx.paused?.until ?? null : null,
   };
   const base = { ai, handoff, sla: null, waiting_since: null } as const;
 
@@ -170,7 +177,7 @@ export function computeAttention(facts: AttentionFacts, ctx: AttentionContext): 
   }
 
   const waited = now - waitingSince;
-  const aiExpected = effective === 'auto' && !holdActive && !handoff;
+  const aiExpected = effective === 'auto' && !holdActive && !handoff && !paused;
   const silent = aiExpected && facts.draft === null && waited >= AI_SILENT_MS;
   const needsHuman = handoff || facts.draft !== null || !aiExpected || facts.escalated || silent;
 
