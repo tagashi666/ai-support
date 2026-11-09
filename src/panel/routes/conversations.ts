@@ -198,6 +198,10 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         store.logEvent('conversation_hidden', id, { actor: actorOf(request).key });
         return { ok: true, conversation };
       }
+      if (hidden === false) {
+        store.unhideConversation(id);
+        store.logEvent('conversation_unhidden', id, { actor: actorOf(request).key });
+      }
       if (status) store.setStatus(id, status);
       if (status === 'resolved' && before.status !== 'resolved' && before.status !== 'closed') {
         operations.recordActivity(actorOf(request), 'resolved', id);

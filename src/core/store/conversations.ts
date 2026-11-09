@@ -68,6 +68,21 @@ export class ConversationRepo {
   }
 
   /**
+   * «Вернуть в список» (10.3 п.8): диалог снова в списке. Кадр conversation, а
+   * не conversation_deleted: строка возвращается у всех, кто смотрит.
+   */
+  unhideConversation(this: Store, conversationId: number): Conversation | undefined {
+    const conversation = this.getConversation(conversationId);
+    if (!conversation) return undefined;
+    if (conversation.hidden_at === null) return conversation;
+    this.db.prepare('UPDATE conversation SET hidden_at = NULL, updated_at = MAX(updated_at + 1, ?) WHERE id = ?')
+      .run(Date.now(), conversationId);
+    const after = this.getConversation(conversationId)!;
+    this.emit('conversation', after);
+    return after;
+  }
+
+  /**
    * Telegram-профили, которым не хватает имени или аватарки. Legacy Business
    * использовал общий avatar_source_id, поэтому выбираем и по нему: после
    * обновления карточки должны восстановиться без нового сообщения клиента.

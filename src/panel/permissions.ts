@@ -9,7 +9,7 @@ import type { Permission } from '../core/operations.js';
 // Чтение, доступное любому оператору с conversation:read. Раньше это было
 // правилом по умолчанию для всех GET, а любой неописанный POST получал
 // conversation:status — новый маршрут молча открывался агенту.
-const CONVERSATION_READ_ROUTES = /^\/api\/(?:conversations(?:\/\d+(?:\/(?:avatar|customer|profile))?)?|inbox(?:\/meta)?|events|bootstrap|me|search|attachments\/\d+(?:\/lottie)?|health|ticket)(?:\?|$)/;
+const CONVERSATION_READ_ROUTES = /^\/api\/(?:conversations(?:\/\d+(?:\/(?:avatar|customer|profile))?)?|inbox(?:\/meta)?|thread\/\d+|events|bootstrap|me|search|attachments\/\d+(?:\/lottie)?|health|ticket)(?:\?|$)/;
 
 export const permissionFor = (method: string, url: string): Permission | undefined => {
   if (url.startsWith('/api/roles')) return 'roles:manage';
@@ -33,6 +33,8 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   if (url.startsWith('/api/filters')) return 'queue:read';
   if (url.startsWith('/api/templates') && method !== 'GET') return 'templates:manage';
   if (url.startsWith('/api/templates')) return 'templates:read';
+  // Черновик по id читает любой, кто видит диалог: «Почему так?» и «только просмотр» (6.3.2, 6.3.4).
+  if ((method === 'GET' || method === 'HEAD') && /^\/api\/suggestions\/\d+(?:\?|$)/.test(url)) return 'conversation:read';
   if (url.startsWith('/api/suggestions')) return 'conversation:reply';
   if (url.startsWith('/api/interface-kb')) return method === 'GET' || method === 'HEAD' ? 'knowledge:read' : 'knowledge:manage';
   if (url.startsWith('/api/kb/mine')) return 'knowledge:mine';

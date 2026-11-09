@@ -143,3 +143,122 @@ export type ControlFrame =
 export type EventsResponse =
   | { reset?: false; epoch: string; seq: number; events: LiveFrame[]; counts: InboxCounts }
   | { reset: true; epoch: string; seq: number };
+
+// --- Диалог в новой панели (этап 3а) --------------------------------------
+
+/** Голос в ленте (6.3.2): клиент, человек из команды, помощник, автосообщение, заметка. */
+export type ThreadVoice = 'client' | 'operator' | 'assistant' | 'auto' | 'note';
+
+/** Вложение: состояние вместо пути и file_id источника. */
+export interface ThreadAttachment {
+  id: number;
+  /** photo, voice, video, document, sticker, tgs_sticker, animation… */
+  kind: string;
+  width: number | null;
+  height: number | null;
+  name: string | null;
+  mime: string | null;
+  bytes: number | null;
+  /** ready — файл есть; pending — скачивается (сервер ответит 202); failed — скачать не удалось (424). */
+  state: 'ready' | 'pending' | 'failed';
+}
+
+/**
+ * Сообщение ленты — явная проекция строки message (правило 5): без
+ * sender_tg_user_id, media_file_id и прочих служебных полей.
+ */
+export interface ThreadMessage {
+  id: number;
+  voice: ThreadVoice;
+  text: string | null;
+  at: number;
+  /** text или тип вложения. */
+  kind: string;
+  /** Кто из команды отправил (10.3 п.3); null — неизвестно (старые ответы) или не человек. */
+  author: { id: string; name: string } | null;
+  /** Цитата: отрывок сообщения, на которое отвечали. */
+  quote: string | null;
+  /**
+   * Внешний id входящего сообщения Telegram — только он нужен, чтобы
+   * ответить цитатой (`replyTo` в POST /reply). null — цитировать нельзя.
+   */
+  quote_id: string | null;
+  /** Ответ ушёл из черновика помощника (для «Почему так?» — GET /api/suggestions/:id). */
+  suggestion_id: number | null;
+  attachments: ThreadAttachment[];
+}
+
+/** Черновик помощника для панели (6.3.4): уровень уверенности считает сервер тем же правилом, что и список. */
+export interface ThreadSuggestion {
+  id: number;
+  text: string;
+  /** Оценка 0..1 — только для «Для специалистов». */
+  confidence: number | null;
+  level: 'sure' | 'check' | 'unsure';
+  needs_human: boolean;
+  reason: string | null;
+  /** «Заметка помощника для вас» (бывшее «Оператору»). */
+  operator_note: string | null;
+  sources: string[];
+  model: string | null;
+  status: string;
+  created_at: number;
+  /** Сообщение клиента, на которое написан черновик. */
+  message_id: number | null;
+}
+
+/** Событие, которого клиент не видел: строка по центру ленты (6.3.2). */
+export interface ThreadEvent {
+  id: string;
+  at: number;
+  kind: 'handoff' | 'took' | 'returned' | 'resolved' | 'reopened' | 'pending' | 'important' | 'unimportant' | 'hidden' | 'unhidden' | 'mode' | 'claimed';
+  /** Кто сделал; null — помощник или система. */
+  actor: { id: string; name: string } | null;
+  /** Для mode — новый режим диалога (inherit | off | shadow | suggest | auto). */
+  mode?: string;
+}
+
+export interface ThreadPresence { id: string; name: string; state: 'viewing' | 'typing'; at: number }
+
+/** Шапка диалога: строка списка для того, кто смотрит, и то, чего в строке нет. */
+export interface ThreadHead {
+  item: InboxItem;
+  /** Внешняя заявка (Bedolaga, MiniShop): «Решено · закроет заявку», без файлов. */
+  ticket: { kind: 'bedolaga' | 'minishop'; number: string | null } | null;
+  /** Канал принимает файлы. */
+  attachments: boolean;
+  /** Отправитель канала подключён. */
+  sender: boolean;
+  hidden: boolean;
+  window: { applies: boolean; open: boolean; closes_at: number | null };
+  presence: ThreadPresence[];
+}
+
+export interface ThreadResponse {
+  head: ThreadHead;
+  messages: ThreadMessage[];
+  /** Есть сообщения раньше первого в ответе. */
+  has_more: boolean;
+  suggestion: ThreadSuggestion | null;
+  events: ThreadEvent[];
+}
+
+/**
+ * Кадр ленты для сокета новой панели. Без seq: это подсказка открытому
+ * диалогу, а не изменение списка. После разрыва панель перечитывает диалог.
+ */
+export type ThreadFrame =
+  | { type: 'thread'; kind: 'message' | 'message_updated'; conversation_id: number; message: ThreadMessage }
+  | { type: 'thread'; kind: 'message_deleted'; conversation_id: number; message_id: number }
+  | { type: 'thread'; kind: 'suggestion'; conversation_id: number; suggestion: ThreadSuggestion | null }
+  /** Диалог убран из списка или удалён (10.3 п.7). */
+  | { type: 'thread'; kind: 'deleted'; conversation_id: number };
+
+/** Ответ отправки: client_msg_id — тот же, что в запросе; повтор отдаёт уже созданное сообщение. */
+export interface ReplyResponse {
+  ok: true;
+  /** Отправленное сообщение в проекции ленты (поле message — сырая строка для классики). */
+  thread: ThreadMessage | null;
+  client_msg_id: string | null;
+  repeated: boolean;
+}

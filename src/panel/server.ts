@@ -12,7 +12,8 @@ import { config, log } from '../config.js';
 import { UpdateManager } from '../core/update.js';
 import { SourceManager } from '../core/sources.js';
 import { Operations, type Actor, type Permission } from '../core/operations.js';
-import { decorate, etagMatches, registerStatusSyncs } from './helpers.js';
+import { decorate, etagMatches, livePendingSuggestion, registerStatusSyncs } from './helpers.js';
+import type { ThreadFrame } from '../shared/api-types.js';
 import { createRouteContext, type WebDeps } from './context.js';
 import { register as registerConversations } from './routes/conversations.js';
 import { register as registerMedia } from './routes/media.js';
@@ -28,10 +29,12 @@ import { register as registerNodes } from './routes/nodes.js';
 import { register as registerKnowledge } from './routes/knowledge.js';
 import { register as registerInterfaceKb } from './routes/interface-kb.js';
 import { register as registerInbox } from './routes/inbox.js';
+import { register as registerThread } from './routes/thread.js';
+import { projectMessages, projectSuggestion } from './thread.js';
 import { createLiveHub, frameFor } from './live.js';
 import { countsFor } from './inbox.js';
 import { apiError } from './errors.js';
-import { registerWebApp } from './webapp.js';
+import { registerWebApp, uiChoice, uiCookie, webAppBuilt } from './webapp.js';
 import { DENY_BY_DEFAULT, permissionFor, registeredApiRoutes, routeSample } from './permissions.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -201,6 +204,13 @@ export async function startWeb(deps: WebDeps) {
   });
 
   const sendPanel = (request: FastifyRequest, reply: FastifyReply) => {
+    // Выбор интерфейса на устройстве (раздел 12): `?ui=next` или сохранённый
+    // выбор отправляют в новую панель; `?ui=classic` остаётся здесь.
+    const { asked, saved } = uiChoice(request.query, request.headers.cookie);
+    if (asked) reply.header('set-cookie', uiCookie(asked, request.protocol === 'https'));
+    if ((asked ?? saved) === 'next' && webAppBuilt()) {
+      return reply.code(302).header('cache-control', 'no-store').redirect('/next/');
+    }
     reply.header('etag', PANEL_HTML_ETAG).header('cache-control', 'no-cache');
     if (etagMatches(request.headers['if-none-match'], PANEL_HTML_ETAG)) return reply.code(304).send();
     return reply.type('text/html; charset=utf-8').send(panelHtml);
@@ -450,6 +460,7 @@ export async function startWeb(deps: WebDeps) {
   registerKnowledge(app, ctx);
   registerInterfaceKb(app, ctx);
   registerInbox(app, ctx);
+  registerThread(app, ctx);
 
   // --- билет для медиа и WS -----------------------------------------
 
@@ -571,6 +582,35 @@ export async function startWeb(deps: WebDeps) {
   store.on('suggestion', ({ conversation, suggestion }) =>
     broadcast({ type: 'suggestion', conversation: decorate(conversation, store, operations), suggestion }),
   );
+
+  // Кадры ленты новой панели: явная проекция, без seq — подсказка открытому
+  // диалогу. После разрыва панель перечитывает диалог сама (GET /api/thread).
+  const threadFrame = (frame: ThreadFrame): void => {
+    const payload = JSON.stringify(frame);
+    for (const socket of sockets) {
+      if (!socketsV2.has(socket) || socket.readyState !== socket.OPEN) continue;
+      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
+      if (actor && operations.can(actor, 'conversation:read')) socket.send(payload);
+    }
+  };
+  // Сообщение перечитывается на следующем шаге цикла: маршрут ответа к этому
+  // времени уже записал автора (событие operator_reply), и кадр несёт имя.
+  const messageFrame = (kind: 'message' | 'message_updated', conversationId: number, messageId: number): void => {
+    setImmediate(() => {
+      const row = store.listMessagesAfter(conversationId, messageId - 1, 1)[0];
+      const message = row && row.id === messageId ? projectMessages(store.db, conversationId, [row])[0] : undefined;
+      if (message) threadFrame({ type: 'thread', kind, conversation_id: conversationId, message });
+    });
+  };
+  store.on('message', ({ conversation, message }) => messageFrame('message', conversation.id, message.id));
+  store.on('message_updated', ({ conversation, message }) => messageFrame('message_updated', conversation.id, message.id));
+  store.on('message_deleted', ({ conversation, message }) =>
+    threadFrame({ type: 'thread', kind: 'message_deleted', conversation_id: conversation.id, message_id: message.id }));
+  store.on('suggestion', ({ conversation }) => {
+    const fresh = store.getConversation(conversation.id) ?? conversation;
+    threadFrame({ type: 'thread', kind: 'suggestion', conversation_id: conversation.id, suggestion: projectSuggestion(livePendingSuggestion(store, fresh)) });
+  });
+  store.on('conversation_deleted', (conversation) => threadFrame({ type: 'thread', kind: 'deleted', conversation_id: conversation.id }));
 
   await app.listen({ port: config.panelPort, host: config.panelHost });
   log.info(`Панель слушает http://${config.panelHost}:${config.panelPort}`);

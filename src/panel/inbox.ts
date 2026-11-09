@@ -19,9 +19,9 @@ import type { Section } from '../shared/attention.js';
 const PREVIEW_MAX = 140;
 const AUTHOR: Record<string, LastAuthor> = { agent: 'operator', ai: 'assistant', system: 'system', client: 'client' };
 
-interface Names { name(key: string): string }
+export interface Names { name(key: string): string }
 
-function operatorNames(db: Database.Database): Names {
+export function operatorNames(db: Database.Database): Names {
   const rows = db.prepare('SELECT id, name FROM operator_account').all() as { id: number; name: string }[];
   const byId = new Map(rows.map((row) => [row.id, row.name]));
   return {

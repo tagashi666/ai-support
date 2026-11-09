@@ -77,7 +77,7 @@
     <div class="more-sheet" id="moreSheet" role="menu" aria-label="Ещё разделы" hidden></div>
     <div class="grow"></div>
     <div id="pulseBoard" class="board" hidden></div>
-    <footer class="sidebar-foot"><span><b id="actorName">—</b><small id="ver">—</small></span><button class="lock-btn" id="lockBtn" title="Выйти из панели" aria-label="Выйти из панели"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg></button></footer>
+    <footer class="sidebar-foot"><span><b id="actorName">—</b><small id="ver">—</small><a class="next-ui-link" href="/?ui=next">Попробовать новую панель</a></span><button class="lock-btn" id="lockBtn" title="Выйти из панели" aria-label="Выйти из панели"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg></button></footer>
   </aside>
 
   <main class="main">
@@ -244,7 +244,7 @@
         <nav class="settings-nav" aria-label="Разделы настроек"><a href="#settings-appearance">Оформление</a><a href="#settings-sources">Источники</a><a href="#settings-ai">AI-помощник</a><a href="#settings-update">Обновление</a><a href="#settings-health">Интеграции</a></nav>
         <div class="settings-content-scroll">
           <div class="settings-content-column">
-            <section class="settings-section" id="settings-appearance"><div class="section-copy"><h2>Рабочая среда</h2><p>Светлая, тёмная или системная схема для этого браузера.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Цветовая схема</b><span>Изменение применяется сразу</span></header><div class="themes" id="themePick"></div></div><div id="accentPick" hidden></div></div></section>
+            <section class="settings-section" id="settings-appearance"><div class="section-copy"><h2>Рабочая среда</h2><p>Светлая, тёмная или системная схема для этого браузера.</p></div><div class="settings-stack"><div class="appearance-panel"><header><b>Новая панель</b><span>Выбор запоминается на этом устройстве</span></header><p><a class="next-ui-link" href="/?ui=next">Попробовать новую панель</a> — вернуться можно ссылкой «Вернуться к классической» в её меню.</p></div><div class="appearance-panel"><header><b>Цветовая схема</b><span>Изменение применяется сразу</span></header><div class="themes" id="themePick"></div></div><div id="accentPick" hidden></div></div></section>
             <section class="settings-section" id="settings-sources"><div class="section-copy"><h2>Источники и папки</h2><p>Каналы можно объединять в пересекающиеся рабочие очереди.</p></div><div class="source-folders" id="sourceFolders"><span class="hint">Загружаю источники…</span></div></section>
             <section class="settings-section" id="settings-ai"><div class="section-copy"><h2>Помощник оператора</h2><p>Правила подготовки и автоматической отправки ответов.</p></div><div><div class="settings-content" id="aiSettings"></div><p class="hint settings-hint">Ключи, адреса и токены хранятся в <span class="mono">.env</span> на сервере.</p></div></section>
             <section class="settings-section" id="settings-update"><div class="section-copy"><h2>Обновление</h2><p>Проверка релизов и безопасная заявка на установку.</p></div><div class="update-panel" id="updatePanel"><span class="hint">Проверяю обновления…</span></div></section>
