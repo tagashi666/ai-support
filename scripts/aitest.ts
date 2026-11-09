@@ -434,6 +434,19 @@ check('пересинхронизация удаляет исчезнувшие 
     store.searchKb('бля а есть чет по типу оферты у вас?')[0]?.title === 'Политика оферта документы',
     store.searchKb('бля а есть чет по типу оферты у вас?').map((h) => h.title));
   store.syncKb('stem', []);
+
+  // Общая статья из комплекта про прокси: вопросы из живого диалога.
+  const { readFileSync } = await import('node:fs');
+  const proxyRaw = readFileSync(new URL('../kb/00-прокси-telegram.md', import.meta.url), 'utf8');
+  store.syncKb('stem', [
+    { extId: 'x.md', title: 'Прокси для Telegram и VPN — в чём разница', body: proxyRaw.split('\n').slice(1).join('\n') },
+    { extId: 'v.md', title: 'Не подключается VPN', body: 'Обновить подписку в приложении, сменить сервер, переустановить профиль по ссылке подписки.' },
+    { extId: 'c.md', title: 'Как подключить устройство', body: 'Скопируйте ссылку подписки и добавьте её в приложение.' },
+  ]);
+  for (const q of ['Где могу узнать юрл прокси?', 'Как подключить прокси для телеграмма', 'дайте прокси для телеги']) {
+    check(`«${q}» находит статью про прокси`, store.searchKb(q)[0]?.title === 'Прокси для Telegram и VPN — в чём разница', store.searchKb(q).map((h) => h.title));
+  }
+  store.syncKb('stem', []);
 }
 
 // ---------- ворота ----------

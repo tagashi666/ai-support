@@ -7,7 +7,7 @@ cd "$(dirname "$0")/.."
 
 {
   find src scripts public deploy interface-kb -type f 2>/dev/null
-  printf '%s\n' kb/00-подключение.md kb/10-подписка.md kb/20-устройства.md kb/30-скорость.md
+  printf '%s\n' kb/00-подключение.md kb/00-прокси-telegram.md kb/10-подписка.md kb/20-устройства.md kb/30-скорость.md
 } | sed 's|^\./||' | sort > MANIFEST
 echo "MANIFEST: $(wc -l < MANIFEST) файлов"
 
@@ -22,7 +22,7 @@ files=(
   tsconfig.json tsconfig.build.json
   deploy public scripts src
   interface-kb
-  kb/00-подключение.md kb/10-подписка.md kb/20-устройства.md kb/30-скорость.md
+  kb/00-подключение.md kb/00-прокси-telegram.md kb/10-подписка.md kb/20-устройства.md kb/30-скорость.md
 )
 for optional in LICENSE CHANGELOG.md CONTRIBUTING.md .github .gitattributes; do
   [[ -e "$optional" ]] && files+=("$optional")
