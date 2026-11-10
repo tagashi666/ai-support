@@ -96,7 +96,7 @@ test('пауза с «Сегодня», полоса на всех экрана�
   const sheet = page.getByRole('dialog', { name: 'Пауза помощника везде' });
   await sheet.getByRole('menuitemradio', { name: 'на 1 час' }).click();
   await expect.poll(async () => (await boot(request)).assistant.pause?.until ?? null).not.toBeNull();
-  await expect(page.getByRole('status').filter({ hasText: /Помощник на паузе до \d\d:\d\d/ })).toBeVisible();
+  await expect(page.getByRole('status').filter({ hasText: /Помощник на паузе до (.+, )?\d\d:\d\d/ })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Помощник' }).getByText(/На паузе/).first()).toBeVisible();
   // Строка состояния видна и в списке диалогов.
   await page.goto('/next/chats');
