@@ -25,6 +25,8 @@ export function ArticlesPanel(): JSX.Element {
   const r = rights.value;
   const all = rows.value;
   const shown = filterArticles(all, filter, query);
+  // Время у всех строк одно и то же — это шум, не показываем (R-19).
+  const times = new Set(shown.map((row) => listTime(row.updatedAt, now.value)));
   const open = (name: string): void => navigate(articleRoute(name));
   return (
     <div class={k.panel}>
@@ -65,12 +67,12 @@ export function ArticlesPanel(): JSX.Element {
                 onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); open(row.name); }}>
                 <span class={k.itemHead}>
                   <span class={k.itemTitle}>{row.title}</span>
-                  <span class={k.itemMeta}>{listTime(row.updatedAt, now.value)}</span>
+                  {times.size > 1 && <span class={k.itemMeta}>{listTime(row.updatedAt, now.value)}</span>}
                 </span>
                 {/* Одна метка на строку (R2 B): опубликованная — без метки, иначе состояние или «идея на проверке». */}
                 {(row.idea || row.state !== 'published') && (
                   <span class={k.itemMeta}>
-                    {row.idea ? <span class={k.tag} data-tone="idea">{t('kb.state.idea')}</span> : t(STATE_LABEL[row.state])}
+                    <span class={k.tag} data-tone={row.idea ? 'idea' : undefined}>{row.idea ? t('kb.state.idea') : t(STATE_LABEL[row.state])}</span>
                   </span>
                 )}
                 {row.excerpt && <span class={k.itemText}>{row.excerpt}</span>}
