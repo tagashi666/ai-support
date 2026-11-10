@@ -28,6 +28,13 @@ const KnowledgeScreen = lazyScreen(
   () => <div class={s.lazy} aria-busy="true" />,
 );
 
+// Редкие разделы (этап 6) — каждый своим чанком: в начальный JS не входят.
+const busy = () => <div class={s.lazy} aria-busy="true" />;
+const ReportsScreen = lazyScreen(() => import('@/features/reports/ReportsScreen').then((module) => module.ReportsScreen), busy);
+const SystemScreen = lazyScreen(() => import('@/features/system/SystemScreen').then((module) => module.SystemScreen), busy);
+const ConnectionsScreen = lazyScreen(() => import('@/features/connections/ConnectionsScreen').then((module) => module.ConnectionsScreen), busy);
+const TeamScreen = lazyScreen(() => import('@/features/team/TeamScreen').then((module) => module.TeamScreen), busy);
+
 /**
  * Стартовый экран (вопрос 14.3а): телефон — «Сегодня», компьютер — «Диалоги»
  * со сжатым «Сегодня» справа, пока диалог не выбран.
@@ -41,6 +48,10 @@ function sectionScreen(current: Extract<Route, { name: 'section' }>, live: boole
   if (current.key === 'device') return <DeviceScreen />;
   if (current.key === 'assistant' && live) return <AssistantScreen sub={current.sub} />;
   if (current.key === 'knowledge' && live) return <KnowledgeScreen sub={current.sub} item={current.item} />;
+  if (current.key === 'reports' && live) return <ReportsScreen sub={current.sub} item={current.item} />;
+  if (current.key === 'system' && live) return <SystemScreen sub={current.sub} item={current.item} />;
+  if (current.key === 'connections' && live) return <ConnectionsScreen sub={current.sub} item={current.item} />;
+  if (current.key === 'team' && live) return <TeamScreen sub={current.sub} item={current.item} />;
   return <Placeholder section={current.key} />;
 }
 

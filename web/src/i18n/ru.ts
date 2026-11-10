@@ -1287,6 +1287,22 @@ export const ru = {
   'wrong.correctHint': 'Станет идеей статьи в «Знаниях»: вопрос клиента и ваш ответ. Неверный ответ туда не попадёт.',
   'wrong.doneIdea': 'Отметили ответ как неверный и добавили идею в «Идеи из диалогов»',
 
+  // Неполадки (этап 6): «Нужно внимание», «Система»
+  'problem.nodesOne': 'Сервер {name} не отвечает',
+  'problem.nodesMany': 'Не отвечают {count} {servers}, первый — {name}',
+  'problem.nodesError': 'Не удалось узнать состояние серверов',
+  'problem.updateFailed': 'Последнее обновление не установилось',
+  'problem.updateFailedVersion': 'Обновление до {version} не установилось',
+  'problem.jobFailed': 'Фоновая задача завершилась с ошибкой',
+  'problem.other': 'Есть что проверить',
+  'problem.more': 'Подробнее',
+
+  // Мелкое поле (6.12): изменено → сохраняется → сохранено ✓ → ошибка у поля
+  'field.saving': 'Сохраняется…',
+  'field.saved': 'Сохранено ✓',
+  'field.hint': '{save} — сохранить, {cancel} — отменить',
+  'field.failed': 'Не сохранилось: {reason}',
+
   // Склонения: один | несколько | много
   'plural.dialogs': 'диалог|диалога|диалогов',
   'plural.updates': 'обновление|обновления|обновлений',
@@ -1295,6 +1311,7 @@ export const ru = {
   'plural.tickets': 'заявку|заявки|заявок',
   'plural.minutes': 'мин|мин|мин',
   'plural.times': 'раз|раза|раз',
+  'plural.servers': 'сервер|сервера|серверов',
 } as const;
 
 export type Key = keyof typeof ru;

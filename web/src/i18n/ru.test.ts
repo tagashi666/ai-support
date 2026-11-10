@@ -4,13 +4,17 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ru, t, tn } from './ru';
 
+/** Словари редких разделов (этап 6): те же правила, что у ru.ts. */
+const sections = import.meta.glob<{ dict: Record<string, string> }>('./sections/*.ts', { eager: true });
+const all: Record<string, string> = { ...ru, ...Object.assign({}, ...Object.values(sections).map((module) => module.dict)) };
+
 const SRC = new URL('..', import.meta.url).pathname;
 const walk = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
   const path = join(dir, name);
   return statSync(path).isDirectory() ? walk(path) : [path];
 });
 const sources = walk(SRC)
-  .filter((file) => /\.(ts|tsx)$/.test(file) && !file.endsWith('.test.ts') && !file.endsWith('i18n/ru.ts'))
+  .filter((file) => /\.(ts|tsx)$/.test(file) && !file.endsWith('.test.ts') && !file.endsWith('i18n/ru.ts') && !file.includes('i18n/sections/'))
   .map((file) => readFileSync(file, 'utf8'))
   .join('\n');
 
@@ -19,17 +23,17 @@ const BRANDS = ['Telegram', 'Business', 'Bedolaga', 'MiniShop', 'Remnawave'];
 
 describe('словарь', () => {
   it('каждый ключ где-то используется', () => {
-    const unused = Object.keys(ru).filter((key) => !sources.includes(`'${key}'`));
+    const unused = Object.keys(all).filter((key) => !sources.includes(`'${key}'`));
     expect(unused).toEqual([]);
   });
 
   it('нет запрещённых слов и сырых значений перечислений', () => {
-    const bad = Object.entries(ru).filter(([, value]) => FORBIDDEN.test(value));
+    const bad = Object.entries(all).filter(([, value]) => FORBIDDEN.test(value));
     expect(bad).toEqual([]);
   });
 
   it('латиница только в названиях продуктов', () => {
-    const bad = Object.entries(ru).filter(([, value]) => {
+    const bad = Object.entries(all).filter(([, value]) => {
       let rest: string = value;
       for (const brand of BRANDS) rest = rest.replaceAll(brand, '');
       return /[A-Za-z]/.test(rest.replace(/\{\w+\}/g, ''));
@@ -38,8 +42,14 @@ describe('словарь', () => {
   });
 
   it('обращение на «вы», без «ты»', () => {
-    const bad = Object.entries(ru).filter(([, value]) => /(^|[\s«])(ты|тебе|твой|твоя)([\s,.!?»]|$)/iu.test(value));
+    const bad = Object.entries(all).filter(([, value]) => /(^|[\s«])(ты|тебе|твой|твоя)([\s,.!?»]|$)/iu.test(value));
     expect(bad).toEqual([]);
+  });
+
+  it('ключи разделов не пересекаются со словарём и между собой', () => {
+    const keys = Object.values(sections).flatMap((module) => Object.keys(module.dict));
+    expect(keys.filter((key) => key in ru)).toEqual([]);
+    expect(keys.length).toBe(new Set(keys).size);
   });
 
   it('подстановки и склонения', () => {

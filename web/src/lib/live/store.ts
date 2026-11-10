@@ -112,8 +112,29 @@ async function loadSnapshot(): Promise<Position> {
   return open.epoch === done.epoch ? { seq: Math.min(open.seq, done.seq), epoch: open.epoch } : { seq: 0, epoch: '' };
 }
 
+/**
+ * Версия кода, с которой открыта вкладка. После установки обновления сервер
+ * перезапускается, сокет переподключается, bootstrap приходит с другой
+ * версией — вкладка показывает «Вышла новая версия панели · Обновить страницу»
+ * (6.9). Другие вкладки узнают о готовой установке и через BroadcastChannel.
+ */
+let loadedVersion: string | null = null;
+export const newVersion = signal<string | null>(null);
+const channel = typeof BroadcastChannel === 'undefined' ? null : new BroadcastChannel('ai-support-panel');
+channel?.addEventListener('message', (event: MessageEvent<{ type?: string; version?: string }>) => {
+  if (event.data?.type === 'updated' && event.data.version && event.data.version !== loadedVersion) newVersion.value = event.data.version;
+});
+/** Установка закончилась в этой вкладке («Система → Обновление»): сказать остальным. */
+export function announceUpdated(version: string): void {
+  if (version !== loadedVersion) newVersion.value = version;
+  channel?.postMessage({ type: 'updated', version });
+}
+
 async function loadBootstrap(): Promise<void> {
-  bootstrap.value = await getJson<BootstrapResponse>('/api/bootstrap', token());
+  const next = await getJson<BootstrapResponse>('/api/bootstrap', token());
+  bootstrap.value = next;
+  if (loadedVersion === null) loadedVersion = next.version;
+  else if (next.version !== loadedVersion) newVersion.value = next.version;
 }
 
 export async function startLive(): Promise<void> {
@@ -145,6 +166,8 @@ export async function startLive(): Promise<void> {
         // Связь вернулась: открытый диалог догоняет пропущенное (кадры ленты без seq).
         const open = openThreadId.peek();
         if (state === 'live' && was !== 'live' && open !== null) void syncThread(open);
+        // После обрыва — свежий bootstrap: права, неполадки и версия (после обновления сервер перезапускался).
+        if (state === 'live' && was !== 'live' && was !== 'connecting') void loadBootstrap().catch(() => undefined);
       },
       onThread: onThreadFrame,
       onPermission: () => {
