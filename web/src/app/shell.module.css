@@ -119,6 +119,7 @@
 /* ---------- Аккаунт (R2 A2) ---------- */
 .account { margin-top: auto; padding-top: var(--s3); }
 .accountButton {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -136,10 +137,16 @@
 }
 .accountButton:hover, .accountButton[data-current="true"] { background: var(--surface-hover); }
 .accountButton > :first-child { flex: none; }
-.accountText { display: none; min-width: 0; flex: 1; }
+.accountText { display: grid; min-width: 0; flex: 1; }
+/* Узкая панель — только аватар; имя и роль остаются доступным именем кнопки. */
+@media (max-width: 1279px) {
+  .accountText {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+}
 @media (min-width: 1280px) {
   .accountButton { justify-content: flex-start; padding: var(--s1) var(--s2); }
-  .accountText { display: grid; }
 }
 .accountName, .accountRole { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .accountName { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }

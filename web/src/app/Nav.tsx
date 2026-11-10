@@ -138,8 +138,7 @@ function Account({ current }: { current: Route }): JSX.Element {
         class={s.accountButton}
         popovertarget="account-menu"
         aria-haspopup="menu"
-        aria-label={role ? `${name}, ${role}` : name}
-        title={name}
+        title={role ? `${name} · ${role}` : name}
         data-current={current.name === 'section' && current.key === 'device' ? 'true' : undefined}
         onClick={place}
       >

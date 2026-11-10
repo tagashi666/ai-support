@@ -4,7 +4,7 @@
  * иначе всё успевает за 500 мс после нажатия и сдвиги не считаются. Ширины: 1440 (desktop) и 390 (mobile).
  */
 import { expect, test } from '@playwright/test';
-import { signIn, TOKEN } from './helpers';
+import { classicLink, signIn, TOKEN } from './helpers';
 
 const CLS_MAX = 0.02;
 type Page = Parameters<Parameters<typeof test>[2]>[0]['page'];
@@ -95,14 +95,17 @@ test('CLS: полоса паузы появляется без сдвига эк
   }
 });
 
-test('полоса «Рабочая панель» на телефоне — одна строка', async ({ page }, info) => {
-  test.skip(info.project.name !== 'mobile', 'узкая раскладка');
+test('верхней полосы нет: «Классическая панель» и «Выйти» — в меню аккаунта (телефон — «Ещё»), «Прототипа» нет (R2 A3)', async ({ page }) => {
   await page.goto('/next/today');
-  const bar = page.getByText('Рабочая панель', { exact: true }).locator('..');
-  await expect(bar).toBeVisible();
-  const box = await bar.boundingBox();
-  expect(box?.height ?? 999, 'высота полосы').toBeLessThanOrEqual(56);
-  await expect(page.getByRole('button', { name: 'Выйти' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Прототип' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Вернуться к классической' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Сегодня', level: 1 })).toBeVisible();
+  await expect(page.getByText('Рабочая панель', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Прототип' })).toHaveCount(0);
+  // Заголовок раздела — у верхнего края: над ним ничего нет.
+  const top = await page.getByRole('heading', { name: 'Сегодня', level: 1 }).boundingBox();
+  expect(top?.y ?? 999, 'заголовок у верха').toBeLessThanOrEqual(48);
+  await classicLink(page);
+  const signOut = (page.viewportSize()?.width ?? 0) >= 768
+    ? page.getByRole('menu').getByRole('menuitem', { name: 'Выйти' })
+    : page.getByRole('button', { name: 'Выйти' });
+  await expect(signOut).toBeVisible();
 });

@@ -1,4 +1,4 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext, type Locator, type Page } from '@playwright/test';
 import type { InboxItem, InboxResponse, ThreadResponse } from '@shared/api-types';
 
 export const TOKEN = process.env.E2E_TOKEN ?? 'e2e-key-0123456789abcdef';
@@ -56,6 +56,23 @@ export async function expectNoHorizontalScroll(page: Page): Promise<void> {
     return root.scrollWidth - root.clientWidth;
   });
   expect(overflow, 'горизонтальная прокрутка').toBeLessThanOrEqual(0);
+}
+
+/**
+ * «Классическая панель» (R2 A3): от 768 px — пункт меню аккаунта внизу навигации,
+ * на телефоне — строка в «Ещё». Возвращает ссылку, уже на виду.
+ */
+export async function classicLink(page: Page): Promise<Locator> {
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
+    await page.locator('button[popovertarget="account-menu"]').click();
+    const item = page.getByRole('menu').getByRole('menuitem', { name: 'Классическая панель' });
+    await expect(item).toBeVisible();
+    return item;
+  }
+  await page.getByRole('navigation').getByRole('link', { name: 'Ещё' }).click();
+  const link = page.getByRole('link', { name: 'Классическая панель' });
+  await expect(link).toBeVisible();
+  return link;
 }
 
 /** Строки списка в порядке показа. */

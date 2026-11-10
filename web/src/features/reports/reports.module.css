@@ -14,7 +14,7 @@
 .empty { padding: var(--s6) 0; }
 
 /* Период */
-.filters { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
+.filters { justify-self: start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
 .filter { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s3); font-size: var(--fs-body); cursor: pointer; }
 .filter + .filter { border-left: 1px solid var(--border); }
 .filter input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
@@ -29,7 +29,7 @@
 .menuItem:hover { background: var(--surface-hover); }
 
 /* Карточки показателей */
-.cards { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr)); }
+.cards { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr)); }
 .card { display: grid; gap: var(--s1); align-content: start; padding: var(--pad-card); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); min-width: 0; }
 .cardTitle { font-size: var(--fs-body); font-weight: 600; color: var(--text-2); }
 .big { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; overflow-wrap: anywhere; }

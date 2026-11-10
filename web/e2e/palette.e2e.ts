@@ -83,7 +83,7 @@ test('«Это устройство» целиком: плотность, ста
   await expect(page.getByRole('switch', { name: /Enter отправляет ответ/ })).toBeChecked();
   await page.goto('/next/');
   await expect(page).toHaveURL(/\/next\/$/);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Добр(ое|ый|ой)/);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Сегодня');
   await page.goto('/next/device');
   await page.getByRole('radiogroup', { name: 'Плотность' }).getByRole('radio', { name: 'Просторно' }).check();
   await page.getByRole('radiogroup', { name: 'Начинать с' }).getByRole('radio', { name: 'По экрану' }).check();

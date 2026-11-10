@@ -1,12 +1,12 @@
 /**
  * Панель по умолчанию (план, раздел 12, этап 8): `/` без выбора открывает новую
- * панель; cookie `ui`, `?ui=classic` и «Вернуться к классической» возвращают
+ * панель; cookie `ui`, `?ui=classic` и «Классическая панель» возвращают
  * классику на устройстве; «Система → Панель» и `PANEL_UI=classic` — для всей
  * установки; старые ссылки `/#c<id>` (уведомления) и `/#v=<раздел>` не ломаются.
  * Отдельный сервер на порту +4 запущен с PANEL_UI=classic (playwright.config.ts).
  */
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
-import { openItems, signIn, TOKEN } from './helpers';
+import { classicLink, openItems, signIn, TOKEN } from './helpers';
 
 const PORT = Number(process.env.E2E_PORT ?? 8197);
 const CLASSIC_BASE = `http://127.0.0.1:${PORT + 4}`;
@@ -22,11 +22,11 @@ async function rootStatus(request: APIRequestContext, base = '', cookie?: string
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
 
-test('по умолчанию / открывает новую панель, «Вернуться к классической» на виду', async ({ page, request }) => {
+test('по умолчанию / открывает новую панель, «Классическая панель» — в меню аккаунта или в «Ещё»', async ({ page, request }) => {
   expect(await rootStatus(request)).toEqual({ status: 302, location: '/next/' });
   await page.goto('/');
   await expect(page).toHaveURL(/\/next\/(chats|today)?$/);
-  await expect(page.getByRole('link', { name: 'Вернуться к классической' }).first()).toBeVisible();
+  await classicLink(page);
 });
 
 test('ссылка из уведомления /#c<id> открывает диалог в новой панели', async ({ page, request }) => {
@@ -35,9 +35,9 @@ test('ссылка из уведомления /#c<id> открывает диа
   await expect(page).toHaveURL(new RegExp(`/next/chats/${id}$`));
 });
 
-test('«Вернуться к классической» — классика, и / помнит выбор (cookie ui)', async ({ page, context }) => {
-  await page.goto('/next/more');
-  await page.getByRole('link', { name: 'Вернуться к классической' }).first().click();
+test('«Классическая панель» — классика, и / помнит выбор (cookie ui)', async ({ page, context }) => {
+  await page.goto('/next/today');
+  await (await classicLink(page)).click();
   await expect(classicNav(page)).toBeAttached();
   expect(new URL(page.url()).pathname).toBe('/');
   expect((await context.cookies()).find((cookie) => cookie.name === 'ui')?.value).toBe('classic');

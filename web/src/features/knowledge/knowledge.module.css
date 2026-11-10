@@ -15,7 +15,7 @@
 /* Поиск и фильтр списка */
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .search { flex: 1 1 16rem; min-width: 0; max-width: 36rem; }
-.filters { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
+.filters { justify-self: start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
 .filter { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s3); font-size: var(--fs-body); cursor: pointer; }
 .filter + .filter { border-left: 1px solid var(--border); }
 .filter input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
