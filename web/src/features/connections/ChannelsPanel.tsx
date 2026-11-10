@@ -70,7 +70,7 @@ export function ChannelsPanel(): JSX.Element {
       return (
         <>
           {r.services && card.sourceId && <Button variant="secondary" size="sm" onClick={() => setProfile(card.sourceId ?? null)}>{tr('connections.profile.open')}</Button>}
-          <Button variant="quiet" size="sm" icon="more" label={tr('connections.more', { name: card.title })} aria-haspopup="dialog" onClick={() => setInfo(card)} />
+          <Button variant="secondary" size="sm" aria-haspopup="dialog" aria-label={tr('connections.more', { name: card.title })} onClick={() => setInfo(card)}>{tr('connections.details')}</Button>
         </>
       );
     }
@@ -78,14 +78,14 @@ export function ChannelsPanel(): JSX.Element {
       return (
         <>
           <Button variant="secondary" size="sm" disabled={checking} onClick={() => void checkBusiness()}>{tr('connections.business.check')}</Button>
-          <Button variant="quiet" size="sm" icon="more" label={tr('connections.more', { name: card.title })} aria-haspopup="dialog" onClick={() => setInfo(card)} />
+          <Button variant="secondary" size="sm" aria-haspopup="dialog" aria-label={tr('connections.more', { name: card.title })} onClick={() => setInfo(card)}>{tr('connections.details')}</Button>
         </>
       );
     }
     if (!card.connected) {
       return r.sources && card.kind === 'minishop'
         ? <Button variant="primary" size="sm" onClick={() => connect('minishop')}>{tr('connections.connect')}</Button>
-        : card.kind === 'bedolaga' ? <Button variant="quiet" size="sm" onClick={() => setInfo(card)}>{tr('connections.details')}</Button> : (
+        : card.kind === 'bedolaga' ? <Button variant="secondary" size="sm" onClick={() => setInfo(card)}>{tr('connections.details')}</Button> : (
           r.sources ? <Button variant="primary" size="sm" onClick={() => connect('remnawave')}>{tr('connections.connect')}</Button> : null
         );
     }

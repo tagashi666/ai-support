@@ -12,7 +12,8 @@
 .empty { display: grid; gap: var(--s3); justify-items: start; padding: var(--s6) 0; }
 .emptyTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; }
 
-.grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
+/* От 22rem, не больше четырёх колонок (как на «Сегодня»). */
+.grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(max(22rem, calc((100% - 3 * var(--s3)) / 4)), 100%), 1fr)); }
 .card { display: grid; gap: var(--s3); align-content: start; height: 100%; }
 .cardTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; overflow-wrap: anywhere; }
 .state { display: flex; align-items: baseline; gap: var(--s2); font-size: var(--fs-body); line-height: var(--lh-body); }
