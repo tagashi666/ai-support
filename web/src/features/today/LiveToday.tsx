@@ -224,23 +224,30 @@ export function LiveToday(): JSX.Element {
           <h1 class={s.title}>{t('nav.today')}</h1>
           <span class={s.date}>{fullDate(at)}</span>
         </header>
-        {onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
-        <RevertLine />
-        {/* Числа держат место и до ответа сервера (J-6): «—», а не появление со сдвигом. */}
-        <dl class={s.metrics}>
-          <Metric label={t('today.metric.waiting')} value={pending ? null : waiting} tone="attention" />
-          <Metric label={t('today.metric.ai')} value={pending ? null : aiCount} />
-          {stats && <Metric label={t('today.metric.auto')} value={day ? day.totals.auto : null} />}
-          {stats && <Metric label={t('today.metric.drafts')} value={day ? day.totals.drafts : null} />}
-          {stats && <Metric label={t('today.metric.handoffs')} value={day ? day.totals.handoffs : null} />}
-        </dl>
-        <div class={s.grid}>
-          {pending ? <div class={`${s.cardSkeleton} ${s.wide}`} data-tall="true" aria-busy="true" aria-label={t('live.loading')} /> : waitingCard}
-          {pending ? <div class={s.cardSkeleton} aria-busy="true" aria-label={t('live.loading')} /> : assistantCard}
-          {!pending && attentionCard}
-          {!pending && awayCard}
-        </div>
-        {system}
+        {/* До bootstrap неизвестно, сколько чисел и карточек будет: ниже заголовка — пусто, а не
+            заглушки другой раскладки, которые потом сдвинутся (CLS, R2 D). Появляется целиком. */}
+        {boot && (
+          <div class={s.body}>
+            {onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
+            <RevertLine />
+            {/* Числа держат место и до ответа сервера (J-6): «—», а не появление со сдвигом. */}
+            <dl class={s.metrics}>
+              <Metric label={t('today.metric.waiting')} value={pending ? null : waiting} tone="attention" />
+              <Metric label={t('today.metric.ai')} value={pending ? null : aiCount} />
+              {stats && <Metric label={t('today.metric.auto')} value={day ? day.totals.auto : null} />}
+              {stats && <Metric label={t('today.metric.drafts')} value={day ? day.totals.drafts : null} />}
+              {stats && <Metric label={t('today.metric.handoffs')} value={day ? day.totals.handoffs : null} />}
+            </dl>
+            <div class={s.grid}>
+              {pending ? <div class={`${s.cardSkeleton} ${s.wide}`} data-tall="true" aria-busy="true" aria-label={t('live.loading')} /> : waitingCard}
+              {pending ? <div class={s.cardSkeleton} aria-busy="true" aria-label={t('live.loading')} /> : assistantCard}
+              {!pending && attentionCard}
+              {!pending && awayCard}
+            </div>
+            {/* Строка «Система» — только с готовыми карточками: под заглушками её сдвигало бы (CLS, R2 D). */}
+            {!pending && system}
+          </div>
+        )}
       </div>
       <WrongSheet messageId={wrongFor} onClose={() => setWrongFor(null)} />
     </div>

@@ -9,16 +9,17 @@
 .date { color: var(--text-3); font-size: var(--fs-body); }
 .date::first-letter { text-transform: uppercase; }
 
-/* Числа: ряд плиток слева, не растягиваются на весь экран. */
-.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s3); margin: 0; max-width: 64rem; }
+/* Числа: один ряд во всю ширину раздела (auto-fit — плитки делят ряд, пустых дорожек нет). */
+.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--s3); margin: 0; }
 .metric { display: grid; gap: 2px; padding: var(--s3) var(--s4); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
 .metricLabel { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metricValue { margin: 0; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; font-variant-numeric: tabular-nums; }
 .metric[data-tone="attention"] .metricValue { color: var(--attention); }
 @media (max-width: 767px) { .metrics { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: var(--s2); } .metric { padding: var(--s2) var(--s3); align-content: space-between; } .metricLabel { white-space: normal; } }
 
-/* Карточки: сетка по 22rem, «Ждут вас» — на две колонки, когда их хотя бы две. */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); gap: var(--s4); align-items: start; grid-auto-flow: row dense; container-type: inline-size; }
+/* Карточки: от 22rem, не больше четырёх колонок; auto-fit — карточки растягиваются на
+   всю ширину, пустых колонок справа нет. «Ждут вас» — на две колонки, когда их хотя бы две. */
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(max(22rem, calc((100% - 3 * var(--s4)) / 4)), 100%), 1fr)); gap: var(--s4); align-items: start; grid-auto-flow: row dense; container-type: inline-size; }
 @container (min-width: 45rem) { .wide { grid-column: span 2; } }
 .screen[data-compact="true"] .grid { grid-template-columns: minmax(0, 1fr); }
 .col { display: grid; gap: var(--s4); min-width: 0; }
@@ -62,3 +63,10 @@
 .cardSkeleton[data-tall="true"] { min-height: 18rem; }
 .lastSkeleton { min-height: 6rem; border-radius: var(--r-control); background: var(--surface-sunken); }
 .small[data-pending="true"] { visibility: hidden; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.body { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+.grid > *, .card > *, .body { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.cardSkeleton, .lastSkeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .cardSkeleton, .lastSkeleton { animation: none; } }
