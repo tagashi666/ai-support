@@ -8,6 +8,7 @@
  *   E2E_PANEL_UI=classic — PANEL_UI установки (e2e переключателя интерфейса, этап 8)
  *   POST :8198/burst?n=20&ms=50  — n сообщений клиентов с паузой ms
  *   POST :8198/drop              — разорвать все сокеты
+ *   POST :8198/inbound?i=1&text= — одно сообщение клиента i (→ {id} диалога)
  *   GET  :8198/stats             — {sent, extensions}
  * Только 127.0.0.1; база удаляется при выходе.
  */
@@ -23,6 +24,9 @@ const control = createServer((request, response) => {
   const reply = (body: unknown): void => { response.setHeader('content-type', 'application/json'); response.end(JSON.stringify(body)); };
   if (url.pathname === '/stats') return reply({ sent: panel.sent(), extensions: panel.extensions() });
   if (url.pathname === '/drop') { panel.dropSockets(); return reply({ ok: true }); }
+  if (url.pathname === '/inbound') {
+    return reply({ id: panel.inbound(Number(url.searchParams.get('i') ?? 1), url.searchParams.get('text') ?? undefined) });
+  }
   if (url.pathname === '/burst') {
     const n = Math.min(1000, Number(url.searchParams.get('n') ?? 10));
     const ms = Math.max(0, Number(url.searchParams.get('ms') ?? 50));

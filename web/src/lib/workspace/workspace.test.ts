@@ -6,7 +6,7 @@ import { DeferredQueue } from './deferred';
 import { DRAFT_MAX_AGE_MS, DraftStore, type DraftStorage } from './drafts';
 import { sendErrorView } from './errors';
 import { filterItems, filterSize } from './filter';
-import { patched } from './local';
+import { clientWrote, lastSign, patched } from './local';
 import { ACTIONS, actionsAt, availability } from './registry';
 import { applyThreadFrame, isStale, mergeMessages, type ThreadState } from './thread';
 import { TYPING_REPEAT_MS, TypingSignal } from './typing';
@@ -236,6 +236,21 @@ describe('фильтр и свои заплатки', () => {
     expect(patched(item({ id: 1, updated_at: 5 }), map)?.status).toBe('resolved');
     expect(patched(item({ id: 1, updated_at: 6 }), map)?.status).toBe('open');
     expect(patched(item({ id: 2, updated_at: 5 }), map)).toBeNull();
+  });
+  it('заплатка в окне отмены держится поверх новых кадров (L-1)', () => {
+    const map = new Map([[1, { base: 5, patch: { status: 'resolved' }, held: true }]]);
+    expect(patched(item({ id: 1, updated_at: 9 }), map)?.status).toBe('resolved');
+  });
+  it('клиент написал после нажатия — по отпечатку последнего сообщения (L-1)', () => {
+    const last = { author: 'client' as const, kind: 'text', text: 'Не работает', at: 100 };
+    const before = lastSign(item({ last }));
+    expect(clientWrote(before, item({ last }))).toBe(false);
+    // Та же секунда Telegram, другой текст — новое сообщение.
+    expect(clientWrote(before, item({ last: { ...last, text: 'Ещё вопрос' } }))).toBe(true);
+    expect(clientWrote(before, item({ last: { ...last, at: 101 } }))).toBe(true);
+    // Ответ оператора или помощника — не повод отменять «Решено».
+    expect(clientWrote(before, item({ last: { ...last, author: 'operator', at: 101 } }))).toBe(false);
+    expect(clientWrote('', item({ last: null }))).toBe(false);
   });
 });
 

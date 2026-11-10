@@ -286,6 +286,7 @@ export const ru = {
   'toast.important': 'Отмечено важным',
   'toast.unimportant': 'Отметка снята',
   'toast.hidden': 'Диалог убран из списка',
+  'toast.clientWrote': 'Клиент написал — диалог не закрыт · {name}',
   'toast.linkCopied': 'Ссылка скопирована',
   'toast.waitClient': 'Ждём ответа клиента',
   'toast.close': 'Закрыть уведомление',

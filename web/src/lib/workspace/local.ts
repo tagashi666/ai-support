@@ -14,6 +14,11 @@ export interface LocalPatch {
   patch: Partial<InboxItem>;
   /** Строку убрать из показа (скрыть из списка). */
   removed?: boolean;
+  /**
+   * Отложенное действие ещё в окне отмены: заплатка держится и поверх более
+   * новых кадров (чужая печать, присутствие), пока запрос не ушёл (L-1).
+   */
+  held?: boolean;
 }
 
 export const patches = signal<ReadonlyMap<number, LocalPatch>>(new Map());
@@ -34,18 +39,15 @@ export function dropPatch(id: number): void {
 /** Строка с учётом своей заплатки; null — убрана из показа. */
 export function patched(item: InboxItem, map: ReadonlyMap<number, LocalPatch> = patches.value): InboxItem | null {
   const local = map.get(item.id);
-  if (!local || item.updated_at > local.base) return item;
+  if (!local || (!local.held && item.updated_at > local.base)) return item;
   if (local.removed) return null;
   return { ...item, ...local.patch };
 }
 
-/** Заплатки, которые сервер уже перекрыл более новой версией, — снять. */
-export function prunePatches(items: readonly InboxItem[]): void {
-  const map = patches.peek();
-  if (map.size === 0) return;
-  const stale = items.filter((item) => (map.get(item.id)?.base ?? Infinity) < item.updated_at).map((item) => item.id);
-  if (stale.length === 0) return;
-  const next = new Map(map);
-  for (const id of stale) next.delete(id);
-  patches.value = next;
-}
+/** Отпечаток последнего сообщения строки: сменился и автор — клиент, значит клиент написал. */
+export const lastSign = (item: InboxItem | undefined): string =>
+  (item?.last ? `${item.last.author}|${item.last.at}|${item.last.kind}|${item.last.text}` : '');
+
+/** Клиент написал после отпечатка `before` (L-1: «Решено» в окне отмены уже не к месту). */
+export const clientWrote = (before: string, item: InboxItem | undefined): boolean =>
+  item?.last?.author === 'client' && lastSign(item) !== before;

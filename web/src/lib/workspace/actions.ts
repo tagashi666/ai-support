@@ -5,7 +5,7 @@
  * отмены. Действия, которые останавливают помощника (взять себе, выключить),
  * применяются сразу: здесь задержка опаснее. Отправка ответа — ярус 1.
  */
-import { computed, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import type { InboxItem, ReplyResponse, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { dismissToast, showToast, undoToast, UNDO_MS } from '@/lib/actions/toasts';
@@ -18,7 +18,7 @@ import { DraftSync, tabDevice } from './serverDrafts';
 import { deferred, deferWithUndo, type DeferredTask } from './deferred';
 import { DraftStore, type Quote } from './drafts';
 import { actionErrorText, sendErrorView } from './errors';
-import { dropPatch, patched, patches, setPatch } from './local';
+import { clientWrote, dropPatch, lastSign, patched, patches, setPatch } from './local';
 import { mergeMessages, syncThread, threads, updateThread, type Outgoing } from './thread';
 import { TypingSignal } from './typing';
 import { modeLabel } from './labels';
@@ -47,11 +47,16 @@ const post = <T = unknown>(path: string, body: unknown, keepalive = false): Prom
   sendJson<T>(path, token(), body, { keepalive });
 const state = (id: number, body: Record<string, unknown>, keepalive = false) => post(`/api/conversations/${id}/state`, body, keepalive);
 
-/** Строка диалога: из списка, иначе из шапки открытого диалога. */
-export function itemOf(id: number): InboxItem | undefined {
+/** Строка с сервера без своих заплаток: из списка или из шапки — что новее. */
+function serverItem(id: number): InboxItem | undefined {
   const listed = inbox.peek().entries.get(id)?.item;
   const head = threads.peek().get(id)?.head?.item;
-  const base = listed && head ? (listed.updated_at >= head.updated_at ? listed : head) : listed ?? head;
+  return listed && head ? (listed.updated_at >= head.updated_at ? listed : head) : listed ?? head;
+}
+
+/** Строка диалога: из списка, иначе из шапки открытого диалога. */
+export function itemOf(id: number): InboxItem | undefined {
+  const base = serverItem(id);
   return base ? patched(base, patches.peek()) ?? base : undefined;
 }
 
@@ -81,30 +86,61 @@ function undoable(text: string, undo: () => void): void {
 }
 
 /** Отложенное действие с «Отменить» в тосте и по ⌘Z; запрос ушёл — отменять уже нечего (M-2). */
-function deferUndoable(task: DeferredTask, text: string): void {
+function deferUndoable(task: DeferredTask, text: string): () => void {
   let run = (): void => undefined;
   const id = deferWithUndo({ ...task, started: () => { if (lastUndo === run) lastUndo = null; task.started?.(); } }, text, t('toast.undo'));
-  run = (): void => { dismissToast(id); lastUndo = null; deferred.cancel(task.key); };
+  run = (): void => { dismissToast(id); if (lastUndo === run) lastUndo = null; deferred.cancel(task.key); };
   lastUndo = run;
+  return run;
 }
 
-/** Заплатка поверх текущей строки: показ меняется сразу. */
-function patch(id: number, change: Partial<InboxItem>, removed = false): void {
+/** Заплатка поверх текущей строки: показ меняется сразу. held — держать поверх новых кадров до ухода запроса. */
+function patch(id: number, change: Partial<InboxItem>, removed = false, held = false): void {
   const item = itemOf(id);
-  setPatch(id, { base: item?.updated_at ?? 0, patch: change, ...(removed ? { removed: true } : {}) });
+  setPatch(id, { base: item?.updated_at ?? 0, patch: change, ...(removed ? { removed: true } : {}), ...(held ? { held: true } : {}) });
 }
 
-/** Отложенное действие яруса 0 со следом вне панели. */
-function deferredAction(id: number, key: string, change: Partial<InboxItem>, body: Record<string, unknown>, text: string, removed = false): void {
-  patch(id, change, removed);
+/** Запрос ушёл: заплатка снова живёт до первого кадра новее того, что сейчас известно. */
+function release(id: number): void {
+  guarded.delete(id);
+  const local = patches.peek().get(id);
+  if (local?.held) setPatch(id, { ...local, held: false, base: Math.max(local.base, serverItem(id)?.updated_at ?? 0) });
+}
+
+/**
+ * L-1: «Решено» или «Убрать» ждут окна отмены, а клиент тем временем
+ * написал — действие уже не к месту. Снимаем его до запроса (строка
+ * остаётся в «Ждут вас») и говорим об этом тостом. Отпечаток — последнее
+ * сообщение строки в момент нажатия.
+ */
+const guarded = new Map<number, { sign: string; cancel: () => void }>();
+function guard(id: number, cancel: () => void): void {
+  guarded.set(id, { sign: lastSign(serverItem(id)), cancel });
+}
+effect(() => {
+  inbox.value; threads.value;
+  for (const [id, entry] of guarded) {
+    const item = serverItem(id);
+    if (!clientWrote(entry.sign, item)) continue;
+    guarded.delete(id);
+    entry.cancel();
+    showToast({ text: t('toast.clientWrote', { name: item ? liveName(item) : '' }) });
+  }
+});
+
+/** Отложенное действие яруса 0 со следом вне панели; conflict — снять, если клиент напишет в окне отмены. */
+function deferredAction(id: number, key: string, change: Partial<InboxItem>, body: Record<string, unknown>, text: string, removed = false, conflict = false): void {
+  patch(id, change, removed, true);
   const taskKey = `${key}:${id}`;
-  deferUndoable({
+  const cancel = deferUndoable({
     key: taskKey,
     commit: async (keepalive) => { await state(id, body, keepalive); },
-    revert: () => dropPatch(id),
+    revert: () => { guarded.delete(id); dropPatch(id); },
     failed: failToast,
+    started: () => release(id),
     done: () => { void syncThread(id); },
   }, text);
+  if (conflict) guard(id, cancel);
 }
 
 /** Сразу, с «Отменить» обратным запросом. */
@@ -127,7 +163,7 @@ async function immediate(id: number, change: Partial<InboxItem>, body: Record<st
 
 export function resolve(id: number): void {
   deferredAction(id, 'resolve', { status: 'resolved', state: 'done', section: 'done' }, { status: 'resolved' },
-    t('toast.resolved', { name: nameOf(id) }));
+    t('toast.resolved', { name: nameOf(id) }), false, true);
 }
 
 export function reopen(id: number): void {
@@ -145,7 +181,7 @@ export function setImportant(id: number, value: boolean): void {
 }
 
 export function hide(id: number): void {
-  deferredAction(id, 'hide', {}, { hidden: true }, t('toast.hidden'), true);
+  deferredAction(id, 'hide', {}, { hidden: true }, t('toast.hidden'), true, true);
 }
 
 export function unhide(id: number): void {
@@ -455,9 +491,11 @@ export function bulk(ids: readonly number[], action: BulkAction): void {
   }
   for (const id of ids) {
     const item = itemOf(id);
-    if (action === 'resolve') patch(id, { status: 'resolved', state: 'done', section: 'done' });
-    else if (action === 'important') patch(id, { flags: { ...(item?.flags ?? { not_found: false, handoff: false }), important: true } });
-    else patch(id, {}, true);
+    if (action === 'resolve') patch(id, { status: 'resolved', state: 'done', section: 'done' }, false, true);
+    else if (action === 'important') patch(id, { flags: { ...(item?.flags ?? { not_found: false, handoff: false }), important: true } }, false, true);
+    else patch(id, {}, true, true);
+    // Клиент написал в окне отмены — эту строку из пакета не закрываем (L-1).
+    if (action !== 'important') guard(id, () => dropPatch(id));
   }
   const key = `bulk:${action}:${ids.join(',')}`;
   const body = BULK_BODY[action]!;
@@ -466,15 +504,18 @@ export function bulk(ids: readonly number[], action: BulkAction): void {
     key,
     commit: async (keepalive) => {
       const failed: number[] = [];
-      for (const id of ids) {
+      // Снятые по L-1 (заплатки уже нет) не отправляем.
+      const live = ids.filter((id) => patches.peek().get(id)?.held);
+      for (const id of live) release(id);
+      for (const id of live) {
         try { await state(id, body, keepalive); } catch { failed.push(id); dropPatch(id); }
       }
-      for (const id of ids) if (!failed.includes(id)) void syncThread(id);
+      for (const id of live) if (!failed.includes(id)) void syncThread(id);
       if (failed.length) {
-        showToast({ text: t('bulk.partial', { done: n - failed.length, n, names: failed.map(nameOf).filter(Boolean).join(', ') }), kind: 'error', ttl: null });
+        showToast({ text: t('bulk.partial', { done: live.length - failed.length, n: live.length, names: failed.map(nameOf).filter(Boolean).join(', ') }), kind: 'error', ttl: null });
       }
     },
-    revert: () => { for (const id of ids) dropPatch(id); },
+    revert: () => { for (const id of ids) { guarded.delete(id); dropPatch(id); } },
     failed: failToast,
   }, t(label, { n }));
 }
