@@ -63,10 +63,10 @@ export function duration(ms: number): string {
   return minutes === 0 ? t('time.hours', { h: hours }) : t('time.hoursMinutes', { h: hours, m: minutes });
 }
 
-/** Длительность без минут после двух часов: «2 ч», а не «2 ч 13 мин» (для строки списка). */
+/** Длительность без минут после часа: «1 ч», а не «1 ч 13 мин» (для строки списка). */
 export function roughDuration(ms: number): string {
   const total = Math.max(0, Math.round(ms / MIN));
-  if (total >= 120 && total < 24 * 60) return t('time.hours', { h: Math.floor(total / 60) });
+  if (total >= 60 && total < 24 * 60) return t('time.hours', { h: Math.floor(total / 60) });
   return duration(ms);
 }
 

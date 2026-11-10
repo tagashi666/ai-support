@@ -29,10 +29,8 @@
 /* Ничего не выбрано (R2 A6). */
 .pick { flex: 1; display: grid; place-content: center; justify-items: center; gap: var(--s2); padding: var(--s6); color: var(--text-3); text-align: center; }
 .pickTitle { margin: 0; color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 500; }
-.pickKeys { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s1) var(--s4); margin: var(--s2) 0 0; font-size: var(--fs-small); line-height: var(--lh-small); }
+.pickKeys { margin: 0; font-size: var(--fs-small); line-height: var(--lh-small); }
 .pickKeys kbd { display: inline-block; min-width: 20px; margin-right: 2px; padding: 0 var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text-2); font: inherit; font-weight: 500; text-align: center; }
-.pickAll { border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
-.pickAll:hover { color: var(--text); }
 @media (pointer: coarse) { .pickKeys { display: none; } }
 
 /* ---------- Строка состояния ---------- */

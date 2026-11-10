@@ -248,7 +248,7 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
             {canTemplates && <Button variant="quiet" size="sm" icon="note" onClick={openTemplates}>{t('composer.templates')}</Button>}
             {canFiles ? (
               <Button variant="quiet" size="sm" icon="plus" onClick={() => fileInput.current?.click()} title={t('composer.attachHint')}>{t('composer.attach')}</Button>
-            ) : !head.attachments ? <span class={w.toolNote}>{t('composer.textOnly')}</span> : null}
+            ) : null}
             {canCapture && <Button variant="quiet" size="sm" onClick={() => { void capture(); }} title={t('editor.captureHint', { mod: modLabel(), keys: '⇧S' })}>{t('editor.capture')}</Button>}
             <input ref={fileInput} type="file" multiple hidden onChange={(event) => {
               const input = event.target as HTMLInputElement;

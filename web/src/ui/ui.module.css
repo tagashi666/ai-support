@@ -147,7 +147,6 @@
 .unreadDot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; align-self: center; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
 .row[data-unread="true"] .unreadDot { opacity: 1; }
 .rowTime { flex: none; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-3); font-weight: 500; }
-.row[data-unread="true"] .rowTime { color: var(--accent-text); }
 .rowLine {
   overflow: hidden;
   text-overflow: ellipsis;

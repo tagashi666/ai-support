@@ -5,7 +5,6 @@ import { t } from '@/i18n/ru';
 import { layerOpen } from '@/lib/keys';
 import { isSplit, isWide } from '@/lib/media';
 import { modLabel } from '@/lib/keys';
-import { keysHelpOpen } from '@/lib/palette/run';
 import { Icon } from '@/ui/Icon';
 import { navigate } from '@/lib/router';
 import { clientPinned } from '@/lib/store/state';
@@ -23,18 +22,13 @@ import { WorkList } from './WorkList';
 const TutorialThread = lazyScreen(() => import('@/features/onboarding/Tutorial').then((module) => module.TutorialThread), () => <div aria-busy="true" />);
 import { WorkThread } from './WorkThread';
 
-/** Правая часть без выбранного диалога (R2 A6): тихо — значок, одна строка, клавиши. */
+/** Правая часть без выбранного диалога (R2 A6): значок, заголовок и строка клавиш — на одной оси. */
 function NoThread(): JSX.Element {
   return (
     <div class={s.pick}>
       <Icon name="chats" size={28} />
       <p class={s.pickTitle}>{t('chats.pick')}</p>
-      <p class={s.pickKeys}>
-        <span><kbd>↑</kbd><kbd>↓</kbd> {t('chats.pickRows')}</span>
-        <span><kbd>Enter</kbd> {t('chats.pickOpen')}</span>
-        <span><kbd>{modLabel().replace('+', '')}K</kbd> {t('chats.pickSearch')}</span>
-        <button type="button" class={s.pickAll} onClick={() => { keysHelpOpen.value = true; }}><kbd>?</kbd> {t('chats.pickAll')}</button>
-      </p>
+      <p class={s.pickKeys} aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> <kbd>Enter</kbd> <kbd>{modLabel().replace('+', '')}K</kbd></p>
     </div>
   );
 }

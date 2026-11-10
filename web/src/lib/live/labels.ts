@@ -6,20 +6,21 @@ import type { InboxItem } from '@shared/api-types';
 import type { ReasonCode } from '@shared/attention';
 import { t } from '@/i18n/ru';
 import { clock, listTime, roughDuration } from '@/lib/format/format';
-import type { ReasonView, Tone } from '@/lib/labels';
+import { withWaitLead, type ReasonView, type Tone } from '@/lib/labels';
 import type { Channel } from '@/lib/types';
 
+/** Янтарный и ▲ — только у просроченных: когда подсвечено всё, подсветка не работает. */
 const TONE: Record<ReasonCode, Tone> = {
-  handoff: 'attention',
+  handoff: 'quiet',
   sla_overdue: 'attention',
-  ai_silent: 'attention',
+  ai_silent: 'quiet',
   draft_unsure: 'ai',
   draft_ready: 'ai',
-  important: 'attention',
-  urgent: 'attention',
+  important: 'quiet',
+  urgent: 'quiet',
   sla_soon: 'quiet',
   waiting: 'quiet',
-  check: 'attention',
+  check: 'quiet',
   ai_replying: 'quiet',
   ai_replied: 'quiet',
   waiting_client: 'quiet',
@@ -37,7 +38,7 @@ export function liveReasonView(item: InboxItem, now: number): ReasonView {
   }
   const { code, since } = item.reason;
   const waited = item.waiting_since !== null ? roughDuration(now - item.waiting_since) : null;
-  const withWait = (text: string): string => (waited ? `${text} · ${t('reason.waitsFor', { for: waited })}` : text);
+  const withWait = (text: string): string => withWaitLead(waited, text);
   const from = since ?? now;
   let text: string;
   switch (code) {

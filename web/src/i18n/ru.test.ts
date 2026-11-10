@@ -53,7 +53,7 @@ describe('словарь', () => {
   });
 
   it('подстановки и склонения', () => {
-    expect(t('reason.waitsFor', { for: '2 ч' })).toBe('ждёт 2 ч');
+    expect(t('reason.waitsLead', { for: '2 ч', what: 'передан человеку' })).toBe('Ждёт 2 ч · передан человеку');
     expect([1, 2, 5, 11, 21, 22].map((n) => `${n} ${tn('plural.dialogs', n)}`))
       .toEqual(['1 диалог', '2 диалога', '5 диалогов', '11 диалогов', '21 диалог', '22 диалога']);
     expect(tn('plural.updates', 3)).toBe('обновления');

@@ -27,9 +27,11 @@ describe('живой список: подписи', () => {
     expect(view.text).toBe('Ведёт Мария');
   });
 
-  it('срочные причины — янтарные, черновик — фиолетовый', () => {
+  it('янтарная только просрочка, черновик — фиолетовый; время ожидания — в начале строки', () => {
     expect(isUrgentCode('handoff') && isUrgentCode('ai_silent') && !isUrgentCode('waiting')).toBe(true);
-    expect(liveReasonView(item({ reason: { code: 'ai_silent', since: NOW } }), NOW).tone).toBe('attention');
+    expect(liveReasonView(item({ reason: { code: 'sla_overdue', since: NOW - 3_600_000 } }), NOW)).toEqual({ text: 'Просрочено 1 ч', tone: 'attention' });
+    expect(liveReasonView(item({ reason: { code: 'ai_silent', since: NOW } }), NOW).tone).toBe('quiet');
+    expect(liveReasonView(item({ reason: { code: 'handoff', since: NOW } }), NOW).text).toBe('Ждёт 1 ч · передан человеку');
     expect(liveReasonView(item({ reason: { code: 'draft_ready', since: NOW } }), NOW).tone).toBe('ai');
   });
 

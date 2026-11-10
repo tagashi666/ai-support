@@ -48,12 +48,8 @@
 .choice { display: flex; align-items: center; gap: var(--s2); min-height: 44px; font-size: var(--fs-body); }
 .choice input { width: 20px; height: 20px; accent-color: var(--accent); }
 
-/* Шапка диалога: на телефоне имя целиком в первой строке, кнопки — во второй. */
-@media (max-width: 767px) {
-  .headTop { flex-wrap: wrap; row-gap: var(--s1); }
-  .headActions { flex: 1 1 100%; justify-content: flex-end; }
-}
-.fullName { white-space: normal; overflow-wrap: anywhere; }
+/* Шапка диалога: на телефоне имя в одну строку с многоточием слева от кнопок; шире — целиком. */
+@media (min-width: 768px) { .fullName { white-space: normal; overflow-wrap: anywhere; } }
 .ledBy { color: var(--text-3); font-size: var(--fs-small); }
 .presence { color: var(--text-2); font-size: var(--fs-small); }
 .quietLine { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); }
@@ -131,13 +127,12 @@
 .draftSlot[data-state="closing"] { animation: var(--kf-sink-out) var(--dur-exit) var(--ease-exit) forwards; }
 .draftBody { font-size: var(--fs-msg); line-height: var(--lh-msg); }
 .expert { color: var(--text-3); font-size: var(--fs-small); }
-.expert summary { min-height: 32px; display: flex; align-items: center; cursor: pointer; }
-@media (pointer: coarse) { .expert summary { min-height: var(--target); } }
+.expert summary { min-height: 32px; margin-block: calc(-1 * var(--s2)); display: flex; align-items: center; cursor: pointer; }
+@media (pointer: coarse) { .expert summary { min-height: var(--target); margin-block: calc(-1 * var(--s3)); } }
 
 /* Поле ответа */
 .composerBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .tools { display: flex; align-items: center; gap: var(--s1); }
-.toolNote { color: var(--text-3); font-size: var(--fs-small); }
 .quoteLine { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); padding-left: var(--s2); border-left: 2px solid var(--accent); color: var(--text-2); font-size: var(--fs-small); }
 .quoteLine > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .templateSearch {
