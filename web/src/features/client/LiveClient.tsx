@@ -37,7 +37,7 @@ function Section({ id, title, count, children, folds, onFold }: {
   const open = folds[id] ?? false;
   return (
     <details class={s.fold} open={open} onToggle={(event) => { const next = (event.currentTarget as HTMLDetailsElement).open; if (next !== open) onFold(id, next); }}>
-      <summary class={s.foldHead}>{title}{count !== undefined && <span class="num"> ({count})</span>}</summary>
+      <summary class={s.foldHead}>{title}{count !== undefined && <span class="num">({count})</span>}</summary>
       <div class={s.foldBody}>{children}</div>
     </details>
   );
@@ -211,7 +211,7 @@ export function LiveClient({ id, item, onClose, inSheet = false }: { id: number;
           <p><b>{t('client.notFound')}</b></p>
           <p class={s.meta}>{t('client.notFoundText')}</p>
           <div class={s.actionsRow}>
-            {(customer.trace?.length ?? 0) > 0 && <Button variant="quiet" size="sm" onClick={() => onFold('sources', true)}>{t('client.whatChecked')}</Button>}
+            {(customer.trace?.length ?? 0) > 0 && <Button variant="secondary" size="sm" onClick={() => onFold('sources', true)}>{t('client.whatChecked')}</Button>}
             {perms.has('conversation:profile') && <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void refresh(); }}>{t('client.refresh')}</Button>}
           </div>
         </div>
