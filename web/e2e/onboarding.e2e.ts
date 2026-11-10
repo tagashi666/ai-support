@@ -22,7 +22,7 @@ test('владелец: чек-лист по фактам, учебный диа
   await expect(list).toBeVisible();
   // В синтетике канал, модель, статьи и коллега есть — открыт только учебный диалог.
   await expect(list.getByRole('heading')).toHaveText(/НАЧАЛО РАБОТЫ · 5 ИЗ 6|Начало работы · 5 из 6/i);
-  await list.getByRole('button', { name: 'Открыть' }).click();
+  await list.getByRole('button', { name: 'Открыть', exact: true }).click();
   await expect(page).toHaveURL(/\/next\/chats\/learn$/);
   await expect(page.getByText('Учебный диалог: клиенту ничего не уходит, в отчёты не попадает.')).toBeVisible();
 
@@ -30,9 +30,9 @@ test('владелец: чек-лист по фактам, учебный диа
   const calls: string[] = [];
   page.on('request', (request) => { if (/\/api\/(conversations|suggestions|thread)/.test(request.url())) calls.push(request.url()); });
   const draft = page.getByRole('region', { name: 'Черновик помощника · Уверен' });
-  await draft.getByRole('button', { name: 'Отправить' }).click();
+  await draft.getByRole('button', { name: 'Отправить', exact: true }).click();
   await expect(page.getByText('Учебный диалог: клиенту ничего не ушло').first()).toBeVisible();
-  await draft.getByRole('button', { name: 'Править' }).click();
+  await draft.getByRole('button', { name: 'Править', exact: true }).click();
   const field = page.getByRole('textbox', { name: 'Ваш ответ…' });
   await expect(field).toBeFocused();
   await field.press('End');
@@ -41,8 +41,8 @@ test('владелец: чек-лист по фактам, учебный диа
   await page.getByRole('tab', { name: 'Заметка' }).click();
   await page.getByRole('textbox', { name: /Заметка для команды/ }).fill('Клиент на iOS');
   await page.getByRole('button', { name: 'Сохранить заметку' }).click();
-  await page.getByRole('button', { name: 'Решено' }).click();
-  await page.getByRole('button', { name: 'Отменить' }).click();
+  await page.getByRole('button', { name: 'Решено', exact: true }).click();
+  await page.getByRole('button', { name: 'Отменить', exact: true }).click();
   await expect(page.getByText('Сделано 5 из 5')).toBeVisible();
   expect(calls, 'запросы из учебного диалога').toEqual([]);
 
@@ -112,7 +112,7 @@ test('«… ждёт вас»: тост в другом разделе, числ
   await request.post(`/api/conversations/${target!.id}/state`, { headers: { authorization: `Bearer ${TOKEN}` }, data: { handoff: true } });
   const toast = page.getByRole('status').filter({ hasText: 'ждёт вас' });
   await expect(toast).toBeVisible();
-  await toast.getByRole('button', { name: 'Открыть' }).click();
+  await toast.getByRole('button', { name: 'Открыть', exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/next/chats/${target!.id}$`));
 });
 

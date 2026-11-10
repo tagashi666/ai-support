@@ -70,9 +70,12 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
   useEffect(() => {
     openThreadId.value = id;
     void loadThread(id);
-    void draftSync.open(id);
     return () => { if (openThreadId.peek() === id) openThreadId.value = null; };
   }, [id]);
+
+  // Свой черновик с сервера (7.8) — когда известны права: по прямой ссылке bootstrap приходит позже.
+  const booted = bootstrap.value !== null;
+  useEffect(() => { if (booted) void draftSync.open(id); }, [id, booted]);
 
   // Присутствие раз в 15 с, пока вкладка видна (как сейчас у классики): «Мария смотрит».
   useEffect(() => {

@@ -40,16 +40,18 @@ test.describe('совместная работа', () => {
 
   test('«Попросить передать» → тост у того, кто ведёт, «Передать» освобождает диалог', async ({ browser, request }) => {
     const owner = await open(browser);
-    const ivanToken = await operator(owner, `Пётр ${Date.now() % 100000}`);
+    const ivanToken = await operator(owner, `Борис ${Date.now() % 100000}`);
     const ivan = await open(browser, ivanToken);
     const target = (await openItems(request)).find((item) => !item.owner && item.state !== 'done' && item.channel === 'telegram' && item.section === 'mine')!;
     await owner.goto(`/next/chats/${target.id}`);
-    await owner.getByRole('button', { name: 'Взять себе' }).click();
+    // Закрепить за владельцем: чип «Взять себе» есть не у каждого диалога (у «Подсказывает» главной кнопки нет).
+    const engaged = await request.post(`/api/conversations/${target.id}/engage`, { headers: auth, data: {} });
+    expect(engaged.ok()).toBeTruthy();
     await ivan.goto(`/next/chats/${target.id}`);
     await ivan.getByRole('button', { name: 'Попросить передать' }).click();
     const toast = owner.getByRole('status').filter({ hasText: 'просит передать диалог' });
     await expect(toast).toBeVisible({ timeout: 10_000 });
-    await toast.getByRole('button', { name: 'Передать' }).click();
+    await toast.getByRole('button', { name: 'Передать', exact: true }).click();
     await expect.poll(async () => (await openItems(request)).find((item) => item.id === target.id)?.owner ?? null, { timeout: 10_000 }).toBeNull();
     // У просящего чип сменился сам — кадром списка, без перезагрузки.
     await expect(ivan.getByRole('button', { name: 'Попросить передать' })).toHaveCount(0, { timeout: 10_000 });
