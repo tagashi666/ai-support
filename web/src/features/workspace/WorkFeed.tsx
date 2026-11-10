@@ -119,8 +119,12 @@ function AttachmentView({ file, onOpen }: { file: ThreadAttachment; onOpen: (fil
   if (file.kind === 'tgs_sticker' || file.mime === 'application/x-tgsticker') return <TgsSticker id={file.id} />;
   if ((file.kind === 'photo' || file.kind === 'sticker' || (file.kind === 'animation' && file.mime === 'image/gif')) && file.mime !== 'application/x-tgsticker') {
     return (
-      <button type="button" class={w.media} style={{ aspectRatio: ratio ?? '4 / 3' }} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
-        <TicketImage src={src} width={file.width ?? undefined} height={file.height ?? undefined} />
+      <button type="button" class={w.media} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
+        {/* Пропорции — на внутреннем блоке: Firefox не применяет aspect-ratio к <button>,
+            рамка была 0×0 и loading=lazy картинку не запрашивал. */}
+        <span class={w.mediaFrame} style={{ aspectRatio: ratio ?? '4 / 3' }}>
+          <TicketImage src={src} width={file.width ?? undefined} height={file.height ?? undefined} />
+        </span>
       </button>
     );
   }
