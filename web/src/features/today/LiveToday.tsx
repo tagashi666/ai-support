@@ -244,8 +244,9 @@ export function LiveToday(): JSX.Element {
               {!pending && attentionCard}
               {!pending && awayCard}
             </div>
-            {/* Строка «Система» — только с готовыми карточками: под заглушками её сдвигало бы (CLS, R2 D). */}
-            {!pending && system}
+            {/* Строка «Система» — только с готовыми карточками: под заглушками её сдвигало бы (CLS, R2 D).
+                Неполадку уже называет «Нужно внимание» — второй раз строкой её не повторяем. */}
+            {!pending && !(linked && firstIssue) && system}
           </div>
         )}
       </div>

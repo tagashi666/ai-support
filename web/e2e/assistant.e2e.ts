@@ -43,8 +43,10 @@ test('«Сегодня»: заголовок без приветствия, чи
   const card = page.getByRole('region', { name: 'Ждут вас' });
   await expect(card.getByRole('button').first()).toBeVisible();
   await expect(page.getByRole('region', { name: 'Помощник' }).getByText('Подсказывает', { exact: true })).toBeVisible();
-  // В синтетике сервер «Франкфурт-2» не отвечает (этап 6): строка «Система» называет неполадку.
-  await expect(page.getByText(/Система:.*сервер Франкфурт-2 не отвечает/)).toBeVisible();
+  // В синтетике сервер «Франкфурт-2» не отвечает (этап 6): неполадку называет «Нужно внимание»,
+  // строка «Система» её не повторяет (R-7).
+  await expect(page.getByRole('region', { name: 'Нужно внимание' }).getByText(/Франкфурт-2 не отвечает/)).toBeVisible();
+  await expect(page.getByText(/Система:/)).toHaveCount(0);
   await expectNoHorizontalScroll(page);
   await card.getByRole('button').first().click();
   await expect(page).toHaveURL(/\/next\/chats\/\d+$/);
