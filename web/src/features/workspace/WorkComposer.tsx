@@ -11,7 +11,7 @@ import { connection } from '@/lib/live/store';
 import { isDesktop } from '@/lib/media';
 import { now } from '@/lib/store/state';
 import {
-  drafts, draftSync, draftTick, FILE_MAX_BYTES, FILES_MAX, isDangerous, permissions, resolve, saveNote, sendFile, sendReply,
+  drafts, draftSync, draftTick, FILE_MAX_BYTES, meKey, FILES_MAX, isDangerous, permissions, resolve, saveNote, sendFile, sendReply,
   ownUndoMs, typingKey, waitClient,
 } from '@/lib/workspace/actions';
 import type { LocalDraft } from '@/lib/workspace/drafts';
@@ -90,6 +90,13 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
   const remote = draftSync.tick.value;
   useEffect(() => { if (remote > 0) setDraftState(drafts.get(id)); }, [remote]);
   const conflict = draftSync.conflicts.value.get(id) ?? null;
+  // «Коллега ответил, пока вы писали» (6.3.7): ответ человека из команды после вашей последней правки.
+  const [seenAnswer, setSeenAnswer] = useState(0);
+  const me = meKey.value;
+  const answered = mode === 'reply' && draft.text.trim()
+    ? [...(threads.value.get(id)?.messages ?? [])].reverse().find((message) => message.voice === 'operator' && message.author !== null
+      && message.author.id !== me && message.at > draft.at && message.id > seenAnswer)
+    : undefined;
 
   // Чужие изменения черновика («Править», «Вернуть в поле», цитата из ленты) — в поле.
   const wantFocus = useRef(false);
@@ -206,6 +213,16 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
       onDrop={(event) => { if (!canFiles || mode !== 'reply') return; event.preventDefault(); addFiles(event.dataTransfer?.files ?? null); }}>
       {colleague !== null && <p class={s.notice}>{t('composer.colleagueLeads', { name: colleague })}</p>}
       {!canReply && colleague === null && <p class={s.notice}>{t('composer.noReplyRight')}</p>}
+      {answered && (
+        <div class={w.draftConflict} role="status">
+          <span>{t('own.answered', { name: answered.author?.name ?? '', time: clock(answered.at) })}</span>
+          <Button variant="quiet" size="sm" onClick={() => {
+            document.querySelector(`[data-message-id="${answered.id}"]`)?.scrollIntoView({ block: 'center' });
+          }}>{t('own.seeAnswer')}</Button>
+          <Button variant="secondary" size="sm" onClick={() => setSeenAnswer(answered.id)}>{t('own.sendAnyway')}</Button>
+          <Button variant="quiet" size="sm" onClick={() => { setSeenAnswer(answered.id); drafts.clear(id); setDraftState(drafts.get(id)); }}>{t('own.dropMine')}</Button>
+        </div>
+      )}
       {conflict && (
         <div class={w.draftConflict} role="status">
           <span>{t('own.elsewhere', { time: clock(conflict.updated_at) })}</span>

@@ -293,7 +293,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
         && sameDay(prev.at, entry.at) && entry.at - prev.at < 10 * 60_000;
       const text = message.text ?? '';
       out.push(
-        <div key={entry.key} class={`${grouped ? s.msgGrouped : s.msg} ${w.msgRow}`} data-side={voice === 'client' ? 'in' : 'out'}
+        <div key={entry.key} class={`${grouped ? s.msgGrouped : s.msg} ${w.msgRow}`} data-side={voice === 'client' ? 'in' : 'out'} data-message-id={String(message.id)}
           onContextMenu={(event) => { event.preventDefault(); setMenu(message); }}>
           <Bubble
             voice={voice}
