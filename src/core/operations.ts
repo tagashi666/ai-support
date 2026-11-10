@@ -501,7 +501,7 @@ export class Operations {
     // открыли заново, created_at и first_response_at остались от прошлого
     // обращения, и свежий вопрос сразу числился просроченным.
     return (this.db.prepare(`
-      SELECT c.id, c.channel, c.username, c.display_name, c.status, c.priority, c.assignee,
+      SELECT c.id, c.channel, c.username, c.display_name, c.status, c.priority, c.assignee, c.claimed_at,
              c.first_inbound_at, c.first_response_at, c.created_at, c.last_message_at,
              p.first_response_minutes, p.resolution_minutes,
              ${REOPENED_AT_SQL} AS reopened_at
@@ -520,7 +520,9 @@ export class Operations {
         : Boolean(this.db.prepare(`SELECT 1 FROM message WHERE conversation_id = ? AND direction = 'out' AND created_at >= ? LIMIT 1`)
           .get(row.id, reopenedAt));
       const due = responded ? resolutionDue : Math.min(firstDue, resolutionDue);
-      return { ...row, due_at: due, overdue: due < now, owner_name: row.assignee ? this.actorName(String(row.assignee)) : null };
+      // owner_live (10.6 п.8): закрепление ещё действует — «ведёт», а не «вёл».
+      const ownerLive = Boolean(row.assignee && row.claimed_at && Number(row.claimed_at) + 15 * 60_000 > now);
+      return { ...row, due_at: due, overdue: due < now, owner_name: row.assignee ? this.actorName(String(row.assignee)) : null, owner_live: ownerLive };
     });
   }
 

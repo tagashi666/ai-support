@@ -10,6 +10,7 @@ import type { RouteContext } from '../context.js';
 import { channelAvailability } from '../helpers.js';
 import { countsFor, listInbox, openProjections, type InboxQuery } from '../inbox.js';
 import { frameFor } from '../live.js';
+import { systemProblems } from '../problems.js';
 import { apiError } from '../errors.js';
 
 const VIEWS: readonly InboxView[] = ['waiting', 'open', 'resolved'];
@@ -83,6 +84,8 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const aiKeys = config.ai.apiKeys.length > 0;
     const canUpdate = operations.can(actor, 'settings:update');
     const cached = canUpdate ? updates.cachedAvailability() : null;
+    const canDiagnose = operations.can(actor, 'diagnostics:read');
+    const problems = canDiagnose ? systemProblems(ctx) : [];
     return {
       me: { id: actor.key, name: actor.name, role: actor.role, permissions: operations.permissionsFor(actor) },
       version,
@@ -105,8 +108,9 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
         mine: counts.sections.mine,
         waiting: counts.waiting,
         ideas: operations.can(actor, 'knowledge:review') ? operations.candidates('pending').length : null,
-        problems: null,
+        problems: canDiagnose ? problems.length : null,
       },
+      problems: canDiagnose ? problems : null,
       update: canUpdate ? { available: cached?.available ?? false, latest: cached?.latest ?? null } : null,
       live: { seq: live.events.seq, epoch: live.events.epoch },
     };

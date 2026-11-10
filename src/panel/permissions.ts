@@ -62,7 +62,14 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   if (/\/conversations\/\d+\/(?:state|engage|release)(?:\?|$)/.test(url)) return 'conversation:status';
   if (url.startsWith('/api/settings/services/')) return 'settings:services';
   if (url.startsWith('/api/settings/test-alert')) return 'settings:alerts';
+  // 10.6 п.1: смотреть серверы может всякий, кто видит систему; обновить и переименовать — settings:nodes.
+  if ((method === 'GET' || method === 'HEAD') && /^\/api\/nodes(?:\?|$)/.test(url)) return 'settings:read';
   if (url.startsWith('/api/nodes')) return 'settings:nodes';
+  // Этап 6 (6.9, 6.11): неполадки — diagnostics:read; уведомления и подключения — чтение настроек.
+  if (/^\/api\/system\/problems(?:\?|$)/.test(url)) return 'diagnostics:read';
+  if (/^\/api\/system\/notifications(?:\?|$)/.test(url)) return 'settings:read';
+  if (/^\/api\/connections(?:\?|$)/.test(url)) return 'settings:read';
+  if ((method === 'GET' || method === 'HEAD') && /^\/api\/team\/names(?:\?|$)/.test(url)) return 'conversation:read';
   if (url === '/api/settings' || url.startsWith('/api/settings?')) return 'settings:read';
   if ((method === 'GET' || method === 'HEAD') && CONVERSATION_READ_ROUTES.test(url)) return 'conversation:read';
   return undefined;

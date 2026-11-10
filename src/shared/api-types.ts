@@ -128,8 +128,10 @@ export interface BootstrapResponse {
   channels: Record<string, boolean>;
   sources: Array<{ id: string; kind: string; name: string; enabled: boolean }>;
   folders: Array<{ id: number; name: string; color: string | null; position: number; source_ids: string[] }>;
-  /** ideas — идеи статей на проверке (null без права knowledge:review); problems — появится с разделом «Система». */
+  /** ideas — идеи статей на проверке (null без права knowledge:review); problems — неполадки (null без diagnostics:read). */
   counts: { mine: number; waiting: number; ideas: number | null; problems: number | null };
+  /** Неполадки для «Нужно внимание» и точки у «Системы» (этап 6); null без права diagnostics:read. */
+  problems?: SystemProblem[] | null;
   /** Есть новая версия; только при праве settings:update, иначе null. */
   update: { available: boolean; latest: string | null } | null;
   live: { seq: number; epoch: string };
@@ -446,4 +448,35 @@ export interface IdeaDecided {
   decision: 'approved' | 'rejected';
   /** Имя того, кто решил; null — не нашли. */
   decided_by: string | null;
+}
+
+/**
+ * Неполадка системы (этап 6, 6.1 и 6.9). Считается сервером по локальному
+ * состоянию, без сетевых вызовов: снимок серверов, журнал обновлений, задачи.
+ * error — что-то не работает; warn — стоит проверить.
+ */
+export type SystemProblemCode = 'nodes_offline' | 'nodes_error' | 'update_failed' | 'job_failed';
+export interface SystemProblem {
+  code: SystemProblemCode;
+  severity: 'error' | 'warn';
+  /** Сколько затронуто (серверов, задач). */
+  count: number;
+  /** Первый затронутый: имя сервера, версия, вид задачи. */
+  subject: string | null;
+  at: number | null;
+}
+export interface ProblemsResponse { problems: SystemProblem[]; checkedAt: number }
+
+/** GET /api/team/names (10.6 п.4): имена команды для всех с conversation:read. */
+export interface TeamNamesResponse { people: Array<{ id: string; name: string; role: string; online: boolean }> }
+
+/** GET /api/connections (6.11): каналы и источники без сетевых вызовов и без секретов. */
+export interface ConnectionsResponse {
+  sources: Array<{ id: string; kind: string; name: string; enabled: boolean }>;
+  serviceProfiles: Record<string, { sourceId: string; serviceName: string; greetingMessage: string; handoffMessage: string }>;
+  businessConnections: Array<{ id: string; name: string | null; username: string | null; enabled: boolean }>;
+  remnawave: Array<{ id: string; name: string; readOnly: boolean }>;
+  bedolaga: { enabled: boolean; lastPoll: string | null };
+  minishop: { enabled: boolean; lastPoll: string | null };
+  sourceManagement: { queued: boolean; progress: Record<string, unknown> | null };
 }

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { version } from '../../config.js';
 import { PERMISSION_CATALOG } from '../../core/operations.js';
 import type { RouteContext } from '../context.js';
+import type { TeamNamesResponse } from '../../shared/api-types.js';
 
 /** Операторы, роли, личная статистика и журнал аудита. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
@@ -10,6 +11,19 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
   app.get('/api/me', async (request) => {
     const actor = actorOf(request);
     return { actor: { ...actor, permissions: operations.permissionsFor(actor) }, version };
+  });
+
+  // Имена команды для всех, кто видит диалоги (10.6 п.4): без ролей-прав и дат, только кто есть и в сети ли.
+  app.get('/api/team/names', async (): Promise<TeamNamesResponse> => {
+    const seen = new Set((ctx.store.db.prepare(`SELECT DISTINCT actor_key FROM operator_presence WHERE seen_at > ?`)
+      .all(Date.now() - 2 * 60_000) as Array<{ actor_key: string }>).map((row) => row.actor_key));
+    const root = operations.rootActor();
+    const people = [
+      { id: root.key, name: root.name, role: root.role, online: seen.has(root.key) },
+      ...operations.listOperators().filter((row) => Boolean(row.active))
+        .map((row) => ({ id: `op:${row.id}`, name: String(row.name), role: String(row.role), online: seen.has(`op:${row.id}`) })),
+    ];
+    return { people };
   });
 
   app.get('/api/operators', async (request, reply) => {

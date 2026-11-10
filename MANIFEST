@@ -48,6 +48,7 @@ public/ui-v3.css
 scripts/aitest.ts
 scripts/assistanttest.ts
 scripts/baretest.ts
+scripts/devfakes.ts
 scripts/devlive.ts
 scripts/devseed.ts
 scripts/e2eserver.ts
@@ -67,6 +68,7 @@ scripts/sectest.ts
 scripts/setuptest.ts
 scripts/smoke.ts
 scripts/source-updater.sh
+scripts/systemtest.ts
 scripts/threadtest.ts
 scripts/uitest.ts
 scripts/updatetest.ts
@@ -142,6 +144,7 @@ src/panel/inbox.ts
 src/panel/kbfiles.ts
 src/panel/live.ts
 src/panel/permissions.ts
+src/panel/problems.ts
 src/panel/routes/ai.ts
 src/panel/routes/assistant.ts
 src/panel/routes/conversations.ts
