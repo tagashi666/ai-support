@@ -25,6 +25,7 @@ export const ru = {
   'nav.main': 'Разделы',
   'shell.newVersion': 'Вышла новая версия панели {version}',
   'shell.reload': 'Обновить страницу',
+  'shell.hideStrip': 'Скрыть до следующего изменения',
   'nav.systemError': '(есть неполадка)',
   'nav.systemWarn': '(есть что проверить)',
   'nav.systemUpdate': '(вышла новая версия)',

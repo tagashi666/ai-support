@@ -170,7 +170,7 @@ export function HintsPanel(): JSX.Element {
     try { setState(await getJson<HintsState>('/api/interface-kb', token())); } catch { setState('error'); }
   };
   useEffect(() => { void load(); }, []);
-  if (state === null) return <div class={k.skeleton} aria-hidden="true" />;
+  if (state === null) return <div class={k.skeleton} key="skeleton" aria-hidden="true" />;
   if (state === 'error') return <p class={k.error} role="alert">{t('kb.loadFailed')} <Button variant="link" size="sm" onClick={() => void load()}>{t('live.retry')}</Button></p>;
   const mode = state.effectiveMode;
   const rows = hintRows(state, mode);

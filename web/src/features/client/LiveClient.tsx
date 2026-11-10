@@ -298,7 +298,7 @@ export function LiveClient({ id, item, onClose, inSheet = false }: { id: number;
 
       {canView && data?.subscription.state !== 'none' && (
         <Section id="subscription" title={t('client.subAndDevices')} folds={folds} onFold={onFold}>
-          {data?.subscription.state === 'loading' && <p class={s.meta}>{t('live.loading')}</p>}
+          {data?.subscription.state === 'loading' && <div class={s.blockSkeleton} aria-busy="true" aria-label={t('live.loading')} />}
           {data?.subscription.state === 'error' && (
             <div class={s.notice}>
               <p>{data.subscription.status === 404 ? t('client.notInRemnawave') : t('client.remnawaveFailed')}</p>
@@ -355,7 +355,7 @@ export function LiveClient({ id, item, onClose, inSheet = false }: { id: number;
 
       {canView && data?.bedolaga.state !== 'none' && (
         <Section id="bedolaga" title={t('client.bedolaga')} folds={folds} onFold={onFold}>
-          {data?.bedolaga.state === 'loading' && <p class={s.meta}>{t('live.loading')}</p>}
+          {data?.bedolaga.state === 'loading' && <div class={s.blockSkeleton} aria-busy="true" aria-label={t('live.loading')} />}
           {data?.bedolaga.state === 'error' && (
             <div class={s.notice}>
               <p>{data.bedolaga.status === 404 ? t('client.notInBedolaga') : t('client.bedolagaFailed')}</p>
@@ -381,7 +381,7 @@ export function LiveClient({ id, item, onClose, inSheet = false }: { id: number;
             <div class={s.fact}><dt>{t('client.tags')}</dt><dd>{profile.tags.length ? profile.tags.join(', ') : '—'}</dd></div>
             {since && Number.isFinite(since) && <div class={s.fact}><dt>{t('client.sinceLabel')}</dt><dd>{longDate(since)}</dd></div>}
           </dl>
-        ) : <p class={s.meta}>{t('live.loading')}</p>}
+        ) : <div class={s.blockSkeleton} aria-busy="true" aria-label={t('live.loading')} />}
         {profile && (
           <Button variant="secondary" size="sm" icon="edit" onClick={needs('conversation:profile', 'right.profile', () => setSheet({ kind: 'profile' }))}>{t('client.editData')}</Button>
         )}

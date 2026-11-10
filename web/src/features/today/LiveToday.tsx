@@ -110,6 +110,8 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
   // Вердикт, вторая фраза (6.1): «Есть неполадка: сервер Франкфурт-2 не отвечает.»
   if (firstIssue?.severity === 'error') lines.push(t('today.problemLine', { text: lowerFirst(problemText(firstIssue)) }));
   const Heading = compact ? 'h2' : 'h1';
+  // Пока не пришли bootstrap и счётчики, карточки не знают, будут ли они (J-6): место держат заглушки той же раскладки.
+  const pending = loading.value === 'loading' && (!counts || !boot);
   const mode = aiMode.value;
   const lastAi: ActivityItem | undefined = day?.items.find((item) => item.kind === 'auto') ?? day?.items[0];
   const linked = connection.value === 'live' || connection.value === 'connecting';
@@ -161,9 +163,13 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
       {stats && dayState === 'error' && (
         <p class={s.small} role="alert">{t('today.blockFailed')} <Button variant="link" size="sm" onClick={() => setTick(tick + 1)}>{t('live.retry')}</Button></p>
       )}
-      {stats && day && (
-        <p class={s.small}>{t('today.dayStatsLive', { auto: day.totals.auto, drafts: day.totals.drafts, sent: day.totals.draftsSent, handoffs: day.totals.handoffs })}</p>
+      {stats && dayState !== 'error' && (
+        // Строка есть всегда, пока суточные цифры в пути: пустое место вместо внезапной строки (J-6).
+        <p class={s.small} data-pending={day ? 'false' : 'true'}>
+          {day ? t('today.dayStatsLive', { auto: day.totals.auto, drafts: day.totals.drafts, sent: day.totals.draftsSent, handoffs: day.totals.handoffs }) : '\u00a0'}
+        </p>
       )}
+      {!compact && stats && dayState === 'loading' && <div class={s.lastSkeleton} aria-hidden="true" />}
       {!compact && lastAi && (
         <>
           <p class={s.small}>{t('today.lastAction', { name: lastAi.name, time: clock(lastAi.at) })}</p>
@@ -228,21 +234,21 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
             <Heading class={s.greeting}>{greeting(at, boot?.me.name ?? '')}</Heading>
             {(isDesktop.value || compact) && <span class={s.date}>{fullDate(at)}</span>}
           </div>
-          {loading.value === 'loading' && !counts
-            ? <div class={s.skeletonLine} aria-hidden="true" />
+          {pending
+            ? <div class={s.verdict} aria-hidden="true"><div class={s.skeletonLine} /></div>
             : <p class={s.verdict}>{lines.join(' ')}</p>}
         </header>
         {!compact && onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
         {!compact && <RevertLine />}
         <div class={s.grid}>
           <div class={s.col}>
-            {waitingCard}
-            {awayCard}
-            {compact ? null : attentionCard}
+            {pending ? <div class={s.cardSkeleton} data-tall="true" aria-busy="true" aria-label={t('live.loading')} /> : waitingCard}
+            {!pending && awayCard}
+            {compact || pending ? null : attentionCard}
           </div>
           <div class={s.col}>
-            {assistantCard}
-            {compact && attentionCard}
+            {pending ? <div class={s.cardSkeleton} aria-busy="true" aria-label={t('live.loading')} /> : assistantCard}
+            {compact && !pending && attentionCard}
             {system}
           </div>
         </div>

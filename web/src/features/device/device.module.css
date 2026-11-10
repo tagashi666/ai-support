@@ -1,5 +1,5 @@
 /* Левый край — как у остальных разделов (--page-max по центру), колонка настроек — 44rem (P-17). */
-.screen { flex: 1; overflow-y: auto; display: grid; align-content: start; gap: var(--s6); width: 100%;
+.screen { flex: 1; overflow-y: auto; scrollbar-gutter: stable; display: grid; align-content: start; gap: var(--s6); width: 100%;
   padding: var(--s6) max(var(--s4), calc((100% - var(--page-max)) / 2)) var(--s12); }
 .screen > * { max-width: 44rem; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }

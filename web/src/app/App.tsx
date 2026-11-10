@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { signal } from '@preact/signals';
 import { ChatsScreen } from '@/features/chats/ChatsScreen';
 import { MoreScreen, Placeholder } from '@/features/placeholder/Placeholder';
 import { Today } from '@/features/today/Today';
@@ -61,6 +62,10 @@ function sectionScreen(current: Extract<Route, { name: 'section' }>, live: boole
   return <Placeholder section={current.key} />;
 }
 
+/** Скрытые полосы: ключ включает паузу/версию — новая пауза или версия показывает полосу снова. */
+const stripsHidden = signal<readonly string[]>([]);
+const hideStrip = (key: string): void => { stripsHidden.value = [...stripsHidden.value, key]; };
+
 export function App(): JSX.Element {
   useGlobalKeys();
   useAttention();
@@ -87,13 +92,18 @@ export function App(): JSX.Element {
       <div class={s.body}>
         {desktop && <Rail current={current} />}
         <main class={s.main}>
-          {live && newVersion.value && (
-            <div class={s.updateStrip} role="status">
-              <span>{t('shell.newVersion', { version: newVersion.value })}</span>
-              <Button size="sm" variant="primary" onClick={() => location.reload()}>{t('shell.reload')}</Button>
-            </div>
-          )}
-          {live && !inThread && session.value !== 'expired' && <PauseStrip />}{screen}
+          {/* Полосы — поверх верха main, не в потоке: появление не сдвигает экран (J-8); «×» убирает полосу до новой паузы/версии. */}
+          <div class={s.strips}>
+            {live && newVersion.value && !stripsHidden.value.includes(`v:${newVersion.value}`) && (
+              <div class={s.updateStrip} role="status">
+                <span class={s.stripText}>{t('shell.newVersion', { version: newVersion.value })}</span>
+                <Button size="sm" variant="primary" onClick={() => location.reload()}>{t('shell.reload')}</Button>
+                <Button size="sm" variant="quiet" icon="close" label={t('shell.hideStrip')} onClick={() => hideStrip(`v:${newVersion.value}`)} />
+              </div>
+            )}
+            {live && !inThread && session.value !== 'expired' && <PauseStrip hidden={stripsHidden.value} onHide={hideStrip} />}
+          </div>
+          {screen}
         </main>
       </div>
       {!desktop && !inThread ? <TabBar current={current} /> : <span />}

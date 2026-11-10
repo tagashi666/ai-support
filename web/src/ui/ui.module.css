@@ -339,7 +339,9 @@
 .toasts:empty { display: none; }
 @media (max-width: 1023px) {
   .toasts {
-    inset: auto var(--s4) calc(var(--toast-lift, var(--tabbar-h)) + var(--s3) + var(--safe-bottom) + var(--kb-inset)) var(--s4);
+    /* Низ уже включает отступ safe-area и там, и там: высота поля ответа (--toast-lift, у .foot padding-bottom с env()) и
+       нижние вкладки (--tabbar-h + safe-area). Второй раз safe-bottom не прибавляем (шаг 3, двойной учёт на iPhone). */
+    inset: auto var(--s4) calc(var(--toast-lift, calc(var(--tabbar-h) + var(--safe-bottom))) + var(--s3) + var(--kb-inset)) var(--s4);
     width: auto;
     max-width: none;
   }

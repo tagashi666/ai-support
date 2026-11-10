@@ -63,16 +63,18 @@ export function PauseControls({ menu = false }: { menu?: boolean }): JSX.Element
 }
 
 /** Строка состояния всех экранов во время паузы: «Помощник на паузе до 15:00 · Возобновить» (6.7). */
-export function PauseStrip(): JSX.Element | null {
+export function PauseStrip({ hidden = [], onHide }: { hidden?: readonly string[]; onHide?: (key: string) => void } = {}): JSX.Element | null {
   const current = pause.value;
-  if (!current) return null;
+  const key = current ? `p:${current.until}` : '';
+  if (!current || hidden.includes(key)) return null;
   return (
     <div class={a.strip} role="status">
       <Icon name="pause" size={16} />
-      <span>{t('pause.strip', { until: pauseText(current.until) })}</span>
+      <span class={a.stripText}>{t('pause.strip', { until: pauseText(current.until) })}</span>
       {canPause.value && !offline.value && (
         <Button variant="link" size="sm" onClick={() => void resumeAssistant()}>{t('pause.resume')}</Button>
       )}
+      {onHide && <Button variant="quiet" size="sm" icon="close" label={t('shell.hideStrip')} class={a.stripClose} onClick={() => onHide(key)} />}
     </div>
   );
 }

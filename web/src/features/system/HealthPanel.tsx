@@ -142,7 +142,7 @@ export function HealthPanel(): JSX.Element {
     return <div class={s.panel}><p class={s.muted} role="status">{tr('system.offline')}</p></div>;
   }
   if (d.state === 'idle' || d.state === 'loading') {
-    return <div class={s.panel} aria-busy="true"><div class={s.skeleton} aria-hidden="true" /><div class={s.skeleton} aria-hidden="true" /><p class="visually-hidden" role="status">{tr('system.checking')}</p></div>;
+    return <div class={s.panel} aria-busy="true"><div class={s.skeleton} key="skeleton" aria-hidden="true" /><p class="visually-hidden" role="status">{tr('system.checking')}</p></div>;
   }
   if (d.state === 'error') {
     return (

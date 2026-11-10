@@ -94,7 +94,7 @@ export function ActivityPanel(): JSX.Element {
           ))}
         </div>
       </div>
-      {state === 'loading' && !data && <div class={a.skeleton} aria-hidden="true" />}
+      {state === 'loading' && !data && <div class={a.skeleton} key="skeleton" aria-hidden="true" />}
       {state === 'error' && (
         <p class={a.error} role="alert">{t('activity.failed')} <Button variant="link" size="sm" onClick={() => setTick(tick + 1)}>{t('live.retry')}</Button></p>
       )}

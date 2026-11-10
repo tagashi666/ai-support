@@ -23,9 +23,11 @@
 .later { color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }
 
 /* Панель «Клиент» на живых данных (6.4) */
-.pane { flex: 1; min-height: 0; overflow-y: auto; display: grid; align-content: start; gap: var(--s4); padding: var(--s4) var(--pad-card) var(--s6); }
+.pane { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: grid; align-content: start; gap: var(--s4); padding: var(--s4) var(--pad-card) var(--s6); }
 .pane[data-sheet="true"] { padding: 0; overflow: visible; }
 .pane .name { overflow-wrap: anywhere; }
+/* Загрузка трёх блоков (карточка, подписка, Bedolaga, данные) — заглушка высоты готового блока: без скачка (J-7). */
+.blockSkeleton { height: 5.5rem; border-radius: var(--r-control); background: var(--surface-sunken); }
 .skeleton { height: 9rem; border-radius: var(--r-card); background: var(--surface-sunken); }
 .notice { display: grid; gap: var(--s2); padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface-sunken); font-size: var(--fs-body); line-height: var(--lh-body); }
 .actionsRow { display: flex; flex-wrap: wrap; gap: var(--s2); }

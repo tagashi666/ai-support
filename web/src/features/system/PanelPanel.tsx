@@ -12,7 +12,7 @@ export function PanelPanel(): JSX.Element {
   useEffect(() => { void loadPanel(); }, []);
   const info = panelInfo.value;
   const r = rights.value;
-  if (info === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} aria-hidden="true" /></div>;
+  if (info === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} key="skeleton" aria-hidden="true" /></div>;
   if (info === null) {
     return (
       <div class={s.panel}>

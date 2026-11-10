@@ -25,7 +25,7 @@ export function ConnectionsScreen({ sub, item }: { sub?: string; item?: string }
     <div class={c.screen}>
       <div class={c.inner}>
         <h1 class={c.title}>{tr('connections.title')}</h1>
-        {!ready ? <div class={c.skeleton} aria-hidden="true" /> : !tab ? <p class={c.muted}>{tr('connections.noAccess')}</p> : (
+        {!ready ? <div class={c.skeleton} key="skeleton" aria-hidden="true" /> : !tab ? <p class={c.muted}>{tr('connections.noAccess')}</p> : (
           <>
             {tabs.length > 1 && (
               <div class={c.tabsScroll}>

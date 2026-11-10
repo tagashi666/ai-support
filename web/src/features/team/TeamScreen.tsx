@@ -37,7 +37,7 @@ export function TeamScreen({ sub, item }: { sub?: string; item?: string }): JSX.
     <div class={k.screen}>
       <div class={k.inner}>
         <h1 class={k.title}>{tr('team.title')}</h1>
-        {!ready ? <div class={k.skeleton} aria-hidden="true" /> : tabs.length === 0 ? <p class={k.muted}>{tr('team.noAccess')}</p> : (
+        {!ready ? <div class={k.skeleton} key="skeleton" aria-hidden="true" /> : tabs.length === 0 ? <p class={k.muted}>{tr('team.noAccess')}</p> : (
           <>
             <div class={k.tabsScroll}>
               <Tabs<Tab> label={tr('team.title')} value={tab ?? 'people'}

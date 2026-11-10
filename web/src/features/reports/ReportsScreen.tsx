@@ -90,7 +90,7 @@ export function ReportsScreen({ sub }: { sub?: string; item?: string }): JSX.Ele
           <h1 class={r.title}>{t('nav.reports')}</h1>
           {tab === 'summary' && rights.value.reset && <MoreMenu onReset={() => { setFailed(''); setResetting(true); }} />}
         </div>
-        {!ready ? <div class={r.skeleton} aria-hidden="true" /> : tabs.length === 0 ? <p class={r.muted}>{tr('reports.noAccess')}</p> : (
+        {!ready ? <div class={r.skeleton} key="skeleton" aria-hidden="true" /> : tabs.length === 0 ? <p class={r.muted}>{tr('reports.noAccess')}</p> : (
           <>
             <div class={r.tabsScroll}>
               <Tabs<Tab> label={t('nav.reports')} value={tab ?? 'summary'}

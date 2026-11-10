@@ -15,7 +15,7 @@ export function NotificationsPanel(): JSX.Element {
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const info = notifications.value;
   const r = rights.value;
-  if (info === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} aria-hidden="true" /></div>;
+  if (info === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} key="skeleton" aria-hidden="true" /></div>;
   if (info === null) {
     return (
       <div class={s.panel}>

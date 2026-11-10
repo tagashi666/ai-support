@@ -62,7 +62,7 @@ export function SlaPanel(): JSX.Element {
             {tr('reports.loadFailed', { reason: goals.error })} <Button variant="link" size="sm" onClick={() => void loadSla()}>{t('live.retry')}</Button>
           </p>
         )}
-        {!goals.data && goals.state !== 'error' && <div class={r.skeleton} aria-hidden="true" />}
+        {!goals.data && goals.state !== 'error' && <div class={r.skeleton} key="skeleton" aria-hidden="true" />}
         {policies.length > 0 && (
           <div class={r.targets}>
             {policies.map((policy) => <TargetRow key={policy.priority} policy={policy} manage={rights.value.manage} />)}
@@ -100,7 +100,7 @@ export function SlaPanel(): JSX.Element {
             {tr('reports.loadFailed', { reason: rows.error })} <Button variant="link" size="sm" onClick={() => void loadQueue()}>{t('live.retry')}</Button>
           </p>
         )}
-        {!rows.data && rows.state !== 'error' && <div class={r.skeleton} aria-hidden="true" />}
+        {!rows.data && rows.state !== 'error' && <div class={r.skeleton} key="skeleton" aria-hidden="true" />}
         {rows.data && shown.length === 0 && <p class={r.muted}>{rows.data.conversations.length === 0 ? tr('reports.now.empty') : tr('reports.now.nothing')}</p>}
         {shown.length > 0 && (
           <ul class={r.list} aria-label={tr('reports.now.title')}>

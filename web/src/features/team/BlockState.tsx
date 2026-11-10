@@ -8,7 +8,7 @@ import k from './team.module.css';
 export function BlockState({ state, error, onRetry, children }: {
   state: LoadState; error: string; onRetry: () => void; children: ComponentChildren;
 }): JSX.Element {
-  if (state === 'idle' || state === 'loading') return <div class={k.skeleton} aria-hidden="true" />;
+  if (state === 'idle' || state === 'loading') return <div class={k.skeleton} key="skeleton" aria-hidden="true" />;
   if (state === 'error') {
     return (
       <div class={k.block} role="alert">

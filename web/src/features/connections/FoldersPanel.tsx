@@ -78,7 +78,7 @@ export function FoldersPanel(): JSX.Element {
   const [editing, setEditing] = useState<Folder | 'new' | null>(null);
   useEffect(() => { void loadMeta(); }, []);
   const state = metaState.value;
-  if (state === 'idle' || state === 'loading') return <div class={c.skeleton} aria-hidden="true" />;
+  if (state === 'idle' || state === 'loading') return <div class={c.skeleton} key="skeleton" aria-hidden="true" />;
   if (state === 'error') {
     return (
       <div class={c.panel}>

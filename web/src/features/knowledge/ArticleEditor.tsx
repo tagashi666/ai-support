@@ -189,7 +189,7 @@ export function ArticleEditor({ name }: { name: string | null }): JSX.Element {
   const go = (target: Route): void => navigate(target, false, true);
   const back = (): void => navigate(LIST);
 
-  if (loaded === 'loading') return <div class={k.screen}><div class={k.inner}><div class={k.skeleton} aria-hidden="true" /></div></div>;
+  if (loaded === 'loading') return <div class={k.screen}><div class={k.inner}><div class={k.skeleton} key="skeleton" aria-hidden="true" /></div></div>;
   if (loaded === 'missing' || loaded === 'error') {
     return (
       <div class={k.screen}>

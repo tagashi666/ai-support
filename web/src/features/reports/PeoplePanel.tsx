@@ -26,7 +26,7 @@ export function PeoplePanel(): JSX.Element {
           {tr('reports.loadFailed', { reason: res.error })} <Button variant="link" size="sm" onClick={() => void loadPeople()}>{t('live.retry')}</Button>
         </p>
       )}
-      {!res.data && res.state !== 'error' && <div class={r.skeleton} aria-hidden="true" />}
+      {!res.data && res.state !== 'error' && <div class={r.skeleton} key="skeleton" aria-hidden="true" />}
       {res.data && rows.length === 0 && <p class={r.muted}>{tr('reports.people.empty')}</p>}
       {rows.length > 0 && (
         isSplit.value ? (

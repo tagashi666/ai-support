@@ -102,7 +102,7 @@ export function AssistantScreen({ sub }: { sub?: string }): JSX.Element {
     <div class={a.screen}>
       <div class={a.inner}>
         <h1 class={a.title}>{t('nav.assistant')}</h1>
-        {!ready ? <div class={a.skeleton} aria-hidden="true" /> : tabs.length === 0 ? <p class={a.muted}>{t('assistant.noAccess')}</p> : (
+        {!ready ? <div class={a.skeleton} key="skeleton" aria-hidden="true" /> : tabs.length === 0 ? <p class={a.muted}>{t('assistant.noAccess')}</p> : (
           <>
             <div class={a.tabsScroll}>
               <Tabs<Tab> label={t('nav.assistant')} value={tab ?? 'answers'}
@@ -112,7 +112,7 @@ export function AssistantScreen({ sub }: { sub?: string }): JSX.Element {
             <RevertLine />
             {by && <p class={a.muted} role="status">{t('assistant.changedBy', { name: by.name, time: clock(by.at) })}</p>}
             {offline.value && <p class={a.muted}>{t('assistant.offlineAll')}</p>}
-            {needsSettings && settingsState.value === 'loading' && !settings.value && <div class={a.skeleton} aria-hidden="true" />}
+            {needsSettings && settingsState.value === 'loading' && !settings.value && <div class={a.skeleton} key="skeleton" aria-hidden="true" />}
             {needsSettings && settingsState.value === 'error' && (
               <p class={a.error} role="alert">{t('assistant.loadFailed')} <Button variant="link" size="sm" onClick={() => void loadSettings()}>{t('live.retry')}</Button></p>
             )}

@@ -43,7 +43,7 @@ export function ArticlesPanel(): JSX.Element {
           ))}
         </div>
       )}
-      {kbState.value === 'loading' && !kb.value && <div class={k.skeleton} aria-hidden="true" />}
+      {kbState.value === 'loading' && !kb.value && <div class={k.skeleton} key="skeleton" aria-hidden="true" />}
       {kbState.value === 'error' && (
         <p class={k.error} role="alert">{t('kb.loadFailed')} <Button variant="link" size="sm" onClick={() => void loadKb()}>{t('live.retry')}</Button></p>
       )}

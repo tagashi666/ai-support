@@ -222,7 +222,7 @@ export function SummaryPanel(): JSX.Element {
           {tr('reports.loadFailed', { reason: res.error })} <Button variant="link" size="sm" onClick={() => void loadStats()}>{t('live.retry')}</Button>
         </p>
       )}
-      {!data && res.state !== 'error' && <div class={r.skeleton} aria-hidden="true" />}
+      {!data && res.state !== 'error' && <div class={r.skeleton} key="skeleton" aria-hidden="true" />}
       {data && (
         <>
           {noData(data) && <p class={`${r.muted} ${r.empty}`}>{tr('reports.noDialogs', { n: data.days })}</p>}

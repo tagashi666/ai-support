@@ -39,7 +39,7 @@ export function ChannelsPanel(): JSX.Element {
   const [checking, setChecking] = useState(false);
   useEffect(() => { void loadConnections(); }, []);
 
-  if (state === 'loading' || state === 'idle') return <div class={c.skeleton} aria-hidden="true" />;
+  if (state === 'loading' || state === 'idle') return <div class={c.skeleton} key="skeleton" aria-hidden="true" />;
   if (!data) {
     return (
       <div class={c.panel}>

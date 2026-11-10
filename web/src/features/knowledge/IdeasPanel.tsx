@@ -54,7 +54,7 @@ function IdeaCard({ id, index, total }: { id: number; index: number; total: numb
         {t('kb.idea.from', { source: t(ideaSourceLabel(row.source)), date: dayMonth(row.created_at) })}
         {word && ` · ${t('kb.idea.confidence', { word })}`}
       </p>
-      {text === null && <div class={k.skeleton} aria-hidden="true" />}
+      {text === null && <div class={k.skeleton} key="skeleton" aria-hidden="true" />}
       {text === 'error' && <p class={k.error} role="alert">{t('kb.idea.noText')}</p>}
       {body && <div class={k.body}>{body}</div>}
       {similar.length > 0 && (
@@ -94,7 +94,7 @@ export function IdeasPanel({ current }: { current: number | null }): JSX.Element
   const list = pendingIdeas.value;
   const desktop = isDesktop.value;
   const chosen = current !== null && list.some((row) => row.id === current) ? current : desktop ? list[0]?.id ?? null : null;
-  if (ideasState.value !== 'error' && !ideas.value) return <div class={k.skeleton} aria-hidden="true" />;
+  if (ideasState.value !== 'error' && !ideas.value) return <div class={k.skeleton} key="skeleton" aria-hidden="true" />;
   if (ideasState.value === 'error') {
     return <p class={k.error} role="alert">{t('kb.loadFailed')} <Button variant="link" size="sm" onClick={() => void loadIdeas()}>{t('live.retry')}</Button></p>;
   }

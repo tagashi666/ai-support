@@ -121,7 +121,7 @@ function Loaded({ snapshot }: { snapshot: NodesSnapshot }): JSX.Element {
 export function ServersPanel(): JSX.Element {
   useEffect(() => { void loadNodes(); }, []);
   const state = nodes.value;
-  if (state === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} aria-hidden="true" /></div>;
+  if (state === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} key="skeleton" aria-hidden="true" /></div>;
   if (state === null || state.kind === 'error') {
     return (
       <div class={s.panel}>

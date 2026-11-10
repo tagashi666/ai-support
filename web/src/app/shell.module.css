@@ -46,6 +46,14 @@
 .short { display: none; }
 @media (max-width: 479px) { .long { display: none; } .short { display: inline; } }
 
+/* Полоса рабочей панели на телефоне — одна строка ~52 px: подпись слева, три кнопки только со значками (J-8/шаг 3). */
+@media (max-width: 479px) {
+  .demo.liveBar { flex-wrap: nowrap; min-height: 52px; }
+  .demo.liveBar .demoTag { flex: 1; min-width: 0; }
+  .demo.liveBar .demoActions { flex: none; flex-wrap: nowrap; gap: 0; }
+  .demo.liveBar .demoActions > * { min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
+}
+
 /* ---------- Рейка ---------- */
 .rail {
   display: flex;
@@ -159,8 +167,19 @@
 .tab .dot { top: -1px; right: -3px; }
 .lazy { flex: 1; min-height: 8rem; }
 
+/* Полосы над экраном (пауза, новая версия): поверх верха main, не в потоке — появление не сдвигает содержимое (J-8).
+   Узкая карточка по центру с «×»; не закрывает рабочие элементы под ней навсегда: полосу можно убрать до новой паузы/версии. */
+.main { position: relative; }
+.strips {
+  position: absolute; top: var(--s2); left: 0; right: 0; z-index: 2; display: grid; justify-items: center; gap: var(--s2);
+  padding: 0 var(--s3); pointer-events: none;
+}
+.strips > * { width: 100%; max-width: 40rem; }
+
 /* «Вышла новая версия панели · Обновить страницу» (6.9): во всех вкладках после установки. */
 .updateStrip {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--s3); flex-wrap: wrap;
-  padding: var(--s2) var(--s4); background: var(--accent-soft); color: var(--text); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: var(--s2); padding: var(--s1) var(--s2) var(--s1) var(--s3);
+  background: var(--accent-soft); color: var(--text); border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-pop); pointer-events: auto; min-width: 0; animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out);
 }
+.stripText { flex: 1; min-width: 0; }

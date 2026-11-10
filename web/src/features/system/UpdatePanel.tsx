@@ -158,7 +158,7 @@ function Loaded({ info }: { info: UpdateInfo }): JSX.Element {
 export function UpdatePanel(): JSX.Element {
   useEffect(() => { void loadUpdate(); }, []);
   const u = update.value;
-  if (u.state === 'idle' || u.state === 'loading') return <div class={s.panel} aria-busy="true"><div class={s.skeleton} aria-hidden="true" /></div>;
+  if (u.state === 'idle' || u.state === 'loading') return <div class={s.panel} aria-busy="true"><div class={s.skeleton} key="skeleton" aria-hidden="true" /></div>;
   if (u.state === 'error') {
     return (
       <div class={s.panel}>

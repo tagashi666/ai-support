@@ -46,7 +46,7 @@ export function KnowledgeScreen({ sub, item }: { sub?: string; item?: string }):
     <div class={k.screen}>
       <div class={k.inner}>
         <h1 class={k.title}>{t('nav.knowledge')}</h1>
-        {!ready ? <div class={k.skeleton} aria-hidden="true" /> : tabs.length === 0 ? <p class={k.muted}>{t('kb.noAccess')}</p> : (
+        {!ready ? <div class={k.skeleton} key="skeleton" aria-hidden="true" /> : tabs.length === 0 ? <p class={k.muted}>{t('kb.noAccess')}</p> : (
           <>
             <div class={k.tabsScroll}>
               <Tabs<Tab> label={t('nav.knowledge')} value={tab ?? 'articles'}

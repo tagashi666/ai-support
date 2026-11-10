@@ -40,7 +40,7 @@ export function SystemScreen({ sub }: { sub?: string; item?: string }): JSX.Elem
     <div class={s.screen}>
       <div class={s.inner}>
         <h1 class={s.title}>{tr('system.title')}</h1>
-        {!ready ? <div class={s.skeleton} aria-hidden="true" /> : tabs.length === 0 ? <p class={s.muted}>{tr('system.noAccess')}</p> : (
+        {!ready ? <div class={s.skeleton} key="skeleton" aria-hidden="true" /> : tabs.length === 0 ? <p class={s.muted}>{tr('system.noAccess')}</p> : (
           <>
             <div class={s.tabsScroll}>
               <Tabs<Tab> label={tr('system.title')} value={tab ?? 'health'}

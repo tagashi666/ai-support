@@ -73,7 +73,7 @@ export function TemplatesPanel(): JSX.Element {
           onInput={(event) => setQuery((event.target as HTMLInputElement).value)} />
         {manage && <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>{t('kb.template.new')}</Button>}
       </div>
-      {templatesState.value === 'loading' && !templates.value && <div class={k.skeleton} aria-hidden="true" />}
+      {templatesState.value === 'loading' && !templates.value && <div class={k.skeleton} key="skeleton" aria-hidden="true" />}
       {templatesState.value === 'error' && (
         <p class={k.error} role="alert">{t('kb.loadFailed')} <Button variant="link" size="sm" onClick={() => void loadTemplates()}>{t('live.retry')}</Button></p>
       )}
