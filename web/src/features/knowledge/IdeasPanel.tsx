@@ -3,7 +3,7 @@ import { useEffect, useState } from 'preact/hooks';
 import type { IdeaRejectReason } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { dayMonth } from '@/lib/format/format';
-import { ideaSourceLabel, REJECT_LABEL, REJECT_REASONS } from '@/lib/knowledge/model';
+import { articleRoute, ideaSourceLabel, REJECT_LABEL, REJECT_REASONS } from '@/lib/knowledge/model';
 import { decideIdea, ideas, ideasState, loadIdeas, pendingIdeas, readArticle, similarArticles } from '@/lib/knowledge/store';
 import { can } from '@/lib/assistant/store';
 import { isDesktop } from '@/lib/media';
@@ -62,7 +62,7 @@ function IdeaCard({ id, index, total }: { id: number; index: number; total: numb
           {t('kb.idea.similar')}{' '}
           {similar.map((item, i) => (
             <span key={item.id}>{i > 0 && ', '}{item.source === 'files' && item.ext_id
-              ? <Button variant="link" size="sm" onClick={() => navigate({ name: 'section', key: 'knowledge', sub: 'articles', item: item.ext_id! })}>«{item.title}»</Button>
+              ? <Button variant="link" size="sm" onClick={() => navigate(articleRoute(item.ext_id!))}>«{item.title}»</Button>
               : `«${item.title}»`}</span>
           ))}
         </p>
@@ -70,7 +70,7 @@ function IdeaCard({ id, index, total }: { id: number; index: number; total: numb
       <div class={k.actions}>
         <Button variant="primary" disabled={text === null || text === 'error'} onClick={() => decide({ decision: 'approved' })}>{t('kb.idea.publish')}</Button>
         {can('knowledge:manage') && (
-          <Button onClick={() => navigate({ name: 'section', key: 'knowledge', sub: 'articles', item: row.file_name })}>{t('kb.idea.edit')}</Button>
+          <Button onClick={() => navigate(articleRoute(row.file_name))}>{t('kb.idea.edit')}</Button>
         )}
         <Button variant="quiet" aria-haspopup="dialog" onClick={() => setRejecting(true)}>{t('kb.idea.reject')} ▾</Button>
       </div>

@@ -7,7 +7,7 @@ import { showToast, undoToast } from '@/lib/actions/toasts';
 import { settings, tryQuestion, type TryResult } from '@/lib/assistant/store';
 import { clock } from '@/lib/format/format';
 import {
-  composeDoc, diffStats, dropLocalDraft, lineDiff, normalizeDoc, readLocalDraft, saveLocalDraft, splitDoc, type DocFields,
+  articleRoute, composeDoc, diffStats, dropLocalDraft, lineDiff, normalizeDoc, readLocalDraft, saveLocalDraft, splitDoc, type DocFields,
 } from '@/lib/knowledge/model';
 import {
   createDraft, loadIdeas, loadKb, pendingIdeas, prefill, publishDraft, readArticle, removeArticle, rights, saveDraft, undoPublish,
@@ -231,7 +231,7 @@ export function ArticleEditor({ name }: { name: string | null }): JSX.Element {
         dirtyRef.current = false;
         void loadKb(); void loadIdeas();
         if (!r.review) { showToast({ text: t('kb.saved.forLead') }); go(LIST); return null; }
-        go({ name: 'section', key: 'knowledge', sub: 'articles', item: result.result.name });
+        go(articleRoute(result.result.name));
         showToast({ text: t('kb.saved.draft') });
         return result.result.name;
       }

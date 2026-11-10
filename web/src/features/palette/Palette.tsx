@@ -8,6 +8,7 @@ import { connection, inbox } from '@/lib/live/store';
 import { letterKeys } from '@/lib/device';
 import { modLabel } from '@/lib/keys';
 import { navigate } from '@/lib/router';
+import { articleRoute } from '@/lib/knowledge/model';
 import { now } from '@/lib/store/state';
 import { CLASSIC_VIEW, COMMANDS, commandsOnly, matchCommand, readRecent, searchable, type Group } from '@/lib/palette/commands';
 import { commandAllowed, openThreadId, paletteOpen, runCommand } from '@/lib/palette/run';
@@ -117,7 +118,7 @@ export function Palette(): JSX.Element {
         // Статья из файлов открывается сама (этап 5); FAQ из Bedolaga правится там — открываем «Знания».
         const file = row.source === 'files' && row.ext_id ? row.ext_id : null;
         list.push({ key: `k${row.id}`, group: 'articles', label: row.title, hint: file ? t('palette.openArticle') : t('palette.bedolagaFaq'),
-          run: () => navigate(file ? { name: 'section', key: 'knowledge', sub: 'articles', item: file } : { name: 'section', key: 'knowledge' }) });
+          run: () => navigate(file ? articleRoute(file) : { name: 'section', key: 'knowledge' }) });
       }
     }
     for (const def of commands.filter((entry) => entry.group === 'settings').slice(0, q ? LIMIT : 0)) {

@@ -1,7 +1,7 @@
 /** «Знания» (6.6): разбор статьи, «было → стало», строки списка, идеи, черновик на устройстве, подсказки по кабинету. */
 import { describe, expect, it } from 'vitest';
 import {
-  articleRows, composeDoc, diffStats, dropLocalDraft, filterArticles, ideaSourceLabel, lineDiff, nextIdeaId, normalizeDoc,
+  articleName, articleRoute, articleRows, composeDoc, diffStats, dropLocalDraft, filterArticles, ideaSourceLabel, lineDiff, nextIdeaId, normalizeDoc,
   readLocalDraft, saveLocalDraft, splitDoc, validShortcut,
 } from './model';
 import { checkForm, formOf, hintRows, withEdit, withHidden, withOwn, withReset, withoutOwn, type HintsState } from './hints';
@@ -26,6 +26,15 @@ describe('статья: название и текст', () => {
     expect(composeDoc(splitDoc(text))).toBe(text);
     expect(normalizeDoc('# Т\nТекст')).toBe('# Т\n\nТекст\n');
     expect(composeDoc({ title: '  Два   слова ', body: '\n\nтело' })).toBe('# Два слова\n\nтело\n');
+  });
+});
+
+describe('адрес статьи', () => {
+  it('без «.md» и точек: сервер не примет адрес с точкой за файл', () => {
+    expect(articleRoute('skorost.md').item).toBe('skorost');
+    expect(articleRoute('v1.2-notes.md').item).toBe('v1~2-notes');
+    expect(articleName('v1~2-notes')).toBe('v1.2-notes.md');
+    expect(articleName('skorost.md')).toBe('skorost.md');
   });
 });
 

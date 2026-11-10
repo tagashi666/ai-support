@@ -6,6 +6,15 @@
 import type { Key } from '@/i18n/ru';
 import type { IdeaRejectReason, KbDoc } from '@shared/api-types';
 
+/**
+ * Статья в адресе — без «.md» и с «~» вместо точки: сервер отдаёт 404 на адрес,
+ * у которого в последнем сегменте точка (это «файл», webapp.ts), и закладка
+ * /next/knowledge/articles/x.md не открывалась бы.
+ */
+export const articleRoute = (name: string): { name: 'section'; key: 'knowledge'; sub: 'articles'; item: string } =>
+  ({ name: 'section', key: 'knowledge', sub: 'articles', item: name.replace(/\.md$/i, '').replace(/\./g, '~') });
+export const articleName = (item: string): string => `${item.replace(/\.md$/i, '').replace(/~/g, '.')}.md`;
+
 /** Статья — markdown с первой строкой «# Название». */
 export interface DocFields {
   title: string;

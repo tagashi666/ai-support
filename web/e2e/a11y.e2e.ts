@@ -74,7 +74,7 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto('/next/knowledge');
       await expect(page.getByRole('list', { name: 'Статьи' })).toBeVisible();
       expect(await serious(page)).toEqual([]);
-      await page.goto('/next/knowledge/articles/skorost.md');
+      await page.goto('/next/knowledge/articles/skorost');
       await expect(page.getByLabel('Текст статьи')).toBeVisible();
       await expect(page.getByText(/Изменения против опубликованной/).first()).toBeVisible();
       expect(await serious(page)).toEqual([]);

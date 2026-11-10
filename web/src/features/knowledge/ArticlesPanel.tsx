@@ -2,7 +2,7 @@ import type { JSX } from 'preact';
 import { useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { listTime } from '@/lib/format/format';
-import { filterArticles, STATE_LABEL, type ArticleFilter } from '@/lib/knowledge/model';
+import { articleRoute, filterArticles, STATE_LABEL, type ArticleFilter } from '@/lib/knowledge/model';
 import { kb, kbState, loadKb, rights, rows } from '@/lib/knowledge/store';
 import { now } from '@/lib/store/state';
 import { href, navigate } from '@/lib/router';
@@ -25,7 +25,7 @@ export function ArticlesPanel(): JSX.Element {
   const r = rights.value;
   const all = rows.value;
   const shown = filterArticles(all, filter, query);
-  const open = (name: string): void => navigate({ name: 'section', key: 'knowledge', sub: 'articles', item: name });
+  const open = (name: string): void => navigate(articleRoute(name));
   return (
     <div class={k.panel}>
       <div class={k.bar}>
@@ -61,7 +61,7 @@ export function ArticlesPanel(): JSX.Element {
         <ul class={k.list} aria-label={t('kb.tab.articles')}>
           {shown.map((row) => (
             <li key={row.name}>
-              <a class={k.item} href={href({ name: 'section', key: 'knowledge', sub: 'articles', item: row.name })}
+              <a class={k.item} href={href(articleRoute(row.name))}
                 onClick={(event) => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); open(row.name); }}>
                 <span class={k.itemHead}>
                   <span class={k.itemTitle}>{row.title}</span>

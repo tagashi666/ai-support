@@ -2,6 +2,7 @@ import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { t, type Key } from '@/i18n/ru';
 import { bootstrap } from '@/lib/live/store';
+import { articleName } from '@/lib/knowledge/model';
 import { loadIdeas, loadKb, pendingIdeas, rights } from '@/lib/knowledge/store';
 import { navigate } from '@/lib/router';
 import { Tabs } from '@/ui/Tabs';
@@ -35,7 +36,7 @@ export function KnowledgeScreen({ sub, item }: { sub?: string; item?: string }):
   const ready = bootstrap.value !== null;
   useEffect(() => { if (ready) { void loadKb(); void loadIdeas(); } }, [ready]);
   if (ready && (sub === 'new' || (sub === 'articles' && item))) {
-    return <ArticleEditor key={item ?? 'new'} name={sub === 'new' ? null : item ?? null} />;
+    return <ArticleEditor key={item ?? 'new'} name={sub === 'new' || !item ? null : articleName(item)} />;
   }
   const tabs = tabsFor();
   const asked = (Object.keys(SUB) as Tab[]).find((tab) => SUB[tab] === sub) ?? 'articles';

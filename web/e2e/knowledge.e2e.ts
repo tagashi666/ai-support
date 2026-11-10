@@ -33,7 +33,7 @@ async function assistantMessage(request: APIRequestContext): Promise<{ conversat
 }
 
 async function openEditor(page: Page, name: string): Promise<void> {
-  await page.goto(`/next/knowledge/articles/${encodeURIComponent(name)}`);
+  await page.goto(`/next/knowledge/articles/${encodeURIComponent(name.replace(/\.md$/, ''))}`);
   await expect(page.getByLabel('Текст статьи')).toBeVisible();
 }
 
@@ -49,8 +49,8 @@ test('«Новая статья» — черновик; публикация с 
   await page.getByLabel('Название').fill(title);
   await page.getByLabel('Текст статьи').fill('Первый шаг.\nВторой шаг.');
   await page.getByRole('button', { name: 'Сохранить черновик' }).click();
-  await expect(page).toHaveURL(/\/next\/knowledge\/articles\/.+\.md$/);
-  const name = decodeURIComponent(page.url().split('/').pop()!);
+  await expect(page).toHaveURL(/\/next\/knowledge\/articles\/[^/.]+$/);
+  const name = `${decodeURIComponent(page.url().split('/').pop()!)}.md`;
   let kb = await list(request);
   expect(kb.drafts.some((doc) => doc.name === name), 'в черновиках').toBeTruthy();
   expect(kb.kb.some((doc) => doc.name === name), 'не опубликована').toBeFalsy();
@@ -88,7 +88,7 @@ test('уход с несохранённым — вопрос; чужая пра
   const leave = page.getByRole('dialog', { name: 'Есть несохранённые правки' });
   await expect(leave).toBeVisible();
   await leave.getByRole('button', { name: 'Остаться' }).click();
-  await expect(page).toHaveURL(new RegExp(`/articles/${name.replace('.', '\\.')}$`));
+  await expect(page).toHaveURL(new RegExp(`/articles/${name.replace(/\.md$/, '')}$`));
 
   // Кто-то сохранил черновик, пока вы правили.
   const current = await api<KbDocResponse>(request, `/api/kb/draft/${name}`);
@@ -191,7 +191,7 @@ test('статья из палитры открывает саму статью'
   const palette = page.getByRole('dialog', { name: 'Поиск и команды' });
   await palette.getByRole('combobox').fill('Лимит устройств');
   await palette.getByRole('option', { name: /Лимит устройств/ }).first().click();
-  await expect(page).toHaveURL(/\/next\/knowledge\/articles\/limit-ustroystv\.md$/);
+  await expect(page).toHaveURL(/\/next\/knowledge\/articles\/limit-ustroystv$/);
   await expect(page.getByLabel('Название')).toHaveValue('Лимит устройств');
 });
 
