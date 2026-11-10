@@ -6,10 +6,10 @@
 import { computed, signal } from '@preact/signals';
 import { t } from '@/i18n/ru';
 import { can } from '@/lib/assistant/store';
-import { showToast, undoToast, UNDO_MS } from '@/lib/actions/toasts';
+import { showToast } from '@/lib/actions/toasts';
 import { readToken } from '@/lib/live/api';
 import { bootstrap } from '@/lib/live/store';
-import { deferred } from '@/lib/workspace/deferred';
+import { deferWithUndo, type DeferredTask } from '@/lib/workspace/deferred';
 import type {
   IdeaDecided, IdeaRejectReason, IdeaRow, IdeasResponse, KbArea, KbConflict, KbDocResponse, KbListResponse, KbWriteResponse,
 } from '@shared/api-types';
@@ -203,7 +203,7 @@ export function decideIdea(id: number, choice: Decision, onUndo: (id: number) =>
   };
   const row = ideas.peek()?.find((item) => item.id === id);
   hold(true);
-  deferred.schedule({
+  const task: DeferredTask = {
     key: `idea:${id}`,
     async commit(keepalive) {
       const body = choice.decision === 'approved' ? { decision: 'approved' } : { decision: 'rejected', reason: choice.reason, discardDraft: true };
@@ -237,9 +237,9 @@ export function decideIdea(id: number, choice: Decision, onUndo: (id: number) =>
       setIdeasCount(pendingIdeas.peek().length);
       if (choice.decision === 'approved') void loadKb();
     },
-  }, UNDO_MS);
+  };
   const text = choice.decision === 'approved' ? t('kb.idea.published', { title: row?.title ?? '' }) : t('kb.idea.rejected', { title: row?.title ?? '' });
-  undoToast(text, () => { if (deferred.cancel(`idea:${id}`)) onUndo(id); }, t('kb.undo'));
+  deferWithUndo(task, text, t('kb.undo'), () => onUndo(id));
   return next;
 }
 
@@ -268,7 +268,7 @@ export async function saveTemplate(input: { shortcut: string; title: string; bod
 export function removeTemplate(item: Template): void {
   const before = templates.peek() ?? [];
   templates.value = before.filter((row) => row.id !== item.id);
-  deferred.schedule({
+  deferWithUndo({
     key: `template:${item.id}`,
     async commit(keepalive) {
       const response = await fetch(`/api/templates/${item.id}`, { method: 'DELETE', keepalive, headers: { authorization: `Bearer ${token()}` } });
@@ -278,8 +278,7 @@ export function removeTemplate(item: Template): void {
     },
     revert() { templates.value = before; },
     failed() { showToast({ kind: 'error', ttl: null, text: t('kb.template.removeFailed') }); },
-  }, UNDO_MS);
-  undoToast(t('kb.template.removed', { name: item.title }), () => { deferred.cancel(`template:${item.id}`); }, t('kb.undo'));
+  }, t('kb.template.removed', { name: item.title }), t('kb.undo'));
 }
 
 // --- сбор статей из старых диалогов ---------------------------------------

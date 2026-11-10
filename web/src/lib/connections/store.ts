@@ -5,10 +5,10 @@
 import { computed, signal } from '@preact/signals';
 import { tr } from '@/i18n/sections/connections';
 import { can } from '@/lib/assistant/store';
-import { showToast, undoToast, UNDO_MS } from '@/lib/actions/toasts';
+import { showToast } from '@/lib/actions/toasts';
 import { ApiError, getJson, readToken, sendJson } from '@/lib/live/api';
 import { bootstrap } from '@/lib/live/store';
-import { deferred } from '@/lib/workspace/deferred';
+import { deferWithUndo } from '@/lib/workspace/deferred';
 import type { BootstrapResponse, ConnectionsResponse } from '@shared/api-types';
 import { isFinished, runStep, type Profile } from './model';
 
@@ -196,7 +196,7 @@ function hold(id: number, on: boolean): void {
 /** Удаление папки (ярус 0): сразу из списка, запрос — после окна «Отменить». */
 export function removeFolder(folder: Folder): void {
   hold(folder.id, true);
-  deferred.schedule({
+  deferWithUndo({
     key: `folder:${folder.id}`,
     async commit(keepalive) {
       const result = await sendJson<{ folders?: Folder[] }>(`/api/inbox/folders/${folder.id}`, token(), undefined, { method: 'DELETE', keepalive });
@@ -206,6 +206,5 @@ export function removeFolder(folder: Folder): void {
     },
     revert() { hold(folder.id, false); },
     failed() { showToast({ kind: 'error', ttl: null, text: tr('connections.folders.removeFailed', { name: folder.name }) }); },
-  }, UNDO_MS);
-  undoToast(tr('connections.folders.removed', { name: folder.name }), () => { deferred.cancel(`folder:${folder.id}`); }, tr('connections.undo'));
+  }, tr('connections.folders.removed', { name: folder.name }), tr('connections.undo'));
 }

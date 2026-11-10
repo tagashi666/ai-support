@@ -184,6 +184,7 @@ web/e2e/list.e2e.ts
 web/e2e/load.e2e.ts
 web/e2e/media.e2e.ts
 web/e2e/onboarding.e2e.ts
+web/e2e/overlay.e2e.ts
 web/e2e/palette.e2e.ts
 web/e2e/playwright.config.ts
 web/e2e/reports.e2e.ts
@@ -369,6 +370,7 @@ web/src/lib/workspace/registry.ts
 web/src/lib/workspace/serverDrafts.ts
 web/src/lib/workspace/thread.ts
 web/src/lib/workspace/typing.ts
+web/src/lib/workspace/undo.test.ts
 web/src/lib/workspace/who.ts
 web/src/lib/workspace/workspace.test.ts
 web/src/main.tsx

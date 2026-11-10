@@ -15,7 +15,7 @@ import { bootstrap, inbox, mode } from '@/lib/live/store';
 import type { ServerDraft } from '@shared/api-types';
 import { setCollabHooks } from './collab';
 import { DraftSync, tabDevice } from './serverDrafts';
-import { deferred } from './deferred';
+import { deferred, deferWithUndo, type DeferredTask } from './deferred';
 import { DraftStore, type Quote } from './drafts';
 import { actionErrorText, sendErrorView } from './errors';
 import { dropPatch, patched, patches, setPatch } from './local';
@@ -80,6 +80,14 @@ function undoable(text: string, undo: () => void): void {
   id = undoToast(text, run, t('toast.undo'));
 }
 
+/** Отложенное действие с «Отменить» в тосте и по ⌘Z; запрос ушёл — отменять уже нечего (M-2). */
+function deferUndoable(task: DeferredTask, text: string): void {
+  let run = (): void => undefined;
+  const id = deferWithUndo({ ...task, started: () => { if (lastUndo === run) lastUndo = null; task.started?.(); } }, text, t('toast.undo'));
+  run = (): void => { dismissToast(id); lastUndo = null; deferred.cancel(task.key); };
+  lastUndo = run;
+}
+
 /** Заплатка поверх текущей строки: показ меняется сразу. */
 function patch(id: number, change: Partial<InboxItem>, removed = false): void {
   const item = itemOf(id);
@@ -90,14 +98,13 @@ function patch(id: number, change: Partial<InboxItem>, removed = false): void {
 function deferredAction(id: number, key: string, change: Partial<InboxItem>, body: Record<string, unknown>, text: string, removed = false): void {
   patch(id, change, removed);
   const taskKey = `${key}:${id}`;
-  deferred.schedule({
+  deferUndoable({
     key: taskKey,
     commit: async (keepalive) => { await state(id, body, keepalive); },
     revert: () => dropPatch(id),
     failed: failToast,
     done: () => { void syncThread(id); },
-  }, UNDO_MS);
-  undoable(text, () => { deferred.cancel(taskKey); });
+  }, text);
 }
 
 /** Сразу, с «Отменить» обратным запросом. */
@@ -266,15 +273,14 @@ export function rejectDraft(id: number, reason: string | null): void {
   if (!suggestion) return;
   updateThread(id, (current) => ({ ...current, suggestion: null }));
   const key = `reject:${suggestion.id}`;
-  deferred.schedule({
+  deferUndoable({
     key,
     commit: async (keepalive) => {
       await post(`/api/suggestions/${suggestion.id}/decide`, { status: 'rejected', ...(reason ? { reason } : {}) }, keepalive);
     },
     revert: () => updateThread(id, (current) => ({ ...current, suggestion: current.suggestion ?? suggestion })),
     failed: failToast,
-  }, UNDO_MS);
-  undoable(t('draft.rejected'), () => { deferred.cancel(key); });
+  }, t('draft.rejected'));
 }
 
 /** «Править»: текст черновика — в поле, курсор в конец; ответ уйдёт с пометкой «изменён». */
@@ -455,7 +461,8 @@ export function bulk(ids: readonly number[], action: BulkAction): void {
   }
   const key = `bulk:${action}:${ids.join(',')}`;
   const body = BULK_BODY[action]!;
-  deferred.schedule({
+  const label = action === 'resolve' ? 'bulk.resolved' : action === 'important' ? 'bulk.important' : 'bulk.hidden';
+  deferUndoable({
     key,
     commit: async (keepalive) => {
       const failed: number[] = [];
@@ -469,7 +476,5 @@ export function bulk(ids: readonly number[], action: BulkAction): void {
     },
     revert: () => { for (const id of ids) dropPatch(id); },
     failed: failToast,
-  }, UNDO_MS);
-  const label = action === 'resolve' ? 'bulk.resolved' : action === 'important' ? 'bulk.important' : 'bulk.hidden';
-  undoable(t(label, { n }), () => { deferred.cancel(key); });
+  }, t(label, { n }));
 }
