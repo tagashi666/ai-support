@@ -44,8 +44,10 @@ function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.
       data-state={leaving ? 'closing' : undefined}
       data-held={held ? 'true' : undefined}
       style={timed ? { '--ttl': `${toast.ttl}ms` } : undefined}
-      onMouseEnter={() => hold(true)}
-      onMouseLeave={() => hold(false)}
+      // Пауза — от настоящего движения курсора: тост, всплывший под неподвижным курсором
+      // (браузер шлёт «пустой» mousemove после перестройки), окно отмены не держит.
+      onPointerMove={(event) => { if (event.pointerType === 'mouse' && (event.movementX || event.movementY)) hold(true); }}
+      onPointerLeave={() => hold(false)}
       onFocusIn={() => hold(true)}
       onFocusOut={() => hold(false)}
     >

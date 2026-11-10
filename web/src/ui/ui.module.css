@@ -219,7 +219,9 @@
 /* ---------- Лист (<dialog>) ----------
  * Одна карта «вариант × ширина»: размеры — переменными --w/--h, раскладка — двумя @media.
  * Высота — по видимой области (dvh), на телефоне сверху запас под вырез, снизу — полоса жестов.
- * Вход и выход (data-state="closing", usePresence) — общими кадрами base.css. */
+ * Вход — кадрами base.css по [open]. Выход — переходом после close(): окно сразу перестаёт
+ * быть модальным (страница не инертна, клик не теряется), а overlay/display allow-discrete
+ * держат его в верхнем слое на время перехода. Без поддержки overlay — закрытие без выхода. */
 .sheet {
   --w: var(--sheet-w);
   --h: var(--sheet-max-h);
@@ -234,12 +236,19 @@
   box-shadow: var(--shadow-pop), var(--pop-ring);
   overflow: auto;
   overscroll-behavior: contain;
-  animation: var(--kf-pop-in) var(--dur-sheet) var(--ease-out);
 }
+.sheet[open] { animation: var(--kf-pop-in) var(--dur-sheet) var(--ease-out); }
 .sheet[data-size="wide"] { --w: var(--sheet-w-wide); --h: var(--sheet-max-h-wide); }
-.sheet[data-state="closing"] { animation: var(--kf-pop-out) var(--dur-exit) var(--ease-exit) forwards; pointer-events: none; }
-.sheet::backdrop { background: var(--scrim); animation: var(--kf-fade-in, ui-fade-in) var(--dur-sheet, 280ms) var(--ease-out, ease-out); }
-.sheet[data-state="closing"]::backdrop { animation: var(--kf-fade-out, ui-fade-out) var(--dur-exit, 160ms) var(--ease-exit, ease-in) forwards; }
+.sheet::backdrop { background: var(--scrim); }
+.sheet[open]::backdrop { animation: var(--kf-fade-in, ui-fade-in) var(--dur-sheet, 280ms) var(--ease-out, ease-out); }
+@supports (overlay: auto) {
+  .sheet, .sheet::backdrop {
+    transition: opacity var(--dur-exit, 160ms) var(--ease-exit, ease-in), transform var(--dur-exit, 160ms) var(--ease-exit, ease-in),
+      overlay var(--dur-exit, 160ms) allow-discrete, display var(--dur-exit, 160ms) allow-discrete;
+  }
+  .sheet:not([open]) { opacity: 0; transform: scale(var(--pop-scale)); }
+  .sheet:not([open])::backdrop { opacity: 0; }
+}
 @media (min-width: 768px) {
   .sheet[data-side="right"] {
     --w: 22rem;
@@ -248,10 +257,10 @@
     max-height: none;
     border-radius: var(--r-sheet) 0 0 var(--r-sheet);
     padding-top: var(--safe-top);
-    animation-name: var(--kf-sheet-left-in);
   }
+  .sheet[data-side="right"][open] { animation-name: var(--kf-sheet-left-in); }
   .sheet[data-side="right"][data-size="pane"] { --w: var(--sheet-w-pane); }
-  .sheet[data-side="right"][data-state="closing"] { animation-name: var(--kf-sheet-right-out); }
+  .sheet[data-side="right"]:not([open]) { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); }
 }
 @media (max-width: 767px) {
   .sheet {
@@ -260,9 +269,9 @@
     margin: auto 0 0;
     border-radius: var(--r-sheet) var(--r-sheet) 0 0;
     padding-bottom: var(--safe-bottom);
-    animation-name: var(--kf-sheet-up-in);
   }
-  .sheet[data-state="closing"] { animation-name: var(--kf-sheet-down-out); }
+  .sheet[open] { animation-name: var(--kf-sheet-up-in); }
+  .sheet:not([open]) { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); }
 }
 .sheetHead {
   position: sticky;

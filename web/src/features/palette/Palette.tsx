@@ -62,14 +62,14 @@ export function Palette(): JSX.Element {
   const perms = permissions.value;
   const offline = connection.value === 'offline';
 
-  // Выход (M-3): окно закрывается после кадров выхода; Esc и клик мимо — тоже через них.
-  const { mounted, closing } = usePresence(open);
+  // Выход (M-3): окно закрывается сразу, выход — CSS-переход; содержимое держим на его время.
+  const { mounted } = usePresence(open);
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (mounted && !dialog.open) { openModal(dialog); setQuery(''); setResult(null); setActive(0); requestAnimationFrame(() => input.current?.focus()); }
-    if (!mounted && dialog.open) closeModal(dialog);
-  }, [mounted]);
+    if (open && !dialog.open) { openModal(dialog); setQuery(''); setResult(null); setActive(0); requestAnimationFrame(() => input.current?.focus()); }
+    if (!open && dialog.open) closeModal(dialog);
+  }, [open]);
 
   // Поиск на сервере: от 2 символов, задержка 180 мс, защита от гонки ответов.
   useEffect(() => {
@@ -157,8 +157,7 @@ export function Palette(): JSX.Element {
   const q = query.trim();
   let lastGroup: Group | null = null;
   return (
-    <dialog ref={ref} class={s.palette} aria-label={t('palette.title')} data-state={closing ? 'closing' : undefined}
-      onCancel={(event) => { event.preventDefault(); close(); }} onClose={close}
+    <dialog ref={ref} class={s.palette} aria-label={t('palette.title')} onClose={close}
       onClick={(event) => { if (event.target === ref.current) close(); }}>
       {mounted && (
         <>

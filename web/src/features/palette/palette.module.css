@@ -9,16 +9,24 @@
   color: var(--text);
   box-shadow: var(--shadow-pop), var(--pop-ring);
   overflow: hidden;
-  animation: var(--kf-pop-in) var(--dur-fast) var(--ease-out);
 }
-.palette[open] { display: flex; flex-direction: column; }
-.palette[data-state="closing"] { animation: var(--kf-pop-out) var(--dur-exit) var(--ease-exit) forwards; pointer-events: none; }
-.palette::backdrop { background: var(--scrim); animation: var(--kf-fade-in, ui-fade-in) var(--dur-fast, 160ms) var(--ease-out, ease-out); }
-.palette[data-state="closing"]::backdrop { animation: var(--kf-fade-out, ui-fade-out) var(--dur-exit, 160ms) var(--ease-exit, ease-in) forwards; }
+.palette[open] { display: flex; flex-direction: column; animation: var(--kf-pop-in) var(--dur-fast) var(--ease-out); }
+.palette::backdrop { background: var(--scrim); }
+.palette[open]::backdrop { animation: var(--kf-fade-in, ui-fade-in) var(--dur-fast, 160ms) var(--ease-out, ease-out); }
+/* Выход — переходом после close(), как у листа (ui.module.css). */
+@supports (overlay: auto) {
+  .palette, .palette::backdrop {
+    transition: opacity var(--dur-exit, 160ms) var(--ease-exit, ease-in), transform var(--dur-exit, 160ms) var(--ease-exit, ease-in),
+      overlay var(--dur-exit, 160ms) allow-discrete, display var(--dur-exit, 160ms) allow-discrete;
+  }
+  .palette:not([open]) { opacity: 0; transform: scale(var(--pop-scale)); }
+  .palette:not([open])::backdrop { opacity: 0; }
+}
 /* Телефон: на весь экран, поле поиска — ниже выреза (W-5). */
 @media (max-width: 767px) {
-  .palette { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border-radius: 0; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); animation-name: var(--kf-fade-in); }
-  .palette[data-state="closing"] { animation-name: var(--kf-fade-out); }
+  .palette { width: 100%; max-width: 100%; height: 100%; max-height: 100%; margin: 0; border-radius: 0; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); }
+  .palette[open] { animation-name: var(--kf-fade-in); }
+  .palette:not([open]) { transform: none; }
 }
 .field { position: relative; display: flex; align-items: center; gap: var(--s2); padding: var(--s3) var(--s4); border-bottom: 1px solid var(--border); }
 .field[data-loading="true"]::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); animation: load 1s ease-in-out infinite alternate; }

@@ -19,13 +19,14 @@ interface SheetProps {
 /**
  * Лист на нативном <dialog>: ловушка фокуса и возврат фокуса даёт браузер,
  * Esc закрывает только верхний слой (6.0). На телефоне — нижний лист.
- * Закрытие (кнопка, Esc, клик мимо) играет выход (M-3, M-4): содержимое и заголовок
- * держатся последними, пока идут кадры выхода, и только потом dialog.close().
+ * Закрытие (кнопка, Esc, клик мимо) сразу закрывает окно — страница не инертна ни кадра, —
+ * а выход играет CSS-переход (M-3); содержимое и заголовок держатся последними, пока он
+ * идёт (M-4: без кадра с пустым окном).
  */
 export function Sheet({ open, onClose, title, side = 'center', size, children }: SheetProps): JSX.Element {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  const { mounted, closing } = usePresence(open);
+  const { mounted } = usePresence(open);
   const live = useRef(open);
   live.current = open;
   const last = useRef({ title, children });
@@ -34,9 +35,9 @@ export function Sheet({ open, onClose, title, side = 'center', size, children }:
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (mounted) openModal(dialog);
+    if (open) openModal(dialog);
     else if (dialog.open) closeModal(dialog);
-  }, [mounted]);
+  }, [open]);
   useEffect(() => () => { if (ref.current) closeModal(ref.current); }, []);
   return (
     <dialog
@@ -44,9 +45,7 @@ export function Sheet({ open, onClose, title, side = 'center', size, children }:
       class={s.sheet}
       data-side={side}
       data-size={size}
-      data-state={closing ? 'closing' : undefined}
       aria-labelledby={titleId}
-      onCancel={(event) => { event.preventDefault(); close(); }}
       onClose={close}
       onClick={(event) => { if (event.target === ref.current) close(); }}
     >
