@@ -11,6 +11,8 @@ import type { Conversation, Store } from '../core/store.js';
 import type { UpdateManager } from '../core/update.js';
 import { runMining } from '../ai/mining.js';
 import type { LiveHub } from './live.js';
+import type { OperatorDrafts } from '../core/drafts.js';
+import type { ThreadFrame } from '../shared/api-types.js';
 import type { CustomerDirectory } from '../integrations/customers.js';
 import type { NodeState, RemnawaveClient } from '../integrations/remnawave.js';
 
@@ -52,6 +54,13 @@ export interface RouteContext extends Omit<WebDeps, 'remnawaves'> {
   /** Кадр всем WS-подписчикам с правом `permission` (по умолчанию conversation:read). */
   broadcast(frame: unknown, permission?: Permission): void;
   /**
+   * Кадр ленты только сокетам новой панели (?v=2) с conversation:read; `to` —
+   * отбор по ключу получателя (черновик — себе, просьба передать — тому, кто ведёт).
+   */
+  pushV2(frame: ThreadFrame, to?: (actorKey: string) => boolean): void;
+  /** Черновики операторов на сервере (7.8). */
+  drafts: OperatorDrafts;
+  /**
    * Фоновый проход майнинга: прогресс и итог пишутся в журнал задач и уходят
    * по WS тем, у кого есть право на этот вид задач. `onDone` выполняется до
    * события «done»; если он бросит, задача помечается упавшей.
@@ -63,7 +72,7 @@ export interface RouteContext extends Omit<WebDeps, 'remnawaves'> {
 
 export function createRouteContext(
   deps: WebDeps,
-  parts: Pick<RouteContext, 'operations' | 'updates' | 'sources' | 'actorOf' | 'broadcast' | 'live'>,
+  parts: Pick<RouteContext, 'operations' | 'updates' | 'sources' | 'actorOf' | 'broadcast' | 'live' | 'pushV2' | 'drafts'>,
 ): RouteContext {
   const { store, bot } = deps;
   const { broadcast } = parts;

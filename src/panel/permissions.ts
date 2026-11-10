@@ -55,6 +55,8 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   if (url.includes('/subscription')) return 'bedolaga:view';
   if (/\/conversations\/\d+\/attachments(?:\?|$)/.test(url)) return 'conversation:attachments';
   if (/\/conversations\/\d+\/reply(?:\?|$)/.test(url)) return 'conversation:reply';
+  // Этап 7 (10.6 п.5, п.8): свой черновик на сервере и «Попросить передать» — у тех, кто отвечает.
+  if (/^\/api\/conversations\/\d+\/(?:draft|handover-request)(?:\?|$)/.test(url)) return 'conversation:reply';
   if (/\/conversations\/\d+\/(?:note|profile\/notes)(?:\?|$)/.test(url)) return 'conversation:notes';
   if (/\/conversations\/\d+\/(?:read|presence)(?:\?|$)/.test(url)) return 'conversation:read';
   if (/\/conversations\/\d+\/customer\/refresh(?:\?|$)/.test(url)) return 'conversation:profile';
@@ -70,6 +72,8 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   if (/^\/api\/system\/notifications(?:\?|$)/.test(url)) return 'settings:read';
   if (/^\/api\/connections(?:\?|$)/.test(url)) return 'settings:read';
   if ((method === 'GET' || method === 'HEAD') && /^\/api\/team\/names(?:\?|$)/.test(url)) return 'conversation:read';
+  // Присутствие во всех диалогах (10.6 п.6): мини-аватары «смотрит» в списке.
+  if ((method === 'GET' || method === 'HEAD') && /^\/api\/presence(?:\?|$)/.test(url)) return 'conversation:read';
   if (url === '/api/settings' || url.startsWith('/api/settings?')) return 'settings:read';
   if ((method === 'GET' || method === 'HEAD') && CONVERSATION_READ_ROUTES.test(url)) return 'conversation:read';
   return undefined;

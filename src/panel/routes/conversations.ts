@@ -6,11 +6,23 @@ import { queueAutoLearn, requeueAutoLearn } from '../../ai/mining.js';
 import { channelAvailability, decorate, livePendingSuggestion } from '../helpers.js';
 import type { RouteContext } from '../context.js';
 import { apiError } from '../errors.js';
-import { AUTHOR_EVENT } from '../thread.js';
+import { AUTHOR_EVENT, presenceOf } from '../thread.js';
 
 /** Диалоги: список, папки, история, прочтение, присутствие, удержание, заметки и статус. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
-  const { store, outbox, notifier, customers, onOpened, operations, actorOf, runJob, live } = ctx;
+  const { store, outbox, notifier, customers, onOpened, operations, actorOf, runJob, live, pushV2 } = ctx;
+
+  // Кадр presence (10.6 п.6) — только когда состав «кто смотрит / печатает» изменился,
+  // а не на каждый heartbeat раз в 15 с. Истечение (90 с) панель считает сама по `at`.
+  const lastPresence = new Map<number, string>();
+  const pushPresence = (id: number): void => {
+    const presence = presenceOf(operations, id);
+    const signature = presence.map((entry) => `${entry.id}:${entry.state}`).sort().join(',');
+    if (lastPresence.get(id) === signature) return;
+    if (signature) lastPresence.set(id, signature); else lastPresence.delete(id);
+    if (lastPresence.size > 2000) lastPresence.clear();
+    pushV2({ type: 'thread', kind: 'presence', conversation_id: id, presence });
+  };
 
   // --- диалоги ---------------------------------------------------------
 
@@ -113,6 +125,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const id = Number(request.params.id);
     if (!store.getConversation(id)) return reply.code(404).send({ error: 'Диалог не найден' });
     operations.presence(id, actorOf(request), request.body?.state);
+    pushPresence(id);
     return { ok: true, collaboration: operations.collaboration(id) };
   });
 
@@ -128,6 +141,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     if (request.body?.typing === true) {
       store.markOperatorActive(id);
       operations.presence(id, actor, 'typing');
+      pushPresence(id);
       return { ok: true, collaboration: operations.collaboration(id) };
     }
     const force = request.body?.force === true && operations.can(actor, 'conversation:assign');
@@ -139,6 +153,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     // диалога, особенно принудительный, фиксируем отдельно.
     if (claimed.acquired) operations.audit(actor, 'conversation.claim', 'conversations', id, { force }, request.ip);
     operations.presence(id, actor, request.body?.state);
+    pushPresence(id);
     store.markOperatorActive(id);
     // Закрепление меняет секцию у всех, кто смотрит, а Store о нём не сообщает.
     if (claimed.acquired) live.touch([id]);
@@ -151,6 +166,7 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const id = Number(request.params.id);
     if (!operations.release(id, actor, force)) return reply.code(409).send(apiError('locked_by_other', 'Диалог закреплён за другим оператором'));
     live.touch([id]);
+    pushPresence(id);
     return { ok: true, collaboration: operations.collaboration(id) };
   });
 

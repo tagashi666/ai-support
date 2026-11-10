@@ -268,7 +268,29 @@ export type ThreadFrame =
   | { type: 'thread'; kind: 'message_deleted'; conversation_id: number; message_id: number }
   | { type: 'thread'; kind: 'suggestion'; conversation_id: number; suggestion: ThreadSuggestion | null }
   /** Диалог убран из списка или удалён (10.3 п.7). */
-  | { type: 'thread'; kind: 'deleted'; conversation_id: number };
+  | { type: 'thread'; kind: 'deleted'; conversation_id: number }
+  /** Кто смотрит и печатает (10.6 п.6): весь список присутствия диалога, всем с conversation:read. */
+  | { type: 'thread'; kind: 'presence'; conversation_id: number; presence: ThreadPresence[] }
+  /** Ваш черновик изменился на другом устройстве (10.6 п.5): только сокетам того же человека. */
+  | { type: 'thread'; kind: 'draft'; conversation_id: number; draft: ServerDraft | null }
+  /** «Иван просит передать диалог» (10.6 п.8): только сокетам того, кто ведёт. */
+  | { type: 'thread'; kind: 'handover_request'; conversation_id: number; from: { id: string; name: string }; customer: string | null };
+
+/** Черновик на сервере (7.8): на человека и диалог. device — вкладка, которая записала. */
+export interface ServerDraft {
+  text: string;
+  mode: 'reply' | 'note';
+  quote: { id: number; quote_id: string; excerpt: string } | null;
+  from_suggestion: number | null;
+  device: string;
+  updated_at: number;
+}
+
+/** GET/PUT /api/conversations/:id/draft. */
+export interface DraftResponse { draft: ServerDraft | null }
+
+/** GET /api/presence: присутствие во всех диалогах, где кто-то есть (мини-аватары в списке). */
+export interface PresenceResponse { items: Array<{ conversation_id: number; presence: ThreadPresence[] }> }
 
 /** Ответ отправки: client_msg_id — тот же, что в запросе; повтор отдаёт уже созданное сообщение. */
 export interface ReplyResponse {

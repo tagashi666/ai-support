@@ -48,6 +48,7 @@ public/ui-v3.css
 scripts/aitest.ts
 scripts/assistanttest.ts
 scripts/baretest.ts
+scripts/collabtest.ts
 scripts/devfakes.ts
 scripts/devlive.ts
 scripts/devseed.ts
@@ -102,6 +103,7 @@ src/config.ts
 src/core/attention.ts
 src/core/channels.ts
 src/core/db.ts
+src/core/drafts.ts
 src/core/fts.ts
 src/core/http.ts
 src/core/media.ts
@@ -147,6 +149,7 @@ src/panel/permissions.ts
 src/panel/problems.ts
 src/panel/routes/ai.ts
 src/panel/routes/assistant.ts
+src/panel/routes/collab.ts
 src/panel/routes/conversations.ts
 src/panel/routes/customers.ts
 src/panel/routes/inbox.ts

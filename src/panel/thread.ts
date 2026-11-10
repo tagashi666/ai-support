@@ -180,7 +180,7 @@ export function threadEvents(db: Database.Database, conversation: Conversation, 
   return events.sort((a, b) => a.at - b.at);
 }
 
-function presenceOf(operations: Operations, conversationId: number): ThreadPresence[] {
+export function presenceOf(operations: Operations, conversationId: number): ThreadPresence[] {
   const collaboration = operations.collaboration(conversationId) as {
     presences?: Array<{ actor_key: string; state: string; seen_at: number; name: string }>;
   };
@@ -190,6 +190,21 @@ function presenceOf(operations: Operations, conversationId: number): ThreadPrese
     state: item.state === 'typing' ? 'typing' : 'viewing',
     at: item.seen_at,
   }));
+}
+
+/** Присутствие во всех диалогах за последние 90 с (как у collaboration): GET /api/presence. */
+export function presenceAll(db: Database.Database, operations: Operations, now = Date.now()): Array<{ conversation_id: number; presence: ThreadPresence[] }> {
+  const rows = db.prepare(`
+    SELECT conversation_id, actor_key, state, seen_at FROM operator_presence
+     WHERE seen_at >= ? ORDER BY conversation_id, seen_at DESC
+  `).all(now - 90_000) as Array<{ conversation_id: number; actor_key: string; state: string; seen_at: number }>;
+  const byId = new Map<number, ThreadPresence[]>();
+  for (const row of rows) {
+    const list = byId.get(row.conversation_id) ?? [];
+    list.push({ id: row.actor_key, name: operations.actorName(row.actor_key), state: row.state === 'typing' ? 'typing' : 'viewing', at: row.seen_at });
+    byId.set(row.conversation_id, list);
+  }
+  return [...byId].map(([conversation_id, presence]) => ({ conversation_id, presence }));
 }
 
 /** Шапка: строка списка для получателя (даже у убранного диалога) и свойства канала. */

@@ -30,6 +30,8 @@ import { register as registerKnowledge } from './routes/knowledge.js';
 import { register as registerInterfaceKb } from './routes/interface-kb.js';
 import { register as registerInbox } from './routes/inbox.js';
 import { register as registerThread } from './routes/thread.js';
+import { register as registerCollab } from './routes/collab.js';
+import { OperatorDrafts } from '../core/drafts.js';
 import { register as registerAssistant } from './routes/assistant.js';
 import { projectMessages, projectSuggestion } from './thread.js';
 import { createLiveHub, frameFor } from './live.js';
@@ -164,8 +166,9 @@ export async function startWeb(deps: WebDeps) {
     if (!actor) return;
     const path = request.url.split('?')[0] ?? request.url;
     // Присутствие, удержание и прочтение — фоновые heartbeat'ы панели, а не
-    // действия оператора: раньше они забивали журнал почти целиком.
-    if (/^\/api\/conversations\/\d+\/(?:presence|engage|read)$/.test(path)) return;
+    // действия оператора: раньше они забивали журнал почти целиком. Черновик
+    // (этап 7) пишется на каждую паузу в наборе, а просьба передать пишет запись сама.
+    if (/^\/api\/conversations\/\d+\/(?:presence|engage|read|draft|handover-request)$/.test(path)) return;
     const parts = path.split('/').filter(Boolean);
     operations.audit(actor, `${request.method} ${path}`, parts[1] ?? 'api', parts[2],
       path.endsWith('/attachments') ? undefined : request.body, request.ip);
@@ -446,7 +449,17 @@ export async function startWeb(deps: WebDeps) {
 
   // Маршруты по областям. Все регистрируются после хуков авторизации выше:
   // onRoute проверяет карту прав, onRequest — токен и право на маршрут.
-  const ctx = createRouteContext(deps, { operations, updates, sources, actorOf, broadcast, live });
+  // Кадры ленты новой панели (?v=2): с conversation:read, `to` — отбор получателя по ключу.
+  const pushV2 = (frame: ThreadFrame, to?: (actorKey: string) => boolean): void => {
+    const payload = JSON.stringify(frame);
+    for (const socket of sockets) {
+      if (!socketsV2.has(socket) || socket.readyState !== socket.OPEN) continue;
+      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
+      if (actor && operations.can(actor, 'conversation:read') && (!to || to(actor.key))) socket.send(payload);
+    }
+  };
+  const drafts = new OperatorDrafts(store.db);
+  const ctx = createRouteContext(deps, { operations, updates, sources, actorOf, broadcast, live, pushV2, drafts });
   registerConversations(app, ctx);
   registerMedia(app, ctx);
   registerReplies(app, ctx);
@@ -462,6 +475,7 @@ export async function startWeb(deps: WebDeps) {
   registerInterfaceKb(app, ctx);
   registerInbox(app, ctx);
   registerThread(app, ctx);
+  registerCollab(app, ctx);
   registerAssistant(app, ctx);
 
   // --- билет для медиа и WS -----------------------------------------
@@ -587,14 +601,7 @@ export async function startWeb(deps: WebDeps) {
 
   // Кадры ленты новой панели: явная проекция, без seq — подсказка открытому
   // диалогу. После разрыва панель перечитывает диалог сама (GET /api/thread).
-  const threadFrame = (frame: ThreadFrame): void => {
-    const payload = JSON.stringify(frame);
-    for (const socket of sockets) {
-      if (!socketsV2.has(socket) || socket.readyState !== socket.OPEN) continue;
-      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
-      if (actor && operations.can(actor, 'conversation:read')) socket.send(payload);
-    }
-  };
+  const threadFrame = (frame: ThreadFrame): void => pushV2(frame);
   // Сообщение перечитывается на следующем шаге цикла: маршрут ответа к этому
   // времени уже записал автора (событие operator_reply), и кадр несёт имя.
   const messageFrame = (kind: 'message' | 'message_updated', conversationId: number, messageId: number): void => {
