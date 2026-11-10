@@ -85,7 +85,7 @@
 .msgRow:hover .msgMenu, .msgRow:focus-within .msgMenu { opacity: 1; }
 @media (max-width: 767px), (pointer: coarse) { .msgMenu { opacity: 0.7; width: 44px; height: 44px; margin-top: 0; } }
 .link { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
-.quote { display: block; margin-bottom: var(--s1); padding-left: var(--s2); border-left: 2px solid currentColor; opacity: 0.8; font-size: var(--fs-small); white-space: normal; }
+.quote { display: block; margin-bottom: var(--s1); padding-left: var(--s2); border-left: 2px solid currentColor; font-size: var(--fs-small); white-space: normal; }
 .newLine { display: flex; align-items: center; gap: var(--s2); margin: var(--s2) 0; color: var(--accent-text); font-size: var(--fs-small); font-weight: 600; }
 .newLine::before, .newLine::after { content: ""; flex: 1; height: 1px; background: currentColor; opacity: 0.4; }
 .media {
