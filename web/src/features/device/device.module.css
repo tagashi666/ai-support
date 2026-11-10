@@ -6,7 +6,12 @@
 .group { display: grid; gap: var(--s3); justify-items: start; }
 .head { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s4); width: 100%; }
-.rowLabel { min-width: 10rem; font-size: var(--fs-body); }
+.rowLabel { font-size: var(--fs-body); }
+/* Шире телефона — колонка меток 13rem, значения на одной оси; пояснение под строкой — по той же оси. */
+@media (min-width: 600px) {
+  .row { display: grid; grid-template-columns: 13rem minmax(0, 1fr); justify-items: start; }
+  .row + .hint { padding-left: calc(13rem + var(--s4)); }
+}
 .segments { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
 .segment { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s4); font-size: var(--fs-body); cursor: pointer; }
 .segment + .segment { border-left: 1px solid var(--border); }
@@ -14,7 +19,7 @@
 .segment[data-checked="true"] { background: var(--selected); color: var(--accent-text); font-weight: 600; }
 .segment:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); width: 100%; min-height: 44px; font-size: var(--fs-body); cursor: pointer; }
-.toggle input { width: 2.5rem; height: 1.5rem; accent-color: var(--accent); flex: none; }
+.toggle input { width: 2.5rem; height: 1.5rem; margin: 0; accent-color: var(--accent); flex: none; }
 .toggleText { display: grid; gap: 2px; }
 .hint { color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }
 .link { color: var(--accent-text); font-size: var(--fs-body); min-height: 44px; display: inline-flex; align-items: center; }
