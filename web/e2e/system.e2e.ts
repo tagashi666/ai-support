@@ -123,7 +123,7 @@ for (const scheme of ['light', 'dark'] as const) {
   test.describe(`axe · система · ${scheme}`, () => {
     test.use({ colorScheme: scheme });
 
-    test('четыре вкладки', async ({ page }) => {
+    test('пять вкладок', async ({ page }) => {
       await page.goto('/next/system');
       await expect(page.getByText(/Есть что проверить|Всё в порядке|Есть неисправность/)).toBeVisible();
       await page.getByRole('button', { name: 'Для специалистов' }).click();
@@ -134,6 +134,9 @@ for (const scheme of ['light', 'dark'] as const) {
       expectClean(await serious(page));
       await page.goto('/next/system/notifications');
       await expect(page.getByRole('group', { name: 'Что присылать в Telegram' })).toBeVisible();
+      expectClean(await serious(page));
+      await page.goto('/next/system/panel');
+      await expect(page.getByRole('group', { name: 'Какая панель открывается по адресу панели' })).toBeVisible();
       expectClean(await serious(page));
       await page.goto('/next/system/update');
       await expect(page.getByText(/Сейчас \d+\.\d+\.\d+\./)).toBeVisible();
@@ -166,6 +169,7 @@ test('телефон: вкладки без горизонтальной про�
     ['/next/system/servers', /Данные от \d\d:\d\d/],
     ['/next/system/update', /Сейчас \d+\.\d+\.\d+\./],
     ['/next/system/notifications', /Что присылать в Telegram/],
+    ['/next/system/panel', /Какая панель открывается/],
   ];
   for (const [path, ready] of screens) {
     await page.goto(path);

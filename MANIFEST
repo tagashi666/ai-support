@@ -189,6 +189,7 @@ web/e2e/playwright.config.ts
 web/e2e/reports.e2e.ts
 web/e2e/system.e2e.ts
 web/e2e/team.e2e.ts
+web/e2e/uiswitch.e2e.ts
 web/index.html
 web/public/favicon.svg
 web/src/app/App.tsx

@@ -8,6 +8,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = Number(process.env.E2E_PORT ?? 8197);
 const LOAD_PORT = PORT + 2;
+// PANEL_UI=classic для всей установки (этап 8): только переключатель на /, база своя.
+const CLASSIC_PORT = PORT + 4;
 
 export default defineConfig({
   testDir: '.',
@@ -45,5 +47,12 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
     env: { E2E_PORT: String(LOAD_PORT), E2E_EXTRA: '460' },
+  }, {
+    command: 'node --import tsx scripts/e2eserver.ts',
+    cwd: '../..',
+    url: `http://127.0.0.1:${CLASSIC_PORT}/next/`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 60_000,
+    env: { E2E_PORT: String(CLASSIC_PORT), E2E_PANEL_UI: 'classic' },
   }],
 });
