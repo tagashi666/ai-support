@@ -9,9 +9,12 @@ import { computed, signal } from '@preact/signals';
 import type { InboxItem, ReplyResponse, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { dismissToast, showToast, undoToast, UNDO_MS } from '@/lib/actions/toasts';
-import { ApiError, newClientId, readToken, sendJson, uploadFile } from '@/lib/live/api';
+import { ApiError, getJson, newClientId, readToken, sendJson, uploadFile } from '@/lib/live/api';
 import { liveName } from '@/lib/live/labels';
-import { bootstrap, inbox } from '@/lib/live/store';
+import { bootstrap, inbox, mode } from '@/lib/live/store';
+import type { ServerDraft } from '@shared/api-types';
+import { setCollabHooks } from './collab';
+import { DraftSync, tabDevice } from './serverDrafts';
 import { deferred } from './deferred';
 import { DraftStore, type Quote } from './drafts';
 import { actionErrorText, sendErrorView } from './errors';
@@ -27,11 +30,17 @@ const LEASE_MS = 15 * 60_000;
 
 export const permissions = computed(() => new Set(bootstrap.value?.me.permissions ?? []));
 export const meKey = computed(() => bootstrap.value?.me.id ?? '');
-export const drafts = new DraftStore();
+export const drafts = new DraftStore(undefined, undefined, (id) => draftSync.saved(id));
+/** Черновик и на сервере (7.8): только у тех, кто отвечает, и на живых данных. */
+export const draftSync = new DraftSync(drafts, {
+  get: async (id) => (await getJson<{ draft: ServerDraft | null }>(`/api/conversations/${id}/draft`, token())).draft,
+  put: async (id, body) => (await sendJson<{ draft: ServerDraft | null }>(`/api/conversations/${id}/draft`, token(), body, { method: 'PUT', keepalive: true })).draft,
+  remove: async (id) => { await sendJson(`/api/conversations/${id}/draft`, token(), {}, { method: 'DELETE', keepalive: true }); },
+}, tabDevice(), () => mode.peek() === 'live' && permissions.peek().has('conversation:reply'));
 const typing = new TypingSignal();
 let typingFor: number | null = null;
 
-if (typeof addEventListener === 'function') addEventListener('pagehide', () => drafts.flush());
+if (typeof addEventListener === 'function') addEventListener('pagehide', () => { drafts.flush(); draftSync.flushAll(); });
 
 const token = (): string => readToken() ?? '';
 const post = <T = unknown>(path: string, body: unknown, keepalive = false): Promise<T> =>
@@ -209,10 +218,31 @@ export async function saveNote(id: number, text: string): Promise<boolean> {
   }
 }
 
-/** «Попросить передать»: до серверной части (10.6 п.8) — заметка для команды. */
-export function askHandover(id: number, owner: string): void {
-  void saveNote(id, t('note.askHandover', { name: owner }));
+/**
+ * «Попросить передать» (10.6 п.8): тому, кто ведёт, — тост «Иван просит
+ * передать диалог · Передать», в ленте — заметка для команды (пишет сервер).
+ * Сервер не принял (закрепление уже кончилось) — только своя заметка, как раньше.
+ */
+export async function askHandover(id: number, owner: string): Promise<void> {
+  try {
+    await post(`/api/conversations/${id}/handover-request`, {});
+    void syncThread(id);
+    showToast({ text: t('handover.sent', { name: owner }) });
+  } catch (err) {
+    if (err instanceof ApiError && err.code === 'permission') { failToast(err); return; }
+    void saveNote(id, t('note.askHandover', { name: owner }));
+  }
 }
+
+/** «Передать» из тоста просьбы: снять своё закрепление. */
+async function handOver(id: number): Promise<boolean> {
+  try {
+    await post(`/api/conversations/${id}/release`, {});
+    void syncThread(id);
+    return true;
+  } catch (err) { failToast(err); return false; }
+}
+setCollabHooks({ draft: (id, frame) => draftSync.frame(id, frame.draft), release: handOver });
 
 export async function copyLink(id: number): Promise<void> {
   try {

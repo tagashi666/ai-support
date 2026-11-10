@@ -224,6 +224,9 @@ describe('фильтр и свои заплатки', () => {
     ];
     expect(filterItems(rows, { assignee: 'me' }, 'op:1').map((row) => row.id)).toEqual([1]);
     expect(filterItems(rows, { assignee: 'none' }, 'op:1').map((row) => row.id)).toEqual([2]);
+    // «Ответственный: Мария» по ключу из /api/team/names (10.6 п.4).
+    expect(filterItems(rows, { assignee: 'op:1' }, 'op:9').map((row) => row.id)).toEqual([1]);
+    expect(filterItems(rows, { assignee: 'op:7' }, 'op:1').map((row) => row.id)).toEqual([]);
     expect(filterItems(rows, { folder: 3, source: 's' }, 'op:1').map((row) => row.id)).toEqual([2]);
     expect(filterItems(rows, { important: true }, 'op:1').map((row) => row.id)).toEqual([1]);
     expect(filterSize({ important: true, folder: 1 })).toBe(2);

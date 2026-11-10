@@ -9,6 +9,7 @@ import { ApiError, clearToken, getJson, readToken, saveToken } from './api';
 import { LiveClient, type ConnectionState, type Position } from './client';
 import { applyFrames, emptyInbox, mergeSnapshot, ordered, type InboxState } from './inbox';
 import { onThreadFrame, openThreadId, syncThread } from '@/lib/workspace/thread';
+import { loadPresence, onCollabFrame } from '@/lib/workspace/collab';
 
 export type Mode = 'demo' | 'live';
 const MODE_KEY = 'next.mode';
@@ -146,6 +147,7 @@ export async function startLive(): Promise<void> {
     await loadBootstrap();
     const position = await loadSnapshot();
     loading.value = 'ready';
+    void loadPresence();
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     client = new LiveClient({
       socketUrl: (ticket) => `${proto}://${location.host}/ws?v=2&token=${encodeURIComponent(ticket)}`,
@@ -167,9 +169,12 @@ export async function startLive(): Promise<void> {
         const open = openThreadId.peek();
         if (state === 'live' && was !== 'live' && open !== null) void syncThread(open);
         // После обрыва — свежий bootstrap: права, неполадки и версия (после обновления сервер перезапускался).
-        if (state === 'live' && was !== 'live' && was !== 'connecting') void loadBootstrap().catch(() => undefined);
+        if (state === 'live' && was !== 'live' && was !== 'connecting') {
+          void loadBootstrap().catch(() => undefined);
+          void loadPresence();
+        }
       },
-      onThread: onThreadFrame,
+      onThread: (frame) => { onCollabFrame(frame); onThreadFrame(frame); },
       onPermission: () => {
         rightsChanged.value = true;
         void loadBootstrap().catch(expired);

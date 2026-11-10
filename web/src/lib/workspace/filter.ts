@@ -9,8 +9,11 @@ import type { InboxItem } from '@shared/api-types';
 export interface ListFilter {
   source?: string;
   folder?: number;
-  /** «Ответственный»: тот, кто вёл диалог последним (assignee), даже после конца закрепления. */
-  assignee?: 'me' | 'none';
+  /**
+   * «Ответственный»: тот, кто вёл диалог последним (assignee), даже после конца
+   * закрепления. Кроме «я» и «никто» — ключ человека из /api/team/names («op:3», 10.6 п.4).
+   */
+  assignee?: 'me' | 'none' | string;
   important?: boolean;
   notFound?: boolean;
 }
@@ -24,6 +27,7 @@ export function filterItems(items: readonly InboxItem[], filter: ListFilter, me:
     if (filter.folder !== undefined && !item.folder_ids.includes(filter.folder)) return false;
     if (filter.assignee === 'me' && item.assignee?.id !== me) return false;
     if (filter.assignee === 'none' && item.assignee !== null) return false;
+    if (filter.assignee && filter.assignee !== 'me' && filter.assignee !== 'none' && item.assignee?.id !== filter.assignee) return false;
     if (filter.important && !item.flags.important) return false;
     if (filter.notFound && !item.flags.not_found) return false;
     return true;

@@ -19,6 +19,7 @@ import { bulk, drafts, hide, markRead, permissions, resolve, setImportant, type 
 import { gestures } from '@/lib/device';
 import { lockOf, offsetOf, PANEL_PX, settle, type SwipeLock } from '@/lib/hooks/swipe';
 import { filterItems, filterSize, readFilter, saveFilter, type ListFilter } from '@/lib/workspace/filter';
+import { colleaguesIn, presence } from '@/lib/workspace/collab';
 import { patched, patches } from '@/lib/workspace/local';
 import { viewLabel } from '@/lib/workspace/labels';
 import { availability } from '@/lib/workspace/registry';
@@ -79,6 +80,8 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
   const own = drafts.get(item.id);
   const preview = own.text.trim() && own.mode === 'reply' ? { who: t('preview.draft'), text: own.text } : livePreview(item);
   const name = liveName(item);
+  // Кто из коллег сейчас в диалоге (7.7): мини-аватар вместо точки «прочитано».
+  const here = colleaguesIn(presence.value.get(item.id), bootstrap.value?.me.id ?? '', at)[0];
   const front = useRef<HTMLDivElement>(null);
   const gesture = useRef<{ x: number; y: number; lock: SwipeLock; dx: number; timer: ReturnType<typeof setTimeout> | null; long: boolean } | null>(null);
 
@@ -147,7 +150,12 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
           wrapped
           avatar={selecting
             ? <span class={w.check} data-checked={actions.selected ? 'true' : 'false'} aria-hidden="true">{actions.selected ? '✓' : ''}</span>
-            : <Avatar name={name} channel={liveChannel(item)} />}
+            : here ? (
+              <span class={w.avatarWrap}>
+                <Avatar name={name} channel={liveChannel(item)} />
+                <span class={w.rowPresence} role="img" aria-label={t('presence.row', { name: here.name })}>{here.name.slice(0, 1).toLocaleUpperCase('ru')}</span>
+              </span>
+            ) : <Avatar name={name} channel={liveChannel(item)} />}
           title={name}
           time={listTime(item.activity_at, at)}
           who={preview.who}

@@ -2,6 +2,7 @@ import type { JSX } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { bootstrap } from '@/lib/live/store';
+import { loadTeamNames, teamNames } from '@/lib/workspace/collab';
 import type { ListFilter } from '@/lib/workspace/filter';
 import { Button } from '@/ui/Button';
 import { Sheet, sheetStyles } from '@/ui/Sheet';
@@ -12,7 +13,9 @@ export function FilterSheet({ open, onClose, value, onChange }: {
   open: boolean; onClose: () => void; value: ListFilter; onChange: (next: ListFilter) => void;
 }): JSX.Element {
   const [draft, setDraft] = useState<ListFilter>(value);
-  useEffect(() => { if (open) setDraft(value); }, [open]);
+  useEffect(() => { if (open) { setDraft(value); void loadTeamNames(); } }, [open]);
+  const me = bootstrap.value?.me.id ?? '';
+  const people = (teamNames.value ?? []).filter((person) => person.id !== me);
   const sources = bootstrap.value?.sources.filter((source) => source.enabled) ?? [];
   const folders = bootstrap.value?.folders ?? [];
   const radio = (name: string, checked: boolean, label: string, pick: () => void): JSX.Element => (
@@ -39,6 +42,7 @@ export function FilterSheet({ open, onClose, value, onChange }: {
         <legend>{t('filter.assignee')}</legend>
         {radio('who', !draft.assignee, t('filter.all'), () => setDraft({ ...draft, assignee: undefined }))}
         {radio('who', draft.assignee === 'me', t('filter.me'), () => setDraft({ ...draft, assignee: 'me' }))}
+        {people.map((person) => radio('who', draft.assignee === person.id, person.name, () => setDraft({ ...draft, assignee: person.id })))}
         {radio('who', draft.assignee === 'none', t('filter.nobody'), () => setDraft({ ...draft, assignee: 'none' }))}
       </fieldset>
       <fieldset class={w.group}>

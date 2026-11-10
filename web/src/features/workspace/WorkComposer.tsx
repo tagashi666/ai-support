@@ -5,13 +5,13 @@ import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { InboxItem, ThreadHead } from '@shared/api-types';
 import { t } from '@/i18n/ru';
-import { duration } from '@/lib/format/format';
+import { clock, duration } from '@/lib/format/format';
 import { getJson, readToken } from '@/lib/live/api';
 import { connection } from '@/lib/live/store';
 import { isDesktop } from '@/lib/media';
 import { now } from '@/lib/store/state';
 import {
-  drafts, draftTick, FILE_MAX_BYTES, FILES_MAX, isDangerous, permissions, resolve, saveNote, sendFile, sendReply,
+  drafts, draftSync, draftTick, FILE_MAX_BYTES, FILES_MAX, isDangerous, permissions, resolve, saveNote, sendFile, sendReply,
   ownUndoMs, typingKey, waitClient,
 } from '@/lib/workspace/actions';
 import type { LocalDraft } from '@/lib/workspace/drafts';
@@ -85,6 +85,11 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
   }, [canFiles, canCapture, mode]);
+
+  // Черновик пришёл с другого устройства (7.8) — в поле, но без фокуса.
+  const remote = draftSync.tick.value;
+  useEffect(() => { if (remote > 0) setDraftState(drafts.get(id)); }, [remote]);
+  const conflict = draftSync.conflicts.value.get(id) ?? null;
 
   // Чужие изменения черновика («Править», «Вернуть в поле», цитата из ленты) — в поле.
   const wantFocus = useRef(false);
@@ -201,6 +206,13 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
       onDrop={(event) => { if (!canFiles || mode !== 'reply') return; event.preventDefault(); addFiles(event.dataTransfer?.files ?? null); }}>
       {colleague !== null && <p class={s.notice}>{t('composer.colleagueLeads', { name: colleague })}</p>}
       {!canReply && colleague === null && <p class={s.notice}>{t('composer.noReplyRight')}</p>}
+      {conflict && (
+        <div class={w.draftConflict} role="status">
+          <span>{t('own.elsewhere', { time: clock(conflict.updated_at) })}</span>
+          <Button variant="secondary" size="sm" onClick={() => draftSync.take(id)}>{t('own.take')}</Button>
+          <Button variant="quiet" size="sm" onClick={() => draftSync.keep(id)}>{t('own.keep')}</Button>
+        </div>
+      )}
       <div class={w.composerBar}>
         <div class={s.modes} role="tablist" aria-label={t('composer.modes')}>
           <button type="button" role="tab" class={s.mode} aria-selected={mode === 'reply'} disabled={noteOnly}

@@ -11,9 +11,10 @@ import { isSplit } from '@/lib/media';
 import { navigate, route } from '@/lib/router';
 import { now } from '@/lib/store/state';
 import {
-  askHandover, copyLink, drafts, draftTick, giveBack, hide, itemOf, meKey, permissions, reopen, resolve, setImportant, setMode,
+  askHandover, copyLink, drafts, draftSync, draftTick, giveBack, hide, itemOf, meKey, permissions, reopen, resolve, setImportant, setMode,
   take, takeover, unhide, waitClient,
 } from '@/lib/workspace/actions';
+import { colleaguesIn, presence as presenceMap, setPresence } from '@/lib/workspace/collab';
 import { patches } from '@/lib/workspace/local';
 import { availability, type ActionId } from '@/lib/workspace/registry';
 import { freshItem, loadThread, openThreadId, threads, updateThread } from '@/lib/workspace/thread';
@@ -69,6 +70,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
   useEffect(() => {
     openThreadId.value = id;
     void loadThread(id);
+    void draftSync.open(id);
     return () => { if (openThreadId.peek() === id) openThreadId.value = null; };
   }, [id]);
 
@@ -83,6 +85,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
           id: entry.actor_key, name: entry.name, state: entry.state === 'typing' ? 'typing' as const : 'viewing' as const, at: entry.seen_at,
         }));
         updateThread(id, (current) => (current.head ? { ...current, head: { ...current.head, presence } } : current));
+        setPresence(id, presence);
       }).catch(() => undefined);
     };
     beat();
@@ -115,7 +118,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
   const done = item.status === 'resolved' || item.status === 'closed';
   const channel = liveChannel(item);
   const can = (action: ActionId): boolean => availability(action, perms) === 'show';
-  const colleagues = head.presence.filter((entry) => entry.id !== me && at - entry.at < 90_000);
+  const colleagues = colleaguesIn(presenceMap.value.get(id) ?? head.presence, me, at);
 
   /** Без права: по нажатию лист «Почему недоступно» (6.14) — на телефоне нет наведения. */
   const guarded = (action: ActionId, run: () => void) => () => {
