@@ -77,6 +77,23 @@ const KIND_KEY: Record<string, Key> = {
   tgs_sticker: 'file.sticker', video_sticker: 'file.sticker', sticker: 'file.sticker', animation: 'file.animation', photo: 'file.photo',
 };
 
+/**
+ * Картинка по медиа-билету в cookie: если картинка попросилась раньше билета (диалог открыт
+ * по ссылке, билет ещё в пути) или билет истёк — 401 и пустая рамка. Берём билет и
+ * запрашиваем ещё раз, один раз (как HintImage в «Знаниях»).
+ */
+function TicketImage({ src, width, height }: { src: string; width?: number; height?: number }): JSX.Element {
+  const [url, setUrl] = useState(src);
+  const retried = useRef(false);
+  return (
+    <img src={url} alt="" loading="lazy" width={width} height={height} onError={() => {
+      if (retried.current) return;
+      retried.current = true;
+      void getJson('/api/ticket', readToken() ?? '').then(() => setUrl(`${src}?r=${Date.now()}`)).catch(() => undefined);
+    }} />
+  );
+}
+
 /** Вложение в ленте: место под картинку резервируется заранее по width/height — лента не прыгает. */
 function AttachmentView({ file, onOpen }: { file: ThreadAttachment; onOpen: (file: ThreadAttachment) => void }): JSX.Element {
   const src = `/api/attachments/${file.id}`;
@@ -103,7 +120,7 @@ function AttachmentView({ file, onOpen }: { file: ThreadAttachment; onOpen: (fil
   if ((file.kind === 'photo' || file.kind === 'sticker' || (file.kind === 'animation' && file.mime === 'image/gif')) && file.mime !== 'application/x-tgsticker') {
     return (
       <button type="button" class={w.media} style={{ aspectRatio: ratio ?? '4 / 3' }} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
-        <img src={src} alt="" loading="lazy" width={file.width ?? undefined} height={file.height ?? undefined} />
+        <TicketImage src={src} width={file.width ?? undefined} height={file.height ?? undefined} />
       </button>
     );
   }
