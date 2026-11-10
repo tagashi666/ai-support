@@ -90,7 +90,7 @@ export const ru = {
   'reason.handedOver': 'Помощник передал вам: {topic}',
   'reason.slaOver': 'Просрочено {ago}',
   'reason.aiSilent': 'Помощник не ответил',
-  'reason.draftUnsure': 'Помощник не уверен — проверьте черновик',
+  'reason.draftUnsure': 'Помощник не уверен',
   'reason.draftReady': 'Черновик готов',
   'reason.important': 'Отмечено важным',
   'reason.slaSoon': 'Срок ответа через {left}',
