@@ -6,7 +6,7 @@
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { openItems, signIn, TOKEN } from './helpers';
+import { expectNoHorizontalScroll, openItems, signIn, TOKEN } from './helpers';
 
 async function serious(page: Page): Promise<string[]> {
   await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
@@ -68,7 +68,14 @@ test('учебный диалог стоит над секциями и закр
   const row = page.locator('[data-tutorial="true"]');
   await expect(row).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Учебный диалог · не в счётчиках' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
   await row.getByRole('button').click();
+  await expect(page.getByText('Задания')).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await page.goto('/next/today');
+  await expect(page.getByRole('region', { name: 'Начало работы' })).toBeVisible();
+  await expectNoHorizontalScroll(page);
+  await page.goto('/next/chats/learn');
   await page.getByRole('button', { name: 'Закрыть учебный диалог' }).click();
   await expect(page).toHaveURL(/\/next\/chats$/);
   await expect(page.locator('[data-tutorial="true"]')).toHaveCount(0);
