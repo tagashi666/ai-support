@@ -28,6 +28,9 @@ export interface WebDeps {
   onKbChanged?: () => void;
   /** Оператор прочитал диалог (POST /read): отметить прочтение во внешнем канале. */
   onOpened?: (conversation: Conversation) => void;
+  /** Подмена для локальной панели и e2e (scripts/devseed.ts): без GitHub и без файлов data/. */
+  updates?: UpdateManager;
+  sources?: SourceManager;
 }
 
 export type MiningOptions = Parameters<typeof runMining>[1];

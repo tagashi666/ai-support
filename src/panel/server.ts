@@ -103,8 +103,8 @@ export async function startWeb(deps: WebDeps) {
   // JSON остаётся под маленьким глобальным лимитом. Только этот media type
   // передаётся обработчику потоком и имеет собственный жёсткий предел 45 МБ.
   app.addContentTypeParser('application/vnd.ai-support.attachment', (_request, payload, done) => done(null, payload));
-  const updates = new UpdateManager();
-  const sources = new SourceManager();
+  const updates = deps.updates ?? new UpdateManager();
+  const sources = deps.sources ?? new SourceManager();
   const operations = new Operations(store);
   // Статус тикета во внешних каналах меняется через Outbox, до локальной записи.
   registerStatusSyncs(outbox, { bedolaga, minishop });

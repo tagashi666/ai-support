@@ -6,11 +6,19 @@
  *
  * Переменные окружения ставятся до импорта конфигурации, поэтому модули
  * сервера подгружаются динамически внутри startDevPanel.
+ *
+ * Изоляция (этап 6): `.env` проекта не читается (ENV_FILE → несуществующий
+ * файл во временном каталоге), все переменные, которые знает src/config.ts,
+ * унаследованные из оболочки, стираются, интеграции выключены, пути файлов
+ * обновления и подключений — во временном каталоге. Локальный прогон равен CI
+ * и не может увидеть данные настоящей инсталляции. isolate() проверяет это
+ * после загрузки конфигурации и падает, если что-то указывает наружу.
  */
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync, gzipSync } from 'node:zlib';
+import { FakeSources, FakeUpdates, fakeNodes, fakeNotifier } from './devfakes.js';
 
 export interface DevPanelOptions {
   port: number;
@@ -69,7 +77,45 @@ function makePng(width: number, height: number): Buffer {
 }
 const GB = 1024 ** 3;
 
+/** Имена переменных, которые читает src/config.ts (строковые литералы в верхнем регистре). */
+export function configEnvNames(): string[] {
+  const text = readFileSync(new URL('../src/config.ts', import.meta.url), 'utf8');
+  return [...new Set([...text.matchAll(/'([A-Z][A-Z0-9_]{2,})'/g)].map((match) => match[1]!))];
+}
+
+/** Стереть унаследованные переменные и закрыть чтение .env — до импорта конфигурации. */
+function scrubEnv(dir: string): void {
+  for (const name of configEnvNames()) delete process.env[name];
+  process.env.ENV_FILE = join(dir, 'no-such.env');
+  // Интеграции выключены явно: поддельные клиенты передаются в startWeb сами.
+  for (const name of ['BEDOLAGA_ENABLED', 'MINISHOP_ENABLED', 'REMNAWAVE_ENABLED', 'NODES_STATUS_ENABLED', 'SUPPORT_API_ENABLED', 'TRANSCRIBE_ENABLED', 'AI_AUTO_LEARN']) {
+    process.env[name] = 'false';
+  }
+  // Модель — закрытый локальный порт: случайный вызов падает сразу, а не уходит в сеть.
+  process.env.AI_BASE_URL = 'http://127.0.0.1:9/v1';
+  process.env.UPDATE_ENABLED = 'true';
+  process.env.UPDATE_REQUEST_FILE = join(dir, 'update-request.json');
+  process.env.UPDATE_STATUS_FILE = join(dir, 'update-status.json');
+  process.env.SOURCE_REQUEST_FILE = join(dir, 'source-request.json');
+  process.env.SOURCE_STATUS_FILE = join(dir, 'source-status.json');
+}
+
+/** Проверка после загрузки конфигурации: всё локально и во временном каталоге. */
+function isolate(config: { dbPath: string; mediaDir: string; kbDir: string; draftDir: string; update: { requestFile: string; statusFile: string };
+  sourceManagement: { requestFile: string; statusFile: string }; ai: { baseUrl: string }; bedolaga: { enabled: boolean }; minishop: { enabled: boolean };
+  remnawave: { enabled: boolean } }, dir: string): void {
+  const paths = [config.dbPath, config.mediaDir, config.kbDir, config.draftDir, config.update.requestFile, config.update.statusFile,
+    config.sourceManagement.requestFile, config.sourceManagement.statusFile];
+  const outside = paths.filter((path) => !path.startsWith(dir));
+  const enabled = [config.bedolaga.enabled && 'Bedolaga', config.minishop.enabled && 'MiniShop', config.remnawave.enabled && 'Remnawave'].filter(Boolean);
+  if (outside.length > 0 || enabled.length > 0 || !/^http:\/\/127\.0\.0\.1:/.test(config.ai.baseUrl)) {
+    throw new Error(`Локальная панель не изолирована: пути ${outside.join(', ') || '—'}, интеграции ${enabled.join(', ') || '—'}, модель ${config.ai.baseUrl}`);
+  }
+}
+
 export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel> {
+  const dir = mkdtempSync(join(tmpdir(), 'devlive-'));
+  scrubEnv(dir);
   process.env.BOT_TOKEN = '123456:AAFakeForDevLive';
   process.env.PANEL_TOKEN = options.token;
   process.env.AI_MODE = 'suggest';
@@ -77,7 +123,6 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
   process.env.LOG_LEVEL = 'error';
   process.env.PANEL_PORT = String(options.port);
   process.env.PANEL_HOST = '127.0.0.1';
-  const dir = mkdtempSync(join(tmpdir(), 'devlive-'));
   process.env.DB_PATH = join(dir, 'd.db');
   process.env.MEDIA_DIR = join(dir, 'media');
   process.env.KB_DIR = join(dir, 'kb');
@@ -90,7 +135,8 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
   const { Operations } = await import('../src/core/operations.js');
   const { startWeb } = await import('../src/panel/server.js');
   const { saveUploadedMedia } = await import('../src/core/media.js');
-  const { config } = await import('../src/config.js');
+  const { config, version } = await import('../src/config.js');
+  isolate(config, dir);
 
   const db = openDatabase();
   const store = new Store(db);
@@ -286,7 +332,27 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
     },
   };
 
-  const app = await startWeb({ store, outbox, customers: customers as never, remnawave: remnawave as never, bedolaga: bedolaga as never });
+  // --- этап 6: команда, журнал, история обновлений, подключения (всё выдуманное) ---
+  const lead = operations.createOperator('Пётр', 'lead');
+  const off = operations.createOperator('Софья', 'viewer');
+  operations.setOperatorActive(Number(off.operator.id), false);
+  const root = operations.rootActor();
+  const peter = operations.authenticate(lead.token)!;
+  operations.audit(root, 'POST /api/settings', 'settings', undefined, { aiMode: 'auto' });
+  operations.audit(peter, 'PUT /api/sla/high', 'sla', 'high', { firstResponseMinutes: 30, resolutionMinutes: 480 });
+  operations.audit(colleague, 'POST /api/conversations/3/reply', 'conversations', '3', { text: 'Проверили, всё в порядке.' });
+  operations.audit(root, 'POST /api/operators', 'operators', undefined, { name: 'Софья', role: 'viewer' });
+  operations.audit(peter, 'POST /api/kb/publish/skorost.md', 'kb', 'publish', {});
+  operations.audit(root, 'POST /api/nodes/alias', 'nodes', 'alias', { name: 'de-fra-2', alias: 'Германия 2' });
+  operations.recordUpdate('update', version, 'completed', root);
+  store.syncSource({ id: 'telegram-dev', kind: 'telegram_bot', name: 'Поддержка', enabled: true });
+  store.saveServiceProfile('telegram-dev', { serviceName: 'Поддержка', greetingMessage: 'Здравствуйте! Чем помочь?', handoffMessage: 'Передаю ваш вопрос специалисту, он скоро ответит.' });
+  store.saveFolder({ name: 'Бот', color: '#2563eb', sourceIds: ['telegram-dev'] });
+
+  const updates = new FakeUpdates(version);
+  const sources = new FakeSources((job) => store.syncSource({ id: job.id, kind: job.kind as 'telegram_bot', name: job.name, enabled: true }));
+  const app = await startWeb({ store, outbox, customers: customers as never, remnawave: remnawave as never, bedolaga: bedolaga as never,
+    updates: updates as never, sources: sources as never, nodes: fakeNodes(now) as never, notifier: fakeNotifier() as never });
   // После startWeb: он ставит синхронизацию заявок через клиента Bedolaga.
   outbox.registerStatusSync('bedolaga', async () => undefined);
 
