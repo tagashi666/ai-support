@@ -1,6 +1,7 @@
 import type { JSX } from 'preact';
 import { t, type Key } from '@/i18n/ru';
 import { tr } from '@/i18n/sections/reports';
+import { isSplit } from '@/lib/media';
 import { duration, listTime } from '@/lib/format/format';
 import type { OperatorStat } from '@/lib/reports/model';
 import { loadPeople, people } from '@/lib/reports/store';
@@ -28,9 +29,9 @@ export function PeoplePanel(): JSX.Element {
       {!res.data && res.state !== 'error' && <div class={r.skeleton} aria-hidden="true" />}
       {res.data && rows.length === 0 && <p class={r.muted}>{tr('reports.people.empty')}</p>}
       {rows.length > 0 && (
-        <>
+        isSplit.value ? (
           <div class={r.wide}>
-            <div class={r.tableWrap}>
+            <div class={r.tableWrap} tabIndex={0} role="region" aria-label={tr('reports.people.list')}>
               <table class={r.table}>
                 <caption>{tr('reports.people.caption', { n: res.data?.days ?? 0 })}</caption>
                 <thead>
@@ -60,6 +61,7 @@ export function PeoplePanel(): JSX.Element {
               </table>
             </div>
           </div>
+        ) : (
           <ul class={`${r.people} ${r.narrow}`} aria-label={tr('reports.people.list')} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {rows.map((row) => (
               <li key={row.key} class={r.person}>
@@ -70,7 +72,7 @@ export function PeoplePanel(): JSX.Element {
               </li>
             ))}
           </ul>
-        </>
+        )
       )}
     </div>
   );

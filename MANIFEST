@@ -191,6 +191,7 @@ web/src/app/Nav.tsx
 web/src/app/lazy.tsx
 web/src/app/shell.module.css
 web/src/app/useGlobalKeys.ts
+web/src/app/useWaitSound.ts
 web/src/demo/seed.ts
 web/src/demo/sim.ts
 web/src/features/assistant/ActivityPanel.tsx
@@ -297,6 +298,7 @@ web/src/lib/confidence.test.ts
 web/src/lib/connections/connections.test.ts
 web/src/lib/connections/model.ts
 web/src/lib/connections/store.ts
+web/src/lib/device.test.ts
 web/src/lib/device.ts
 web/src/lib/format/format.test.ts
 web/src/lib/format/format.ts

@@ -19,6 +19,9 @@ async function serious(page: Page): Promise<string[]> {
     .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
     .map((violation) => `${violation.id}: ${violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')}`);
 }
+function expectClean(found: string[]): void {
+  expect(found, JSON.stringify(found)).toEqual([]);
+}
 
 const LEVEL_NAME = { all: 'Каждое событие', important: 'Только то, что требует вмешательства', minimal: 'Только передачи и просрочки' } as const;
 
@@ -124,18 +127,18 @@ for (const scheme of ['light', 'dark'] as const) {
       await expect(page.getByText(/Есть что проверить|Всё в порядке|Есть неисправность/)).toBeVisible();
       await page.getByRole('button', { name: 'Для специалистов' }).click();
       await page.getByRole('button', { name: 'Приложение' }).click();
-      expect(await serious(page)).toEqual([]);
+      expectClean(await serious(page));
       await page.goto('/next/system/servers');
       await expect(page.getByText(/Данные от \d\d:\d\d/)).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expectClean(await serious(page));
       await page.goto('/next/system/notifications');
       await expect(page.getByRole('group', { name: 'Что присылать в Telegram' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expectClean(await serious(page));
       await page.goto('/next/system/update');
       await expect(page.getByText(/Сейчас \d+\.\d+\.\d+\./)).toBeVisible();
       await page.getByRole('button', { name: /^Расширенно/ }).click();
       await page.getByRole('button', { name: /^История операций/ }).click();
-      expect(await serious(page)).toEqual([]);
+      expectClean(await serious(page));
     });
 
     test('листы: откат и обновление', async ({ page }) => {
@@ -144,13 +147,13 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: /^Расширенно/ }).click();
       await page.getByRole('button', { name: 'Откатить…' }).click();
       await expect(page.getByRole('dialog', { name: 'Откатить на прежнюю версию?' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expectClean(await serious(page));
       await page.getByRole('dialog').getByRole('button', { name: 'Отмена' }).click();
       const open = page.getByRole('button', { name: /^Обновить до \d+\.\d+\.\d+…$/ });
       if (await open.count() > 0) {
         await open.click();
         await expect(page.getByRole('dialog', { name: /^Обновить до \d+\.\d+\.\d+\?$/ })).toBeVisible();
-        expect(await serious(page)).toEqual([]);
+        expectClean(await serious(page));
       }
     });
   });

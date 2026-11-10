@@ -2,13 +2,32 @@ import type { JSX } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { tr } from '@/i18n/sections/team';
 import { clock, dayMonth, sameDay } from '@/lib/format/format';
-import { actorsOf, AUDIT_GROUPS, describeEvents, filterLines, GROUP_LABEL, type AuditGroup } from '@/lib/team/model';
+import { actorsOf, AUDIT_GROUPS, describeEvents, filterLines, GROUP_LABEL, type AuditGroup, type AuditLine } from '@/lib/team/model';
 import { auditError, auditEvents, auditState, loadAudit, operators, loadPeople } from '@/lib/team/store';
 import { Button } from '@/ui/Button';
 import { BlockState } from './BlockState';
 import k from './team.module.css';
 
 const PAGE = 50;
+
+function RawView({ line }: { line: AuditLine }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <details class={k.raw} open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)}>
+      <summary>{tr('team.log.raw')}</summary>
+      {open && (
+        <dl class={k.rawBody}>
+          <dt>{tr('team.log.rawAction')}</dt>
+          <dd>{line.action}</dd>
+          <dt>{tr('team.log.rawSection')}</dt>
+          <dd>{line.section}</dd>
+          <dt>{tr('team.log.rawBody')}</dt>
+          <dd>{line.body ? <pre>{line.body}</pre> : line.bodyBroken ? tr('team.log.rawBroken') : tr('team.log.rawNone')}</dd>
+        </dl>
+      )}
+    </details>
+  );
+}
 
 const when = (ms: number, now: number): string => (sameDay(ms, now) ? clock(ms) : `${dayMonth(ms)}, ${clock(ms)}`);
 
@@ -58,20 +77,10 @@ export function LogPanel(): JSX.Element {
                 {visible.map((line) => (
                   <li key={line.id} class={k.logItem}>
                     <div class={k.logMain}>
-                      <span class={k.logText}><span class={k.logWho}>{line.who}</span> {line.text}</span>
+                      <span class={k.logText}><span class={k.logWho}>{line.who}</span> {line.text}</span>{' '}
                       <span class={`${k.logTime} num`}>{when(line.at, now)}</span>
                     </div>
-                    <details class={k.raw}>
-                      <summary>{tr('team.log.raw')}</summary>
-                      <dl class={k.rawBody}>
-                        <dt>{tr('team.log.rawAction')}</dt>
-                        <dd>{line.action}</dd>
-                        <dt>{tr('team.log.rawSection')}</dt>
-                        <dd>{line.section}</dd>
-                        <dt>{tr('team.log.rawBody')}</dt>
-                        <dd>{line.body ? <pre>{line.body}</pre> : line.bodyBroken ? tr('team.log.rawBroken') : tr('team.log.rawNone')}</dd>
-                      </dl>
-                    </details>
+                    <RawView line={line} />
                   </li>
                 ))}
               </ul>

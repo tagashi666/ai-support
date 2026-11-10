@@ -25,12 +25,11 @@ async function settle(page: Page): Promise<void> {
   await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
 }
 
-async function serious(page: Page): Promise<string[]> {
+async function expectClean(page: Page): Promise<void> {
   await settle(page);
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  return result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => `${violation.id}: ${violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')}`);
+  const bad = result.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
+  expect(bad.map((violation) => violation.id), JSON.stringify(bad.map((v) => [v.id, v.nodes.map((n) => n.target).join(' ')]))).toEqual([]);
 }
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
@@ -214,7 +213,8 @@ test('«Журнал»: человеческие строки, фильтры «
   const item = list.getByRole('listitem').filter({ hasText: 'ответил(а) в диалоге №3' }).first();
   await expect(item).toContainText('Мария');
   await expect(item.locator('summary')).toHaveText('Как есть');
-  await expect(item).not.toContainText('/api/conversations');
+  await expect(item.locator('summary')).toBeVisible();
+  await expect(item.getByText('POST /api/conversations/3/reply')).toHaveCount(0);
   await expect(list.getByRole('listitem').filter({ hasNotText: 'Мария' })).toHaveCount(0);
   await item.locator('summary').click();
   await expect(item.getByText('POST /api/conversations/3/reply')).toBeVisible();
@@ -238,33 +238,33 @@ for (const scheme of ['light', 'dark'] as const) {
     test('люди, карточка, добавление', async ({ page, request }) => {
       await page.goto('/next/team');
       await expect(page.getByRole('list', { name: 'Люди' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
       const maria = (await operators(request)).find((person) => person.name === 'Мария');
       await page.goto(`/next/team/people/${maria?.id}`);
       await expect(page.getByRole('dialog', { name: 'Мария · Оператор' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
       await page.getByRole('button', { name: 'Отключить доступ…' }).click();
       await expect(page.getByRole('dialog', { name: 'Отключить доступ Мария?' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
       await page.goto('/next/team/people/new');
       await expect(page.getByRole('dialog', { name: 'Новый человек' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
     });
 
     test('роли и журнал', async ({ page }) => {
       await page.goto('/next/team/roles');
       await expect(page.getByRole('list', { name: 'Роли' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
       await page.getByRole('region', { name: 'Оператор' }).getByRole('button', { name: 'Точно настроить' }).click();
       await expect(page.getByRole('dialog', { name: 'Права: Оператор' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
       await page.getByRole('button', { name: 'Проверить изменения' }).click();
       await expect(page.getByRole('dialog', { name: 'Что изменится у роли «Оператор»' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
       await page.goto('/next/team/log');
       await expect(page.getByRole('list', { name: 'Журнал действий' })).toBeVisible();
       await page.getByRole('list', { name: 'Журнал действий' }).locator('summary').first().click();
-      expect(await serious(page)).toEqual([]);
+      await expectClean(page);
     });
   });
 }

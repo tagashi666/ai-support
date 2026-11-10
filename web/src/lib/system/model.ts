@@ -268,7 +268,7 @@ export function verdictOf(checks: Check[]): Verdict {
 }
 
 function issuesLine(bad: Check[]): string {
-  const lines = bad.slice(0, 2).map((c) => c.issue ?? `${c.title}: ${c.summary}`).map((s) => (/[.!?]$/.test(s) ? s : `${s}.`));
+  const lines = bad.map((c) => c.issue ?? `${c.title}: ${c.summary}`).map((s) => (/[.!?]$/.test(s) ? s : `${s}.`));
   return lines.join(' ');
 }
 

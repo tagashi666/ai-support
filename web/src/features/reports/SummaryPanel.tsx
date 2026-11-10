@@ -70,7 +70,7 @@ function Charts({ data }: { data: StatsResponse }): JSX.Element {
         </div>
       ) : (
         <div class={r.charts}>
-          <div class={r.tableWrap}>
+          <div class={r.tableWrap} tabIndex={0} role="region" aria-label={tr('reports.byDay')}>
             <table class={r.table}>
               <caption>{tr('reports.byDay')}</caption>
               <thead><tr><th scope="col">{tr('reports.col.day')}</th><th scope="col" class={r.num}>{tr('reports.col.incoming')}</th><th scope="col" class={r.num}>{tr('reports.col.outgoing')}</th></tr></thead>
@@ -81,7 +81,7 @@ function Charts({ data }: { data: StatsResponse }): JSX.Element {
               </tbody>
             </table>
           </div>
-          <div class={r.tableWrap}>
+          <div class={r.tableWrap} tabIndex={0} role="region" aria-label={tr('reports.byHour')}>
             <table class={r.table}>
               <caption>{tr('reports.byHour')}</caption>
               <thead><tr><th scope="col">{tr('reports.col.hour')}</th><th scope="col" class={r.num}>{tr('reports.col.incoming')}</th></tr></thead>

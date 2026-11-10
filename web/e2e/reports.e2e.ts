@@ -13,12 +13,11 @@ interface Policy { priority: string; first_response_minutes: number; resolution_
 interface QueueRows { conversations: { id: number; overdue: boolean }[] }
 interface People { operators: { name: string }[] }
 
-async function serious(page: Page): Promise<string[]> {
+async function serious(page: Page): Promise<string> {
   await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  return result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => `${violation.id}: ${violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')}`);
+  const bad = result.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
+  return bad.length === 0 ? '' : JSON.stringify(bad.map((v) => [v.id, v.nodes.map((n) => n.target.join(' ')).slice(0, 4)]));
 }
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
@@ -148,26 +147,26 @@ for (const scheme of ['light', 'dark'] as const) {
     test('сводка, по людям, сроки ответа и лист сброса', async ({ page }) => {
       await page.goto('/next/reports');
       await expect(page.getByText('Ждут человека').first()).toBeVisible();
-      expect(await serious(page), 'сводка').toEqual([]);
+      expect(await serious(page), 'сводка').toBe('');
       await page.getByRole('button', { name: 'Показать таблицей' }).click();
       await expect(page.getByRole('table', { name: 'Когда пишут (часы)' })).toBeVisible();
-      expect(await serious(page), 'сводка, таблицы').toEqual([]);
+      expect(await serious(page), 'сводка, таблицы').toBe('');
 
       await page.goto('/next/reports/people');
       await expect(page.getByRole('tab', { name: 'По людям' })).toHaveAttribute('aria-selected', 'true');
       await expect(page.getByText('Обработано').first()).toBeVisible();
-      expect(await serious(page), 'по людям').toEqual([]);
+      expect(await serious(page), 'по людям').toBe('');
 
       await page.goto('/next/reports/sla');
       await expect(page.getByRole('list', { name: 'Сейчас по срокам' }).getByRole('link').first()).toBeVisible();
-      expect(await serious(page), 'сроки ответа').toEqual([]);
+      expect(await serious(page), 'сроки ответа').toBe('');
 
       await page.goto('/next/reports');
       await expect(page.getByText('Ждут человека').first()).toBeVisible();
       await page.getByRole('button', { name: 'Действия с отчётом' }).click();
       await page.getByRole('menuitem', { name: 'Сбросить статистику…' }).click();
       await expect(page.getByRole('dialog', { name: 'Сбросить статистику?' })).toBeVisible();
-      expect(await serious(page), 'лист сброса').toEqual([]);
+      expect(await serious(page), 'лист сброса').toBe('');
     });
   });
 }

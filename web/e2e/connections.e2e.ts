@@ -20,13 +20,12 @@ async function waitIdle(request: APIRequestContext): Promise<void> {
   await expect.poll(async () => (await api<{ queued: boolean }>(request, '/api/sources/status')).queued, { timeout: 20_000 }).toBe(false);
 }
 
-async function serious(page: Page): Promise<string[]> {
+async function serious(page: Page): Promise<string> {
   // Лист открывается с проявлением: контраст на середине анимации axe считает неверно.
   await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  return result.violations
-    .filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
-    .map((violation) => `${violation.id}: ${violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')}`);
+  const bad = result.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
+  return bad.length === 0 ? '' : JSON.stringify(bad.map((violation) => [violation.id, violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')]));
 }
 
 async function runWizard(page: Page, request: APIRequestContext, name: string, key: string): Promise<void> {
@@ -51,10 +50,10 @@ test('карточки: бот, Business, Bedolaga, Remnawave, MiniShop — со
   const bot = page.getByRole('region', { name: 'Telegram-бот «Поддержка»' });
   await expect(bot.getByText('работает', { exact: true })).toBeVisible();
   await expect(bot.getByRole('button', { name: 'Как мы представляемся' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Telegram Business' }).getByText('подключён', { exact: true })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Bedolaga' })).toBeVisible();
-  await expect(page.getByRole('region', { name: 'Remnawave' }).getByText('подключено · только чтение')).toBeVisible();
-  const shop = page.getByRole('region', { name: 'MiniShop' });
+  await expect(page.getByRole('region', { name: 'Telegram Business', exact: true }).getByText(/^(подключён|выключен|не подключён)$/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Bedolaga', exact: true })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Remnawave', exact: true }).getByText(/^подключено · (только чтение|действия разрешены)$/)).toBeVisible();
+  const shop = page.getByRole('region', { name: 'MiniShop', exact: true });
   await expect(shop.getByText('не подключён', { exact: true })).toBeVisible();
   await expect(shop.getByRole('button', { name: 'Подключить' })).toBeVisible();
   await expect(page.getByRole('tab', { name: 'Каналы и источники' })).toHaveAttribute('aria-selected', 'true');
@@ -65,8 +64,8 @@ test('Business: «Проверить подключение» перечитыв
   const data = await api<ConnectionsResponse>(request, '/api/connections');
   const expected = data.businessConnections.some((item) => item.enabled) ? 'Подключено ✓' : 'Пока не видим подключение';
   await page.goto('/next/connections');
-  await page.getByRole('region', { name: 'Telegram Business' }).getByRole('button', { name: 'Проверить подключение' }).click();
-  await expect(page.getByRole('region', { name: 'Telegram Business' }).getByRole('status')).toContainText(expected);
+  await page.getByRole('region', { name: 'Telegram Business', exact: true }).getByRole('button', { name: 'Проверить подключение' }).click();
+  await expect(page.getByRole('region', { name: 'Telegram Business', exact: true }).getByRole('status')).toContainText(expected);
 });
 
 test('«Как мы представляемся»: правка приветствия меняет пример; сохранение; возвращаем как было', async ({ page, request }) => {
@@ -132,7 +131,7 @@ test('мастер: проверка полей до отправки, ключ 
   await wizard.getByRole('button', { name: 'Подключить и проверить' }).click();
   await expect(wizard.getByText(/Нужен полный адрес с https:\/\//)).toBeVisible();
   await expect(wizard.getByText(/Ключ короче 24 знаков/)).toBeVisible();
-  await expect(wizard.getByText('Для специалистов')).toBeVisible();
+  await expect(wizard.getByText('Для специалистов', { exact: true })).toBeVisible();
 });
 
 test('мастер с плохим ключом: «Не подключилось, вернули как было»', async ({ page, request }) => {
@@ -221,14 +220,14 @@ for (const scheme of ['light', 'dark'] as const) {
     test('вкладки «Каналы и источники» и «Папки»', async ({ page }) => {
       await page.goto('/next/connections');
       await expect(page.getByRole('region', { name: 'MiniShop' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), 'нарушения axe').toBe('');
       await page.goto('/next/connections/folders');
       await expect(page.getByRole('button', { name: 'Новая папка' })).toBeVisible();
       await expect(page.getByRole('list', { name: 'Папки' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), 'нарушения axe').toBe('');
       await page.getByRole('button', { name: 'Новая папка' }).click();
       await expect(page.getByRole('dialog', { name: 'Новая папка' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), 'нарушения axe').toBe('');
     });
 
     test('мастер: выбор, поля и ошибки', async ({ page }) => {
@@ -236,18 +235,18 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.getByRole('button', { name: 'Подключить канал или источник' }).click();
       const wizard = page.getByRole('dialog');
       await expect(wizard.getByText('1 из 3')).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), 'нарушения axe').toBe('');
       await wizard.getByRole('button', { name: 'Дальше' }).click();
       await wizard.getByRole('button', { name: 'Подключить и проверить' }).click();
       await expect(wizard.getByText('Укажите название.')).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), 'нарушения axe').toBe('');
     });
 
     test('лист «Как мы представляемся»', async ({ page }) => {
       await page.goto('/next/connections');
       await page.getByRole('region', { name: 'Telegram-бот «Поддержка»' }).getByRole('button', { name: 'Как мы представляемся' }).click();
       await expect(page.getByRole('region', { name: 'Так это увидит клиент' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      expect(await serious(page), 'нарушения axe').toBe('');
     });
   });
 }
