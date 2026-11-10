@@ -4,6 +4,7 @@ import { t, type Key } from '@/i18n/ru';
 import { showToast } from '@/lib/actions/toasts';
 import { isMod } from '@/lib/keys';
 import { Button } from '@/ui/Button';
+import { closeModal, openModal } from '@/ui/layer';
 import s from './media.module.css';
 
 export type Tool = 'draw' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'pixel' | 'crop';
@@ -64,7 +65,8 @@ export function ImageEditor({ file, onSave, onClose, saveLabel }: {
   const redo = (): void => { const next = history.current.redo.pop(); if (next) { history.current.undo.push(snapshot()); restore(next); } };
 
   useEffect(() => {
-    dialog.current?.showModal();
+    const box = dialog.current;
+    if (box) openModal(box);
     let alive = true;
     void createImageBitmap(file).then((bitmap) => {
       if (!alive || !canvas.current) return;
@@ -74,7 +76,7 @@ export function ImageEditor({ file, onSave, onClose, saveLabel }: {
       setSize({ w: canvas.current.width, h: canvas.current.height });
       setReady(true);
     }).catch(() => { showToast({ text: t('editor.badFormat'), kind: 'error', ttl: null }); onClose(); });
-    return () => { alive = false; };
+    return () => { alive = false; if (box) closeModal(box); };
   }, [file]);
 
   const style = (c: CanvasRenderingContext2D): void => {

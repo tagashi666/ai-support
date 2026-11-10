@@ -26,6 +26,7 @@ import { Icon } from '@/ui/Icon';
 import { Option, Sheet } from '@/ui/Sheet';
 import s from '@/features/thread/thread.module.css';
 import w from './workspace.module.css';
+import { smooth } from '@/ui/motion';
 
 const NEAR_BOTTOM = 120;
 const EARLIER_AT = 80;
@@ -204,7 +205,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
       if (fromClient.length) announcement.value = t('feed.newMessage', { name: liveName(item) });
       const own = added.some((message) => message.voice === 'operator' && message.author?.id === me);
       if (own || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM + 200) {
-        el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+        el.scrollTo({ top: el.scrollHeight, behavior: smooth() });
         // Новое входящее при видимой вкладке и ленте внизу — прочитано (прил. А.C, 7.2).
         if (fromClient.length && document.visibilityState === 'visible') markRead(id);
       } else if (fromClient.length) setUnseen((value) => value + fromClient.length);
@@ -352,7 +353,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
       </div>
       {unseen > 0 && (
         <Button variant="secondary" size="sm" icon="arrowDown" class={s.newBelow}
-          onClick={() => { ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' }); setUnseen(0); markRead(id); }}>
+          onClick={() => { ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: smooth() }); setUnseen(0); markRead(id); }}>
           {t('feed.newBelow', { n: unseen })}
         </Button>
       )}

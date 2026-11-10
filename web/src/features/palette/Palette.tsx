@@ -13,6 +13,8 @@ import { now } from '@/lib/store/state';
 import { COMMANDS, commandsOnly, matchCommand, readRecent, searchable, type Group } from '@/lib/palette/commands';
 import { commandAllowed, openThreadId, paletteOpen, runCommand } from '@/lib/palette/run';
 import { permissions } from '@/lib/workspace/actions';
+import { closeModal, openModal } from '@/ui/layer';
+import { usePresence } from '@/ui/motion';
 import s from './palette.module.css';
 
 interface SearchResponse {
@@ -60,12 +62,14 @@ export function Palette(): JSX.Element {
   const perms = permissions.value;
   const offline = connection.value === 'offline';
 
+  // Выход (M-3): окно закрывается после кадров выхода; Esc и клик мимо — тоже через них.
+  const { mounted, closing } = usePresence(open);
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) { dialog.showModal(); setQuery(''); setResult(null); setActive(0); requestAnimationFrame(() => input.current?.focus()); }
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+    if (mounted && !dialog.open) { openModal(dialog); setQuery(''); setResult(null); setActive(0); requestAnimationFrame(() => input.current?.focus()); }
+    if (!mounted && dialog.open) closeModal(dialog);
+  }, [mounted]);
 
   // Поиск на сервере: от 2 символов, задержка 180 мс, защита от гонки ответов.
   useEffect(() => {
@@ -153,9 +157,10 @@ export function Palette(): JSX.Element {
   const q = query.trim();
   let lastGroup: Group | null = null;
   return (
-    <dialog ref={ref} class={s.palette} aria-label={t('palette.title')} onClose={close}
+    <dialog ref={ref} class={s.palette} aria-label={t('palette.title')} data-state={closing ? 'closing' : undefined}
+      onCancel={(event) => { event.preventDefault(); close(); }} onClose={close}
       onClick={(event) => { if (event.target === ref.current) close(); }}>
-      {open && (
+      {mounted && (
         <>
           <div class={s.field} data-loading={state === 'loading' ? 'true' : 'false'}>
             <input ref={input} type="search" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list"

@@ -9,6 +9,7 @@ import { Bubble } from '@/ui/Bubble';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import s from './thread.module.css';
+import { smooth } from '@/ui/motion';
 
 const NEAR_BOTTOM = 120;
 
@@ -71,7 +72,7 @@ export function Feed({ chat }: { chat: Chat }): JSX.Element {
     if (added <= 0) return;
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM + 160;
     const mine = chat.feed[chat.feed.length - 1]?.type === 'message' && (chat.feed[chat.feed.length - 1] as Message).author === 'you';
-    if (near || mine) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    if (near || mine) el.scrollTo({ top: el.scrollHeight, behavior: smooth() });
     else setUnseen((value) => value + added);
   }, [chat.feed.length]);
 
@@ -133,7 +134,7 @@ export function Feed({ chat }: { chat: Chat }): JSX.Element {
           size="sm"
           icon="arrowDown"
           class={s.newBelow}
-          onClick={() => { ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: 'smooth' }); setUnseen(0); }}
+          onClick={() => { ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: smooth() }); setUnseen(0); }}
         >
           {t('feed.newBelow', { n: unseen })}
         </Button>

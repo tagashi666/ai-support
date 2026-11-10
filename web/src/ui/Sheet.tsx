@@ -2,6 +2,8 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useId, useRef } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { Button } from './Button';
+import { closeModal, openModal } from './layer';
+import { usePresence } from './motion';
 import s from './ui.module.css';
 
 interface SheetProps {
@@ -17,33 +19,44 @@ interface SheetProps {
 /**
  * Лист на нативном <dialog>: ловушка фокуса и возврат фокуса даёт браузер,
  * Esc закрывает только верхний слой (6.0). На телефоне — нижний лист.
+ * Закрытие (кнопка, Esc, клик мимо) играет выход (M-3, M-4): содержимое и заголовок
+ * держатся последними, пока идут кадры выхода, и только потом dialog.close().
  */
 export function Sheet({ open, onClose, title, side = 'center', size, children }: SheetProps): JSX.Element {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const { mounted, closing } = usePresence(open);
+  const live = useRef(open);
+  live.current = open;
+  const last = useRef({ title, children });
+  if (open) last.current = { title, children };
+  const close = (): void => { if (live.current) onClose(); };
   useEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    if (!open && dialog.open) dialog.close();
-  }, [open]);
+    if (mounted) openModal(dialog);
+    else if (dialog.open) closeModal(dialog);
+  }, [mounted]);
+  useEffect(() => () => { if (ref.current) closeModal(ref.current); }, []);
   return (
     <dialog
       ref={ref}
       class={s.sheet}
       data-side={side}
       data-size={size}
+      data-state={closing ? 'closing' : undefined}
       aria-labelledby={titleId}
-      onClose={onClose}
-      onClick={(event) => { if (event.target === ref.current) onClose(); }}
+      onCancel={(event) => { event.preventDefault(); close(); }}
+      onClose={close}
+      onClick={(event) => { if (event.target === ref.current) close(); }}
     >
-      {open && (
+      {mounted && (
         <>
           <div class={s.sheetHead}>
-            <h2 class={s.sheetTitle} id={titleId}>{title}</h2>
-            <Button variant="quiet" size="sm" icon="close" label={t('sheet.close')} onClick={onClose} />
+            <h2 class={s.sheetTitle} id={titleId}>{last.current.title}</h2>
+            <Button variant="quiet" size="sm" icon="close" label={t('sheet.close')} onClick={close} />
           </div>
-          <div class={s.sheetBody}>{children}</div>
+          <div class={s.sheetBody}>{last.current.children}</div>
         </>
       )}
     </dialog>

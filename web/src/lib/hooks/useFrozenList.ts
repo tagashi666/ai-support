@@ -10,6 +10,7 @@
 import type { RefObject } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { reducedMotion } from '@/lib/media';
+import { DUR, EASE } from '@/ui/motion';
 
 export const CALM_MS = 1500;
 export const SCROLL_SETTLE_MS = 1000;
@@ -103,9 +104,8 @@ export function useFrozenList({ pendingKey, apply, shown, onFrozen }: Options): 
         }
         return;
       }
-      const easing = 'cubic-bezier(.2,.8,.2,1)';
-      if (was === undefined) row.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 200, easing });
-      else if (Math.abs(was - top) > 1) row.animate([{ transform: `translateY(${was - top}px)` }, { transform: 'none' }], { duration: 200, easing });
+      if (was === undefined) row.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: DUR.fast, easing: EASE.out });
+      else if (Math.abs(was - top) > 1) row.animate([{ transform: `translateY(${was - top}px)` }, { transform: 'none' }], { duration: DUR.move, easing: EASE.move });
     });
   }, [shown]);
 

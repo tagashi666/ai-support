@@ -34,6 +34,7 @@ import { Tabs } from '@/ui/Tabs';
 import s from '@/features/chats/chats.module.css';
 import { FilterSheet } from './FilterSheet';
 import w from './workspace.module.css';
+import { DUR, EASE } from '@/ui/motion';
 
 type View = 'waiting' | 'open' | 'done';
 const VIEW_SECTIONS: Record<View, readonly Section[]> = {
@@ -90,7 +91,7 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
   const setOffset = (px: number, animate: boolean): void => {
     const el = front.current;
     if (!el) return;
-    el.style.transition = animate && !reducedMotion.value ? 'transform 180ms ease' : 'none';
+    el.style.transition = animate && !reducedMotion.value ? `transform ${DUR.move}ms ${EASE.out}` : 'none';
     el.style.transform = px ? `translateX(${px}px)` : '';
   };
   useEffect(() => { setOffset(actions.swiped ? -PANEL_PX : 0, true); }, [actions.swiped]);

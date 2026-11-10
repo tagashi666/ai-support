@@ -1,17 +1,30 @@
-import type { JSX } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { render, type JSX } from 'preact';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { dismissToast, toasts, type Toast } from '@/lib/actions/toasts';
 import { Button } from './Button';
+import { addFloating } from './layer';
+import { flip, measure, useExitList } from './motion';
 import s from './ui.module.css';
 
-function ToastItem({ toast }: { toast: Toast }): JSX.Element {
+/**
+ * Тост. Наведение или фокус ставят паузу — и отсчёту, и действию за ним
+ * (toast.hold → deferred.pause, M-2): «Отменить» не может «протухнуть», пока на него смотрят.
+ */
+function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.Element {
   const [left, setLeft] = useState(toast.ttl ?? 0);
-  const held = useRef(false);
+  const [held, setHeld] = useState(false);
+  const heldRef = useRef(false);
+  const hold = (value: boolean): void => {
+    if (heldRef.current === value) return;
+    heldRef.current = value;
+    setHeld(value);
+    toast.hold?.(value);
+  };
   useEffect(() => {
     if (toast.ttl === null) return undefined;
     const timer = setInterval(() => {
-      if (held.current) return;
+      if (heldRef.current) return;
       setLeft((value) => {
         const next = value - 250;
         if (next <= 0) dismissToast(toast.id);
@@ -20,15 +33,21 @@ function ToastItem({ toast }: { toast: Toast }): JSX.Element {
     }, 250);
     return () => clearInterval(timer);
   }, [toast.id, toast.ttl]);
-  const hold = (value: boolean) => () => { held.current = value; };
+  // Тост ушёл, пока на нём курсор (вытеснен четвёртым) — снять паузу с действия.
+  useEffect(() => () => { if (heldRef.current) toast.hold?.(false); }, []);
+  useEffect(() => { if (leaving) hold(false); }, [leaving]);
+  const timed = toast.ttl !== null && toast.action;
   return (
     <div
       class={s.toast}
       role={toast.kind === 'error' ? 'alert' : 'status'}
-      onMouseEnter={hold(true)}
-      onMouseLeave={hold(false)}
-      onFocusIn={hold(true)}
-      onFocusOut={hold(false)}
+      data-state={leaving ? 'closing' : undefined}
+      data-held={held ? 'true' : undefined}
+      style={timed ? { '--ttl': `${toast.ttl}ms` } : undefined}
+      onMouseEnter={() => hold(true)}
+      onMouseLeave={() => hold(false)}
+      onFocusIn={() => hold(true)}
+      onFocusOut={() => hold(false)}
     >
       <span class={s.toastText}>{toast.text}</span>
       {toast.action && (
@@ -36,16 +55,33 @@ function ToastItem({ toast }: { toast: Toast }): JSX.Element {
           {toast.action.label}
         </button>
       )}
-      {toast.ttl !== null && toast.action && <span class={s.toastTimer} aria-hidden="true">{Math.max(1, Math.ceil(left / 1000))}</span>}
+      {timed && <span class={s.toastTimer} aria-hidden="true">{Math.max(1, Math.ceil(left / 1000))}</span>}
       <Button variant="quiet" size="sm" icon="close" label={t('toast.close')} class={s.toastClose} onClick={() => dismissToast(toast.id)} />
+      {timed && <span class={s.toastBar} aria-hidden="true" />}
     </div>
   );
 }
 
-export function Toaster(): JSX.Element {
-  return (
-    <section class={s.toasts} aria-label={t('toast.region')}>
-      {toasts.value.map((toast) => <ToastItem key={toast.id} toast={toast} />)}
-    </section>
-  );
+function Stack({ host }: { host: HTMLElement }): JSX.Element {
+  const list = useExitList(toasts.value, (toast) => toast.id);
+  const before = useRef(new Map<Element, number>());
+  // Соседи съезжают на место ушедшего плавно (M-11).
+  useLayoutEffect(() => { flip(host, before.current); before.current = measure(host); });
+  return <>{list.map(({ item, leaving }) => <ToastItem key={item.id} toast={item} leaving={leaving} />)}</>;
+}
+
+/**
+ * Стопка тостов в своём корне: узел живёт в верхнем слое и переезжает в верхний
+ * открытый лист (ui/layer.ts, W-1), поэтому его DOM не принадлежит дереву App.
+ */
+export function Toaster(): null {
+  useEffect(() => {
+    const host = document.createElement('section');
+    host.className = s.toasts ?? '';
+    host.setAttribute('aria-label', t('toast.region'));
+    const drop = addFloating(host);
+    render(<Stack host={host} />, host);
+    return () => { render(null, host); drop(); };
+  }, []);
+  return null;
 }
