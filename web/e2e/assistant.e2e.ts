@@ -33,10 +33,13 @@ async function fakeTry(page: Page): Promise<void> {
 test.beforeEach(async ({ page }) => { await signIn(page); });
 test.afterEach(async ({ request }) => { await restore(request); });
 
-test('«Сегодня»: вердикт, «Ждут вас», помощник и система', async ({ page }) => {
+test('«Сегодня»: заголовок без приветствия, числа, «Ждут вас», помощник и система', async ({ page }) => {
   await page.goto('/next/today');
-  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Добр(ое|ый|ой)/);
-  await expect(page.getByText(/Вас жд(ёт|ут) \d+ диалог/)).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Сегодня');
+  await expect(page.getByText(/Добр(ое|ый|ой)/)).toHaveCount(0);
+  // Состояние — числами (R2 B): «Ждут вас» и «Ведёт помощник» с цифрой.
+  await expect(page.getByRole('term').filter({ hasText: 'Ждут вас' })).toBeVisible();
+  await expect(page.getByRole('definition').first()).toHaveText(/^\d+$/);
   const card = page.getByRole('region', { name: 'Ждут вас' });
   await expect(card.getByRole('button').first()).toBeVisible();
   await expect(page.getByRole('region', { name: 'Помощник' }).getByText('Подсказывает', { exact: true })).toBeVisible();
@@ -47,9 +50,8 @@ test('«Сегодня»: вердикт, «Ждут вас», помощник 
   await expect(page).toHaveURL(/\/next\/chats\/\d+$/);
 });
 
-test('«Сегодня»: неполадка в вердикте и в «Нужно внимание», «Подробнее» → «Система → Серверы»', async ({ page }) => {
+test('«Сегодня»: неполадка в «Нужно внимание», «Подробнее» → «Система → Серверы»', async ({ page }) => {
   await page.goto('/next/today');
-  await expect(page.getByText(/Есть неполадка: сервер Франкфурт-2 не отвечает\./)).toBeVisible();
   const card = page.getByRole('region', { name: 'Нужно внимание' });
   await expect(card.getByText('Сервер Франкфурт-2 не отвечает')).toBeVisible();
   await card.getByRole('link', { name: 'Подробнее' }).click();
@@ -73,7 +75,7 @@ test('к осторожному — сразу и «Вернуть как был
   expect((await boot(request)).assistant.mode).toBe('suggest');
   await sheet.getByRole('button', { name: 'Проверить' }).click();
   await expect(sheet.getByText(/ушёл бы сразу|передал бы вам/).first()).toBeVisible();
-  await sheet.getByRole('button', { name: 'Не надо' }).click();
+  await sheet.getByRole('button', { name: 'Отмена' }).click();
   await expect(sheet).toBeHidden();
   expect((await boot(request)).assistant.mode).toBe('suggest');
 
@@ -93,7 +95,7 @@ test('пауза с «Сегодня», полоса на всех экрана�
   await sheet.getByRole('menuitemradio', { name: 'на 1 час' }).click();
   await expect.poll(async () => (await boot(request)).assistant.pause?.until ?? null).not.toBeNull();
   await expect(page.getByRole('status').filter({ hasText: /Помощник на паузе до \d\d:\d\d/ })).toBeVisible();
-  await expect(page.getByText(/новые вопросы ждут вас|Остальное спокойно/)).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Помощник' }).getByText(/На паузе/).first()).toBeVisible();
   // Строка состояния видна и в списке диалогов.
   await page.goto('/next/chats');
   const strip = page.getByRole('status').filter({ hasText: 'Помощник на паузе' });

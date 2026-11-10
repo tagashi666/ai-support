@@ -96,7 +96,7 @@ export function TemplatesPanel(): JSX.Element {
           ))}
         </ul>
       )}
-      <p class={k.hint}>{manage ? t('kb.template.hint') : t('kb.template.hintRead')}</p>
+      {!manage && <p class={k.hint}>{t('kb.template.hintRead')}</p>}
       <TemplateSheet item={editing} onClose={() => setEditing(null)} />
     </div>
   );

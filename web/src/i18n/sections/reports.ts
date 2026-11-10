@@ -20,7 +20,7 @@ export const dict = {
   // Сброс статистики (ярус 2)
   'reports.reset.menu': 'Сбросить статистику…',
   'reports.reset.title': 'Сбросить статистику?',
-  'reports.reset.text': 'Прежние итоги нельзя будет восстановить. Диалоги и переписка останутся на месте, но цифры начнут считаться заново — с этого момента.',
+  'reports.reset.text': 'Прежние итоги не восстановить. Диалоги и переписка останутся, цифры начнут считаться с этого момента.',
   'reports.reset.confirm': 'Сбросить статистику',
   'reports.reset.failed': 'Не получилось: {reason}.',
   'reports.resetDone': 'Статистика считается заново',
@@ -107,12 +107,11 @@ export const dict = {
 
   // Сроки ответа
   'reports.targets.title': 'Цели по срочности',
-  'reports.targets.intro': 'Сколько минут на первый ответ клиенту и на решение диалога.',
   'reports.targets.first': '{name}: первый ответ, минут',
   'reports.targets.resolution': '{name}: решение, минут',
   'reports.targets.equals': '= {time}',
   'reports.targets.invalid': 'Нужно целое число минут от 1 до 10080.',
-  'reports.targets.readOnly': 'Менять цели может тот, у кого есть право управлять очередью.',
+  'reports.targets.readOnly': 'Нужно право «Менять сроки ответа».',
   'reports.targets.calendar': 'Считаем по календарному времени.',
   'reports.targets.remind': 'Срок вышел — напомним в Telegram.',
   'reports.priority.urgent': 'Срочно',

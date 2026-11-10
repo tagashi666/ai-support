@@ -48,8 +48,8 @@ test('пакет: заявки — лист второго яруса, обыч�
   await expect(bar.getByText('Выбрано: 2')).toBeVisible();
   await bar.getByRole('button', { name: 'Решено' }).click();
   const confirm = page.getByRole('dialog', { name: /Закрыть 2 заявки/ });
-  await expect(confirm.getByRole('button', { name: 'Не надо' })).toBeFocused();
-  await confirm.getByRole('button', { name: 'Не надо' }).click();
+  await expect(confirm.getByRole('button', { name: 'Отмена' })).toBeFocused();
+  await confirm.getByRole('button', { name: 'Отмена' }).click();
 
   for (const item of tickets) await page.locator(`[data-row-id="${item.id}"] button[aria-pressed]`).click();
   for (const item of plain) await page.locator(`[data-row-id="${item.id}"] button[aria-pressed]`).click();

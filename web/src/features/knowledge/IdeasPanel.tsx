@@ -113,7 +113,6 @@ export function IdeasPanel({ current }: { current: number | null }): JSX.Element
     <div class={k.ideas}>
       {showList && (
         <div class={k.panel}>
-          <p class={k.muted}>{t('kb.idea.perDay')}</p>
           <ul class={k.list} aria-label={t('kb.tab.ideas')}>
             {list.map((row) => (
               <li key={row.id}>

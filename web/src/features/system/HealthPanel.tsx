@@ -38,7 +38,6 @@ function CheckRow({ check, open, onToggle }: { check: Check; open: boolean; onTo
     setTesting(false);
     showToast(res.ok ? { text: tr('system.notify.testOk') } : { text: tr('system.notify.testFailed', { reason: res.reason }), kind: 'error', ttl: null });
   };
-  const hasBody = check.details.length > 0 || Boolean(check.link);
   return (
     <li class={s.check}>
       <button type="button" class={s.checkBtn} aria-expanded={open} onClick={onToggle}>
@@ -54,7 +53,6 @@ function CheckRow({ check, open, onToggle }: { check: Check; open: boolean; onTo
               {check.details.map((row) => (<><dt>{row.label}</dt><dd>{row.value}</dd></>))}
             </dl>
           )}
-          {!hasBody && <p class={s.hint}>{tr('system.check.nothingMore')}</p>}
           <div class={s.actions}>
             {check.link === 'servers' && <Button variant="secondary" size="sm" onClick={() => goTo('servers')}>{tr('system.check.openServers')}</Button>}
             {check.link === 'update' && <Button variant="secondary" size="sm" onClick={() => goTo('update')}>{tr('system.check.openUpdate')}</Button>}

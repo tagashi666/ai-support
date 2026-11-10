@@ -30,7 +30,6 @@ export function VoicePanel(): JSX.Element {
       </section>
       <section class={a.group} aria-labelledby="as-links">
         <h2 class={a.head} id="as-links">{t('assistant.links.title')}</h2>
-        <p class={a.muted}>{t('assistant.links.hint')}</p>
         <Lock field="customerLinks" />
         {links.length === 0 && <p class={a.muted}>{t('assistant.links.empty')}</p>}
         {links.length > 0 && (

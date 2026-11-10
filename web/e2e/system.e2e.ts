@@ -198,7 +198,7 @@ test('обновление: лист с «Что нового» → шаги →
   const progress = page.getByRole('region', { name: 'Ход операции' });
   await expect(progress).toBeVisible();
   await expect(progress.getByText('Копия').first()).toBeVisible();
-  await expect(progress.getByText(/Готово: установлена версия/)).toBeVisible({ timeout: 20_000 });
+  await expect(progress.getByText(/Установлена версия/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/Это последняя версия/)).toBeVisible();
   await expectNoHorizontalScroll(page);
 });

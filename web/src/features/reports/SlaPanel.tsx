@@ -56,7 +56,6 @@ export function SlaPanel(): JSX.Element {
     <div class={r.panel}>
       <section class={r.block} aria-label={tr('reports.targets.title')}>
         <h2 class={r.blockTitle}>{tr('reports.targets.title')}</h2>
-        <p class={r.muted}>{tr('reports.targets.intro')}</p>
         {goals.state === 'error' && (
           <p class={r.error} role="alert">
             {tr('reports.loadFailed', { reason: goals.error })} <Button variant="link" size="sm" onClick={() => void loadSla()}>{t('live.retry')}</Button>

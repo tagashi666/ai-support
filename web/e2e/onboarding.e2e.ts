@@ -54,7 +54,7 @@ test('владелец: чек-лист по фактам, учебный диа
   await page.goto('/next/today');
   await expect(list.getByText('6. Попробовать на учебном диалоге')).toBeVisible();
   await expect(list.locator('li[data-state="todo"]')).toHaveCount(0);
-  await list.getByRole('button', { name: 'Скрыть, вернусь позже' }).click();
+  await list.getByRole('button', { name: 'Скрыть' }).click();
   await expect(list).toBeHidden();
   await page.goto('/next/device');
   await page.getByRole('button', { name: 'Показать чек-лист запуска' }).click();
@@ -89,7 +89,7 @@ test('новый оператор: три подсказки и строка о 
   await expect(page.getByText('1 из 3')).toBeVisible();
   await expect(page.getByText('Вы — Оператор: отвечаете клиентам и пишете заметки.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Дальше' }).click();
-  await expect(page.getByText(/Черновик помощника: вы решаете/)).toBeVisible();
+  await expect(page.getByText(/Черновик помощника: «Отправить»/)).toBeVisible();
   await page.getByRole('button', { name: 'Дальше' }).click();
   await page.getByRole('button', { name: 'Понятно' }).click();
   await expect(page.getByText('1 из 3')).toHaveCount(0);

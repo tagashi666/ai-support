@@ -25,12 +25,6 @@ const KIND_TEXT: Record<WizardKind, { name: Parameters<typeof tr>[0]; hint: Para
   minishop: { name: 'connections.kind.minishop', hint: 'connections.kind.minishopHint', title: 'connections.fields.minishopTitle' },
 };
 
-const WHY: Record<WizardKind, Parameters<typeof tr>[0]> = {
-  telegram_bot: 'connections.why.bot',
-  business: 'connections.why.business',
-  remnawave: 'connections.why.remnawave',
-  minishop: 'connections.why.minishop',
-};
 
 const CHECK: Record<WizardKind, Parameters<typeof tr>[0]> = {
   telegram_bot: 'connections.check.bot',
@@ -162,7 +156,6 @@ export function Wizard({ initial, onClose }: { initial: WizardKind | null; onClo
       {stage === 'fields' && kind !== 'business' && (
         <form class={c.form} noValidate onSubmit={(event) => { event.preventDefault(); void submit(); }}>
           {heading(tr('connections.wizard.step', { n: position, total: 3 }))}
-          <p class={sheetStyles.text}>{tr(WHY[kind])}</p>
           {kind === 'telegram_bot' && (
             <ol class={c.recipe}>
               <li>{tr('connections.bot.s1', { botfather: BOTFATHER })}</li>

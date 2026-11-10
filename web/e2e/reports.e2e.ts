@@ -134,7 +134,7 @@ test('«Сбросить статистику…»: лист второго яр
   await page.getByRole('button', { name: 'Действия с отчётом' }).click();
   await page.getByRole('menuitem', { name: 'Сбросить статистику…' }).click();
   const sheet = page.getByRole('dialog', { name: 'Сбросить статистику?' });
-  await expect(sheet.getByText(/Прежние итоги нельзя будет восстановить/)).toBeVisible();
+  await expect(sheet.getByText(/Прежние итоги не восстановить/)).toBeVisible();
   await expect(sheet.getByRole('button', { name: 'Сбросить статистику' })).toBeVisible();
   await sheet.getByRole('button', { name: 'Отмена' }).click();
   await expect(sheet).toBeHidden();

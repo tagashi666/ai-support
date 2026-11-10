@@ -1,6 +1,6 @@
 /**
  * «Клиент» (6.4): панель открывается из шапки, Bedolaga с семью вкладками,
- * продление второго яруса без двойного начисления, опасное — с «Не надо».
+ * продление второго яруса без двойного начисления, опасное — с «Отмена».
  */
 import { expect, test } from '@playwright/test';
 import { expectNoHorizontalScroll, openItems, signIn, stats } from './helpers';
@@ -31,25 +31,25 @@ test('«Клиент» из шапки: пять строк, Bedolaga, прод�
   await expect(bed.getByRole('tabpanel')).toContainText(/авторизац|недоступна/);
   await bed.getByRole('button', { name: 'Закрыть' }).click();
 
-  // Продление: лист второго яруса, фокус на «Не надо», двойной клик — одно начисление.
+  // Продление: лист второго яруса, фокус на «Отмена», двойной клик — одно начисление.
   const before = (await stats(request)).extensions;
   await pane.getByRole('button', { name: 'Продлить…' }).first().click();
   const sheet = page.getByRole('dialog', { name: /Продлить подписку/ });
-  await expect(sheet.getByRole('button', { name: 'Не надо' })).toBeFocused();
+  await expect(sheet.getByRole('button', { name: 'Отмена' })).toBeFocused();
   await sheet.getByRole('button', { name: /Продлить на 30/ }).dblclick();
   await expect(page.getByText(/Добавлено 30 дней/)).toBeVisible();
   expect((await stats(request)).extensions).toBe(before + 1);
   await expectNoHorizontalScroll(page);
 });
 
-test('отвязать устройство — второй ярус с «Не надо» по умолчанию', async ({ page, request }) => {
+test('отвязать устройство — второй ярус с «Отмена» по умолчанию', async ({ page, request }) => {
   const id = await bedolagaThread(request);
   await page.goto(`/next/chats/${id}/client`);
   const pane = page.getByRole('dialog', { name: 'Клиент' });
   await pane.getByText('Подписка и устройства').click();
   await pane.getByRole('button', { name: 'Отвязать…' }).first().click();
   const confirm = page.getByRole('dialog', { name: /Отвязать «/ });
-  await expect(confirm.getByRole('button', { name: 'Не надо' })).toBeFocused();
+  await expect(confirm.getByRole('button', { name: 'Отмена' })).toBeFocused();
   await confirm.getByRole('button', { name: 'Отвязать устройство' }).click();
   await expect(page.getByText('Устройство отвязано')).toBeVisible();
 });

@@ -59,7 +59,6 @@ export function ProfileSheet({ sourceId, sourceName, onClose }: { sourceId: stri
     <Sheet open onClose={onClose} title={tr('connections.profile.title')} size="wide">
       <div class={c.profile}>
         <form class={c.form} onSubmit={(event) => { event.preventDefault(); void save(); }} noValidate>
-          <p class={sheetStyles.text}>{tr('connections.profile.why')}</p>
           {field('serviceName', tr('connections.profile.name'), tr('connections.profile.nameHint', { max: PROFILE_LIMITS.name }), false)}
           {field('greetingMessage', tr('connections.profile.greeting'), tr('connections.profile.greetingHint', { max: PROFILE_LIMITS.greeting }), true)}
           {field('handoffMessage', tr('connections.profile.handoff'), tr('connections.profile.handoffHint', { min: PROFILE_LIMITS.handoffMin, max: PROFILE_LIMITS.greeting }), true)}

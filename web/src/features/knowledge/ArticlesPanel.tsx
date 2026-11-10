@@ -67,9 +67,12 @@ export function ArticlesPanel(): JSX.Element {
                   <span class={k.itemTitle}>{row.title}</span>
                   <span class={k.itemMeta}>{listTime(row.updatedAt, now.value)}</span>
                 </span>
-                <span class={k.itemMeta}>
-                  {t(STATE_LABEL[row.state])}{row.idea && <> · <span class={k.tag} data-tone="idea">{t('kb.state.idea')}</span></>}
-                </span>
+                {/* Одна метка на строку (R2 B): опубликованная — без метки, иначе состояние или «идея на проверке». */}
+                {(row.idea || row.state !== 'published') && (
+                  <span class={k.itemMeta}>
+                    {row.idea ? <span class={k.tag} data-tone="idea">{t('kb.state.idea')}</span> : t(STATE_LABEL[row.state])}
+                  </span>
+                )}
                 {row.excerpt && <span class={k.itemText}>{row.excerpt}</span>}
               </a>
             </li>
