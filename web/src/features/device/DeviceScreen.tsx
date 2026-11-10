@@ -2,9 +2,11 @@ import type { JSX } from 'preact';
 import { useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import {
-  gestures, letterKeys, navKeys, setGestures, setLetterKeys, setNavKeys, setTextSize, setUndo, textSize, undoScope, undoSeconds,
-  type TextSize, type UndoScope, type UndoSeconds,
+  density, enterSends, gestures, letterKeys, navKeys, playWaitSound, setDensity, setEnterSends, setGestures, setLetterKeys, setNavKeys,
+  setStartScreen, setTextSize, setUndo, setWaitSound, startScreen, textSize, undoScope, undoSeconds, waitSound,
+  type Density, type TextSize, type UndoScope, type UndoSeconds,
 } from '@/lib/device';
+import { isMac } from '@/lib/keys';
 import { clearToken } from '@/lib/live/api';
 import { bootstrap, mode } from '@/lib/live/store';
 import { setTheme, theme, type Theme } from '@/lib/store/state';
@@ -60,9 +62,22 @@ export function DeviceScreen(): JSX.Element {
           <Segments<TextSize> label={t('device.textSize')} value={textSize.value} onChange={setTextSize}
             items={[{ value: 100, label: '100%' }, { value: 112, label: '112%' }, { value: 125, label: '125%' }]} />
         </div>
+        <div class={s.row}>
+          <span class={s.rowLabel}>{t('device.density')}</span>
+          <Segments<Density> label={t('device.density')} value={density.value} onChange={setDensity}
+            items={[{ value: 'comfortable', label: t('device.densityComfortable') }, { value: 'compact', label: t('device.densityCompact') }]} />
+        </div>
+        <p class={s.hint}>{t('device.densityHint')}</p>
       </section>
       <section class={s.group} aria-labelledby="dev-work">
         <h2 class={s.head} id="dev-work">{t('device.work')}</h2>
+        <div class={s.row}>
+          <span class={s.rowLabel}>{t('device.start')}</span>
+          <Segments<'auto' | 'today' | 'chats'> label={t('device.start')} value={startScreen.value ?? 'auto'}
+            onChange={(value) => setStartScreen(value === 'auto' ? null : value)}
+            items={[{ value: 'auto', label: t('device.startAuto') }, { value: 'today', label: t('device.startToday') }, { value: 'chats', label: t('device.startChats') }]} />
+        </div>
+        <p class={s.hint}>{t('device.startHint')}</p>
         <div class={s.row}>
           <span class={s.rowLabel}>{t('device.undo')}</span>
           <Segments<UndoSeconds> label={t('device.undo')} value={undoSeconds.value} onChange={(value) => setUndo(value)}
@@ -75,6 +90,10 @@ export function DeviceScreen(): JSX.Element {
               items={[{ value: 'drafts', label: t('device.undoDrafts') }, { value: 'all', label: t('device.undoAll') }]} />
           </div>
         )}
+        <Toggle label={t('device.enterSends', { enter: 'Enter' })} hint={t('device.enterSendsHint', { enter: 'Enter', shift: 'Shift', mod: isMac ? '⌘' : 'Ctrl' })}
+          checked={enterSends.value} onChange={setEnterSends} />
+        <Toggle label={t('device.sound')} hint={t('device.soundHint')} checked={waitSound.value} onChange={(on) => { setWaitSound(on); if (on) playWaitSound(); }} />
+        {waitSound.value && <Button variant="quiet" size="sm" onClick={playWaitSound}>{t('device.soundTry')}</Button>}
       </section>
       <section class={s.group} aria-labelledby="dev-keys">
         <h2 class={s.head} id="dev-keys">{t('device.keys')}</h2>

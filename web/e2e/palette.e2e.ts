@@ -70,3 +70,24 @@ test('«Это устройство»: тема и размер текста —
   await page.getByRole('radiogroup', { name: 'Размер текста' }).getByRole('radio', { name: '100%' }).check();
   expect(await page.evaluate(() => localStorage.getItem('theme'))).toBe('system');
 });
+
+test('«Это устройство» целиком: плотность, стартовый экран, Enter отправляет, звук (6.12)', async ({ page }) => {
+  await page.goto('/next/device');
+  await page.getByRole('radiogroup', { name: 'Плотность' }).getByRole('radio', { name: 'Компактно' }).check();
+  await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
+  await page.getByRole('radiogroup', { name: 'Начинать с' }).getByRole('radio', { name: 'Сегодня' }).check();
+  await page.getByRole('switch', { name: /Enter отправляет ответ/ }).check();
+  await page.getByRole('switch', { name: /Звук, когда прибавилось/ }).check();
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-density', 'compact');
+  await expect(page.getByRole('switch', { name: /Enter отправляет ответ/ })).toBeChecked();
+  await page.goto('/next/');
+  await expect(page).toHaveURL(/\/next\/$/);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(/Добр(ое|ый|ой)/);
+  await page.goto('/next/device');
+  await page.getByRole('radiogroup', { name: 'Плотность' }).getByRole('radio', { name: 'Просторно' }).check();
+  await page.getByRole('radiogroup', { name: 'Начинать с' }).getByRole('radio', { name: 'По экрану' }).check();
+  await page.getByRole('switch', { name: /Enter отправляет ответ/ }).uncheck();
+  await page.getByRole('switch', { name: /Звук, когда прибавилось/ }).uncheck();
+  await expect(page.locator('html')).not.toHaveAttribute('data-density', 'compact');
+});

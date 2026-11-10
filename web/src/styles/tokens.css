@@ -118,8 +118,15 @@
   --kb-inset: 0px;
 }
 
+/* «Это устройство → Плотность → Компактно» (6.12): для мыши; на касаниях цели остаются 44 px. */
+:root[data-density="compact"] {
+  --row-h: 60px;
+  --control-h: 34px;
+  --avatar: 36px;
+}
+
 @media (pointer: coarse) {
-  :root {
+  :root, :root[data-density="compact"] {
     --control-h: 44px;
     --fs-name: 1rem;
     --lh-name: 1.375rem;

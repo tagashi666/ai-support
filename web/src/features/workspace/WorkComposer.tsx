@@ -1,4 +1,5 @@
 import { ImageEditor } from '@/features/media/ImageEditor';
+import { isSendKey } from '@/lib/device';
 import { isMod, layerOpen, modLabel } from '@/lib/keys';
 import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
@@ -254,7 +255,7 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
             if (files && files.length && canFiles && mode === 'reply') { event.preventDefault(); addFiles(files); }
           }}
           onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) { event.preventDefault(); void submit(); return; }
+            if (isSendKey(event)) { event.preventDefault(); void submit(); return; }
             if (event.key === 'Escape' && draft.quote) { event.preventDefault(); update({ quote: null }); return; }
             if (event.code === 'KeyU' && event.shiftKey && (event.metaKey || event.ctrlKey) && canFiles) { event.preventDefault(); fileInput.current?.click(); }
           }}
