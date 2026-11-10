@@ -2,7 +2,7 @@ import type { JSX } from 'preact';
 import { useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import {
-  density, enterSends, gestures, letterKeys, navKeys, playWaitSound, setDensity, setEnterSends, setGestures, setLetterKeys, setNavKeys,
+  browserNotify, density, enterSends, setBrowserNotify, gestures, letterKeys, navKeys, playWaitSound, setDensity, setEnterSends, setGestures, setLetterKeys, setNavKeys,
   setStartScreen, setTextSize, setUndo, setWaitSound, startScreen, textSize, undoScope, undoSeconds, waitSound,
   type Density, type TextSize, type UndoScope, type UndoSeconds,
 } from '@/lib/device';
@@ -11,6 +11,7 @@ import { clearToken } from '@/lib/live/api';
 import { bootstrap, mode } from '@/lib/live/store';
 import { setTheme, theme, type Theme } from '@/lib/store/state';
 import { roleLabel } from '@/lib/workspace/labels';
+import { setsUp, showChecklistAgain, showHintsAgain } from '@/lib/onboarding';
 import { Button } from '@/ui/Button';
 import { Sheet, sheetStyles } from '@/ui/Sheet';
 import s from './device.module.css';
@@ -46,7 +47,15 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
  */
 export function DeviceScreen(): JSX.Element {
   const [logout, setLogout] = useState(false);
+  const [learn, setLearn] = useState(false);
   const me = bootstrap.value?.me;
+  const notifySupported = typeof Notification !== 'undefined';
+  const [permission, setPermission] = useState(notifySupported ? Notification.permission : 'denied');
+  // Включить можно только с разрешения браузера; запрет — подсказка, переключатель не включается.
+  const toggleNotify = (on: boolean): void => {
+    if (!on || !notifySupported) { setBrowserNotify(false); return; }
+    void Notification.requestPermission().then((answer) => { setPermission(answer); setBrowserNotify(answer === 'granted'); });
+  };
   return (
     <div class={s.screen}>
       <h1 class={s.title}>{t('nav.device')}</h1>
@@ -94,7 +103,20 @@ export function DeviceScreen(): JSX.Element {
           checked={enterSends.value} onChange={setEnterSends} />
         <Toggle label={t('device.sound')} hint={t('device.soundHint')} checked={waitSound.value} onChange={(on) => { setWaitSound(on); if (on) playWaitSound(); }} />
         {waitSound.value && <Button variant="quiet" size="sm" onClick={playWaitSound}>{t('device.soundTry')}</Button>}
+        <Toggle label={t('device.notify')} hint={t('device.notifyHint')} checked={browserNotify.value && permission === 'granted'} onChange={toggleNotify} />
+        {!notifySupported ? <p class={s.hint}>{t('device.notifyNone')}</p> : permission === 'denied' && <p class={s.hint} role="status">{t('device.notifyDenied')}</p>}
       </section>
+      {mode.value === 'live' && (
+        <section class={s.group} aria-labelledby="dev-learn">
+          <h2 class={s.head} id="dev-learn">{t('device.learn')}</h2>
+          <div class={s.actions}>
+            {setsUp(me)
+              ? <Button variant="secondary" size="sm" onClick={() => { showChecklistAgain(); setLearn(true); }}>{t('device.checklistAgain')}</Button>
+              : <Button variant="secondary" size="sm" onClick={() => { showHintsAgain(); setLearn(true); }}>{t('device.hintsAgain')}</Button>}
+          </div>
+          {learn && <p class={s.hint} role="status">{t('device.learnDone')}</p>}
+        </section>
+      )}
       <section class={s.group} aria-labelledby="dev-keys">
         <h2 class={s.head} id="dev-keys">{t('device.keys')}</h2>
         <Toggle label={t('device.navKeys')} hint={t('device.navKeysHint', { enter: 'Enter', g: 'G' })} checked={navKeys.value} onChange={setNavKeys} />

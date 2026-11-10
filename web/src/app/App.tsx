@@ -21,7 +21,7 @@ import { Palette } from '@/features/palette/Palette';
 import { DemoBar } from './DemoBar';
 import { lazyScreen } from './lazy';
 import { useGlobalKeys } from './useGlobalKeys';
-import { useWaitSound } from './useWaitSound';
+import { useAttention } from './useAttention';
 import { startScreen } from '@/lib/device';
 import { Rail, TabBar } from './Nav';
 import s from './shell.module.css';
@@ -63,7 +63,7 @@ function sectionScreen(current: Extract<Route, { name: 'section' }>, live: boole
 
 export function App(): JSX.Element {
   useGlobalKeys();
-  useWaitSound();
+  useAttention();
   const desktop = isDesktop.value;
   const live = mode.value === 'live';
   const current = resolveHome(route.value, desktop);

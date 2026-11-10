@@ -13,7 +13,12 @@ import { threads } from '@/lib/workspace/thread';
 import { inbox } from '@/lib/live/store';
 import { Sheet } from '@/ui/Sheet';
 import s from '@/features/chats/chats.module.css';
+import { lazyScreen } from '@/app/lazy';
+import { TUTORIAL_ID } from '@/lib/onboarding';
 import { WorkList } from './WorkList';
+
+// Учебный диалог (6.13 В) — свой чанк: живёт в браузере, сервер о нём не знает.
+const TutorialThread = lazyScreen(() => import('@/features/onboarding/Tutorial').then((module) => module.TutorialThread), () => <div aria-busy="true" />);
 import { WorkThread } from './WorkThread';
 
 /**
@@ -49,12 +54,14 @@ export function Workspace({ id, client = false }: { id: string | null; client?: 
   }, []);
 
   return (
-    <div class={s.screen} data-open={open !== null ? 'true' : 'false'} data-client={column ? 'true' : 'false'}>
+    <div class={s.screen} data-open={open !== null || id === TUTORIAL_ID ? 'true' : 'false'} data-client={column ? 'true' : 'false'}>
       <section class={s.listCol}>
-        <WorkList openId={open} />
+        <WorkList openId={open} tutorialOpen={id === TUTORIAL_ID} />
       </section>
       <section class={s.threadCol}>
-        {open !== null ? <WorkThread key={open} id={open} /> : <div class={s.summary}><LiveToday compact /></div>}
+        {open !== null ? <WorkThread key={open} id={open} />
+          : id === TUTORIAL_ID ? <TutorialThread />
+          : <div class={s.summary}><LiveToday compact /></div>}
       </section>
       {column && item && open !== null && (
         <aside class={s.clientCol} aria-label={t('client.title')}>

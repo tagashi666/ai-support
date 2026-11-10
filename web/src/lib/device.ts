@@ -40,6 +40,8 @@ export const startScreen = signal<StartScreen | null>(savedStart === 'auto' ? nu
 export const enterSends = signal(read('next.enterSends') === 'on');
 /** Звук, когда прибавилось «Ждут вас», — выключен по умолчанию. */
 export const waitSound = signal(read('next.waitSound') === 'on');
+/** Уведомления браузера (7.7), пока вкладка открыта: по умолчанию выключены, включаются с разрешения браузера. */
+export const browserNotify = signal(read('next.notify') === 'on');
 
 export function setTextSize(value: TextSize): void { textSize.value = value; write('next.textSize', String(value)); }
 export function setUndo(seconds: UndoSeconds, scope: UndoScope = undoScope.peek()): void {
@@ -53,6 +55,7 @@ export function setDensity(value: Density): void { density.value = value; write(
 export function setStartScreen(value: StartScreen | null): void { startScreen.value = value; write('next.start', value ?? 'auto'); }
 export function setEnterSends(on: boolean): void { enterSends.value = on; write('next.enterSends', on ? 'on' : 'off'); }
 export function setWaitSound(on: boolean): void { waitSound.value = on; write('next.waitSound', on ? 'on' : 'off'); }
+export function setBrowserNotify(on: boolean): void { browserNotify.value = on; write('next.notify', on ? 'on' : 'off'); }
 
 /** Отправить ли по этой клавише: ⌘/Ctrl+Enter — всегда; просто Enter — если включено «Enter отправляет». */
 export function isSendKey(event: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey' | 'isComposing'>, enter = enterSends.peek()): boolean {

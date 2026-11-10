@@ -21,6 +21,7 @@ import { gestures } from '@/lib/device';
 import { lockOf, offsetOf, PANEL_PX, settle, type SwipeLock } from '@/lib/hooks/swipe';
 import { filterItems, filterSize, readFilter, saveFilter, type ListFilter } from '@/lib/workspace/filter';
 import { colleaguesIn, presence } from '@/lib/workspace/collab';
+import { TUTORIAL_ID, tutorialListed } from '@/lib/onboarding';
 import { patched, patches } from '@/lib/workspace/local';
 import { viewLabel } from '@/lib/workspace/labels';
 import { availability } from '@/lib/workspace/registry';
@@ -191,7 +192,7 @@ const isTicket = (item: InboxItem): boolean => item.channel === 'bedolaga' || it
  * стоит, пока курсор, палец или фокус на нём, а изменения копятся в пилюле.
  * Свои действия (Решено, Убрать) применяются сразу. Открытый диалог не уезжает.
  */
-export function WorkList({ openId }: { openId: number | null }): JSX.Element {
+export function WorkList({ openId, tutorialOpen = false }: { openId: number | null; tutorialOpen?: boolean }): JSX.Element {
   const [view, setView] = useState<View>(readView);
   const [collapsed, setCollapsed] = useState<Partial<Record<Section, boolean>>>({});
   const [active, setActive] = useState<string | null>(null);
@@ -329,6 +330,8 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
   };
 
   const nothing = (searchRows ?? sections.flatMap((group) => group.rows)).length === 0;
+  const boot = bootstrap.value;
+  const noChannels = Boolean(boot && !boot.sources.some((source) => source.enabled) && !Object.values(boot.channels).some(Boolean));
   const state = loading.value;
   const activeFilters = filterSize(filter);
   const confirmItem = sheet && typeof sheet === 'object' && 'confirmResolve' in sheet ? itemFor(sheet.confirmResolve) : undefined;
@@ -450,8 +453,26 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
                 <p>{t('chats.nobodyWaits', { n: counts?.sections.ai ?? 0, dialogs: tn('plural.dialogs', counts?.sections.ai ?? 0) })}</p>
                 <button type="button" class={s.emptyAction} onClick={() => changeView('open')}>{t('chats.view.open')}</button>
               </>
-            ) : view === 'done' ? <p>{t('chats.noneDone')}</p> : <p>{t('list.quiet')}</p>}
+            ) : view === 'done' ? <p>{t('chats.noneDone')}</p> : noChannels ? (
+              <>
+                <p>{t('list.noChannels')}</p>
+                {perms.has('settings:sources') && <button type="button" class={s.emptyAction} onClick={() => navigate({ name: 'section', key: 'connections' })}>{t('list.connect')}</button>}
+                {!tutorialListed(Date.now()) && <button type="button" class={s.emptyAction} onClick={() => navigate({ name: 'chats', id: TUTORIAL_ID })}>{t('learn.open')}</button>}
+              </>
+            ) : <p>{t('list.quiet')}</p>}
           </div>
+        )}
+        {!searchRows && view !== 'done' && tutorialListed(Date.now()) && state === 'ready' && (
+          <section class={s.section} aria-labelledby="work-sec-learn">
+            <h2 class={s.sectionHead} id="work-sec-learn"><span class={s.sectionToggle}>{t('learn.section')}</span></h2>
+            <div class={s.rows}>
+              <div class={w.rowWrap} data-tutorial="true">
+                <Row id={TUTORIAL_ID} wrapped avatar={<Avatar name={t('learn.name')} channel="telegram" />} title={t('learn.name')} time=""
+                  preview={t('learn.preview')} reason="" tone="quiet" current={tutorialOpen} tabIndex={-1}
+                  onOpen={() => navigate({ name: 'chats', id: TUTORIAL_ID })} />
+              </div>
+            </div>
+          </section>
         )}
         {searchRows ? (
           searchRows.length > 0 && (

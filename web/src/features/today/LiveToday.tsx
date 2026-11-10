@@ -20,7 +20,12 @@ import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Icon } from '@/ui/Icon';
 import { Row } from '@/ui/Row';
+import { lazyScreen } from '@/app/lazy';
+import { onboardingWanted } from '@/lib/onboarding';
 import s from './today.module.css';
+
+// Первый запуск (6.13) — отдельный чанк: нужен один раз, в начальный JS не входит.
+const TodayOnboarding = lazyScreen(() => import('@/features/onboarding/Onboarding').then((module) => module.TodayOnboarding), () => <span />);
 
 const IDEAS: Route = { name: 'section', key: 'knowledge', sub: 'ideas' };
 const UPDATE: Route = { name: 'section', key: 'system', sub: 'update' };
@@ -227,6 +232,7 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
             ? <div class={s.skeletonLine} aria-hidden="true" />
             : <p class={s.verdict}>{lines.join(' ')}</p>}
         </header>
+        {!compact && onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
         {!compact && <RevertLine />}
         <div class={s.grid}>
           <div class={s.col}>

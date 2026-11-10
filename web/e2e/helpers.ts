@@ -5,12 +5,19 @@ export const TOKEN = process.env.E2E_TOKEN ?? 'e2e-key-0123456789abcdef';
 const PORT = Number(process.env.E2E_PORT ?? 8197);
 export const CONTROL = `http://127.0.0.1:${PORT + 1}`;
 
-/** Ключ общий с классикой (localStorage panelToken) — как будто вы уже вошли. */
-export async function signIn(page: Page): Promise<void> {
-  await page.addInitScript((token) => {
+/**
+ * Ключ общий с классикой (localStorage panelToken) — как будто вы уже вошли.
+ * По умолчанию — опытный человек: обучение (6.13) на этом устройстве пройдено;
+ * `fresh` — первый вход: чек-лист, подсказки и учебный диалог на месте.
+ */
+export async function signIn(page: Page, options: { token?: string; fresh?: boolean } = {}): Promise<void> {
+  await page.addInitScript(({ token, fresh }) => {
     localStorage.setItem('panelToken', token);
     localStorage.setItem('next.mode', 'live');
-  }, TOKEN);
+    if (!fresh && localStorage.getItem('next.onboarding') === null) {
+      localStorage.setItem('next.onboarding', JSON.stringify({ welcomeDone: true, checklistHidden: true, hintsDone: true, tutorialClosed: true }));
+    }
+  }, { token: options.token ?? TOKEN, fresh: options.fresh ?? false });
 }
 
 export async function api<T>(request: APIRequestContext, path: string): Promise<T> {

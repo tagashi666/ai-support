@@ -15,3 +15,4 @@
 .toggleText { display: grid; gap: 2px; }
 .hint { color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }
 .link { color: var(--accent-text); font-size: var(--fs-body); min-height: 44px; display: inline-flex; align-items: center; }
+.actions { display: flex; flex-wrap: wrap; gap: var(--s2); }
