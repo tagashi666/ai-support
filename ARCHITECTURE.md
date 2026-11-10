@@ -54,7 +54,8 @@ src/
     tgexport.ts      Разбор выгрузки Telegram Desktop
 
   panel/             Веб-интерфейс
-    server.ts        HTTP API и WebSocket
+    server.ts        HTTP API и WebSocket; `/` выбирает панель (cookie ui → PANEL_UI → настройка)
+    webapp.ts        Раздача новой панели по /next
     kbfiles.ts       Файлы базы знаний, защита пути
 
   cli/               Точки входа для консоли
@@ -62,7 +63,9 @@ src/
     kbmine.ts        Сбор базы знаний
     rwprobe.ts       Разбор связки с Remnawave
 
-public/index.html    Панель целиком: разметка, стили, логика
+web/                 Новая панель (Preact + Vite, по умолчанию с 3.0): web/src —
+                     код, web/e2e — Playwright; сборка web/dist только в образе
+public/              Классическая панель — запасная до её удаления
 deploy/minishop-plugin/ Узкий service-token API поверх Plugin API v1 MiniShop
 MANIFEST             Список файлов релиза. Установщик удаляет по нему
                      всё, чего в новой версии больше нет
@@ -204,6 +207,9 @@ npm run selfcheck # что реально настроено на этом се�
 | `aitest.ts` | ворота, тон, склейка, передача человеку, связка с панелью |
 | `minetest.ts` | выгрузка Telegram, архив тикетов, группировка тем |
 | `notifytest.ts` | доставка уведомлений, уровни, троттлинг, отказы |
+| `nexttest.ts` | раздача /next, CSP, выбор панели на `/` (cookie, `?ui=`, `PANEL_UI`, настройка) |
+| `web/src/**/*.test.ts` | Vitest: порядок списка, кадры, словарь, модели разделов новой панели |
+| `web/e2e/*.e2e.ts` | Playwright (`npm run test:e2e`): сценарии новой панели, доступность, нагрузка, переключатель |
 
 Внешние API поднимаются заглушками на localhost. Модель не вызывается.
 Каждый найденный в проде баг закреплён отдельной проверкой — список в
