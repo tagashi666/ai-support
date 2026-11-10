@@ -12,7 +12,8 @@ import s from './ui.module.css';
  * (toast.hold → deferred.pause, M-2): «Отменить» не может «протухнуть», пока на него смотрят.
  */
 function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.Element {
-  const [left, setLeft] = useState(toast.ttl ?? 0);
+  // Остаток — без перерисовки: показывает его полоса, голой цифры нет (R-38).
+  const left = useRef(toast.ttl ?? 0);
   const [held, setHeld] = useState(false);
   const heldRef = useRef(false);
   const hold = (value: boolean): void => {
@@ -25,11 +26,8 @@ function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.
     if (toast.ttl === null) return undefined;
     const timer = setInterval(() => {
       if (heldRef.current) return;
-      setLeft((value) => {
-        const next = value - 250;
-        if (next <= 0) dismissToast(toast.id);
-        return next;
-      });
+      left.current -= 250;
+      if (left.current <= 0) dismissToast(toast.id);
     }, 250);
     return () => clearInterval(timer);
   }, [toast.id, toast.ttl]);
@@ -57,7 +55,6 @@ function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.
           {toast.action.label}
         </button>
       )}
-      {timed && <span class={s.toastTimer} aria-hidden="true">{Math.max(1, Math.ceil(left / 1000))}</span>}
       <Button variant="quiet" size="sm" icon="close" label={t('toast.close')} class={s.toastClose} onClick={() => dismissToast(toast.id)} />
       {timed && <span class={s.toastBar} aria-hidden="true" />}
     </div>

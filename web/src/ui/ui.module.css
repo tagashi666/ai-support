@@ -380,7 +380,6 @@
 .toastAction:hover { background: color-mix(in srgb, var(--toast-text) 14%, transparent); }
 .toastClose { color: var(--toast-text); }
 .toastClose:hover { background: color-mix(in srgb, var(--toast-text) 14%, transparent); }
-.toastTimer { font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--toast-text) 80%, transparent); font-size: var(--fs-small); min-width: 1.25rem; text-align: right; }
 /* Отсчёт окна отмены: полоса тает за --ttl, пауза — вместе с таймером действия. */
 .toastBar {
   position: absolute;
