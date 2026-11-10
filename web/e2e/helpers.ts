@@ -79,3 +79,6 @@ export async function classicLink(page: Page): Promise<Locator> {
 export async function rowOrder(page: Page): Promise<string[]> {
   return await page.locator('[data-row-id]').evaluateAll((rows) => rows.map((row) => row.getAttribute('data-row-id') ?? ''));
 }
+
+/** Компьютер с мышью: Chromium («desktop») и другие движки (webkit, firefox — R2 D). */
+export const desktopLike = (project: string): boolean => project === 'desktop' || project === 'webkit' || project === 'firefox';

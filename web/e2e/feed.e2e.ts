@@ -2,7 +2,7 @@
  * Диалог и список без потерь и скачков (audit/ui-polish, шаг 2): L-1 и CLS.
  */
 import { expect, test } from '@playwright/test';
-import { control, openItems, signIn } from './helpers';
+import { control, desktopLike, openItems, signIn } from './helpers';
 
 const UNDO_MS = 6000;
 
@@ -141,7 +141,7 @@ test('CLS: «Решено» — строка уходит, соседи пере
 });
 
 test('M-1: строка после «Решено» в списке уходит с выходом, не скачком', async ({ page, request }, info) => {
-  test.skip(info.project.name !== 'desktop', 'список и меню строки — на компьютере');
+  test.skip(!desktopLike(info.project.name), 'список и меню строки — на компьютере');
   const { id } = await inbound(request, 12, 'Уйдёт с выходом');
   await page.goto('/next/chats');
   const row = page.locator(`[data-row-id="${id}"]`);

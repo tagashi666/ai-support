@@ -5,6 +5,7 @@
  *
  *   E2E_PORT=8197 node --import tsx scripts/e2eserver.ts
  *   E2E_EXTRA=460 — ещё столько диалогов (нагрузочный проект load, 11.6)
+ *   E2E_LONG=1000 — «Длинный диалог» на столько сообщений (кадры ленты, R2 D)
  *   E2E_PANEL_UI=classic — PANEL_UI установки (e2e переключателя интерфейса, этап 8)
  *   POST :8198/burst?n=20&ms=50  — n сообщений клиентов с паузой ms
  *   POST :8198/drop              — разорвать все сокеты
@@ -17,6 +18,7 @@ import { startDevPanel } from './devseed.js';
 
 const port = Number(process.env.E2E_PORT ?? 8197);
 const panel = await startDevPanel({ port, token: process.env.E2E_TOKEN ?? 'e2e-key-0123456789abcdef', extra: Number(process.env.E2E_EXTRA ?? 0),
+  longThread: Number(process.env.E2E_LONG ?? 0),
   ...(process.env.E2E_PANEL_UI === 'classic' || process.env.E2E_PANEL_UI === 'next' ? { panelUi: process.env.E2E_PANEL_UI } : {}) });
 
 const control = createServer((request, response) => {

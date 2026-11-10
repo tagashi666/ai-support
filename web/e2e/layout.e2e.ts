@@ -5,12 +5,12 @@
  * ширины задаются в самих тестах.
  */
 import { expect, test, type Page } from '@playwright/test';
-import { signIn } from './helpers';
+import { desktopLike, signIn } from './helpers';
 
 const SECTIONS = ['today', 'knowledge', 'assistant', 'reports', 'connections', 'team', 'system', 'device'] as const;
 
 test.beforeEach(async ({ page }, info) => {
-  test.skip(info.project.name !== 'desktop', 'ширины задаёт тест');
+  test.skip(!desktopLike(info.project.name), 'ширины задаёт тест');
   await signIn(page);
 });
 

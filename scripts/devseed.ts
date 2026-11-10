@@ -25,6 +25,8 @@ export interface DevPanelOptions {
   token: string;
   /** Ещё столько выдуманных диалогов — нагрузочный e2e (план, 11.6: 500 диалогов). */
   extra?: number;
+  /** Диалог на столько сообщений (DEVSEED_HEAVY, замеры раздела D): лента под нагрузкой. */
+  longThread?: number;
   /** PANEL_UI установки — e2e «классика для всех» (раздел 12, этап 8). */
   panelUi?: 'classic' | 'next';
 }
@@ -33,6 +35,8 @@ export interface DevPanel {
   url: string;
   /** Новое сообщение клиента в диалог с номером i из набора (0..39). */
   inbound(i: number, text?: string): number | null;
+  /** Новое сообщение в нагрузочный диалог с номером i (0..extra-1) — замеры живых кадров. */
+  inboundExtra(i: number, text: string): number | null;
   /** Ответ помощника или оператора — поток событий как у живой панели. */
   outbound(conversationId: number, author: 'ai' | 'agent', text: string): void;
   /** Сколько сообщений ушло в поддельные каналы. */
@@ -185,6 +189,18 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
     const result = store.recordInbound({ channel: 'tg_bot', externalId: `load-${i}`, displayName: `Клиент ${i + 1}`,
       text: TEXTS[i % TEXTS.length]!, externalMsgId: `load-${i}-1`, sentAt: at });
     if (result && i % 3 === 0) store.setHandoff(result.conversation.id, at + 5_000);
+  }
+  // Длинная лента (DEVSEED_HEAVY): клиент и оператор по очереди, раз в 2 мин, последнее — минуту назад.
+  const long = options.longThread ?? 0;
+  let longId = 0;
+  for (let i = 0; i < long; i += 1) {
+    const at = now - (long - i) * 120_000;
+    if ((long - 1 - i) % 2 === 0 || !longId) {
+      longId = store.recordInbound({ channel: 'tg_bot', externalId: 'long-1', displayName: 'Длинный диалог',
+        text: `${TEXTS[i % TEXTS.length]!} (${i + 1})`, externalMsgId: `long-1-${i}`, sentAt: at })?.conversation.id ?? longId;
+    } else {
+      store.recordOutbound({ conversationId: longId, author: i % 6 === 1 ? 'ai' : 'agent', text: `Ответ ${i + 1}: проверьте подписку в приложении.`, sentAt: at });
+    }
   }
 
   // Картинка 64×32 (настоящий PNG — её можно открыть в редакторе), чтобы в ленте было фото с размерами.
@@ -372,6 +388,11 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
     url: `http://127.0.0.1:${options.port}`,
     inbound(i, text) {
       const result = inboundAt(i, Date.now(), text ?? TEXTS[Math.floor(Math.random() * TEXTS.length)]!);
+      return result?.conversation.id ?? null;
+    },
+    inboundExtra(i, text) {
+      const result = store.recordInbound({ channel: 'tg_bot', externalId: `load-${i}`, displayName: `Клиент ${i + 1}`,
+        text, externalMsgId: `load-${i}-${++n}`, sentAt: Date.now() });
       return result?.conversation.id ?? null;
     },
     outbound(conversationId, author, text) { store.recordOutbound({ conversationId, author, text }); },

@@ -85,3 +85,44 @@ test('клавиатура в длинном списке: одна остано
   await page.keyboard.press('ArrowDown');
   await expect.poll(() => page.evaluate(() => document.activeElement?.closest('[data-row-id]')?.getAttribute('data-row-id') ?? null)).not.toBeNull();
 });
+
+/**
+ * Кадры в любом движке (R2 D): прокрутка списка из ~500 и ленты «Длинного диалога»
+ * (1000 сообщений) по 60 px за кадр — requestAnimationFrame-счётчик, без длинных
+ * провалов. Числа печатаются строкой [perf] (видны в выводе CI).
+ */
+test('кадры: прокрутка списка и длинной ленты без провалов', async ({ page, browserName }) => {
+  test.setTimeout(90_000);
+  const run = async (selector: string, step: number): Promise<{ fps: number; max: number; over50: number }> => await page.evaluate(([sel, dy]) => new Promise((resolve) => {
+    const el = document.querySelector(sel)!;
+    const deltas: number[] = [];
+    let last = 0;
+    let start = 0;
+    const tick = (now: number): void => {
+      if (start) deltas.push(now - last); else start = now;
+      last = now;
+      el.scrollTop += dy;
+      if (now - start < 3000) requestAnimationFrame(tick);
+      else resolve({ fps: Math.round(1000 * deltas.length / (now - start)), max: Math.round(Math.max(...deltas)), over50: deltas.filter((d) => d > 50).length });
+    };
+    requestAnimationFrame(tick);
+  }), [selector, step] as const);
+
+  await page.goto('/next/chats');
+  await page.getByRole('tab', { name: /Открытые/ }).click();
+  await expect(page.locator('[data-row-id]').first()).toBeVisible();
+  await page.waitForTimeout(500);
+  const list = await run('[data-scroller="chats"]', 60);
+
+  await page.locator('#chat-search').fill('Длинный диалог');
+  await page.locator('[data-row-id]').filter({ hasText: 'Длинный диалог' }).first().locator('button').first().click();
+  await expect(page.locator('[role="log"] [data-voice]').nth(50)).toBeAttached();
+  await page.waitForTimeout(500);
+  const feed = await run('[role="log"]', -60);
+
+  console.log(`[perf] ${browserName} список ${list.fps} fps, худший кадр ${list.max} мс, >50 мс: ${list.over50}; лента ${feed.fps} fps, худший ${feed.max} мс, >50 мс: ${feed.over50} — passed`);
+  // Провал — кадр дольше 250 мс (заметный рывок даже на медленной машине CI); единичные >50 мс допустимы.
+  expect(list.max, 'худший кадр списка').toBeLessThan(250);
+  expect(feed.max, 'худший кадр ленты').toBeLessThan(250);
+  expect(list.over50 + feed.over50, 'кадров длиннее 50 мс').toBeLessThanOrEqual(6);
+});

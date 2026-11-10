@@ -4,7 +4,7 @@
  * фокус держат и отсчёт, и запрос за ним).
  */
 import { expect, test } from '@playwright/test';
-import { openItems, signIn } from './helpers';
+import { desktopLike, openItems, signIn } from './helpers';
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
 
@@ -41,7 +41,7 @@ test('M-2: «Решено» — пауза тоста держит запрос,
   const toast = page.getByRole('status').filter({ has: page.getByRole('button', { name: 'Отменить' }) });
   await expect(toast).toBeVisible();
   // Мышь — наведение, касание и клавиатура — фокус: оба ставят паузу.
-  if (info.project.name === 'desktop') await toast.hover();
+  if (desktopLike(info.project.name)) await toast.hover();
   else await toast.getByRole('button', { name: 'Отменить' }).focus();
   await expect(toast).toHaveAttribute('data-held', 'true');
   await page.waitForTimeout(8_000); // окно отмены — 6 с

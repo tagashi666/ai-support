@@ -22,7 +22,7 @@ async function meWith(request: APIRequestContext, token: string): Promise<number
 
 async function settle(page: Page): Promise<void> {
   // Лист открывается с проявлением: контраст на середине анимации axe считает неверно.
-  await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))); });
 }
 
 async function expectClean(page: Page): Promise<void> {
@@ -268,6 +268,8 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto('/next/team/log');
       await expect(page.getByRole('list', { name: 'Журнал действий' })).toBeVisible();
       await page.getByRole('list', { name: 'Журнал действий' }).locator('summary').first().click();
+      // Тело появляется после события toggle и проявляется (R2 C) — ждём его, потом анимации.
+      await expect(page.getByRole('list', { name: 'Журнал действий' }).locator('details[open] dl').first()).toBeVisible();
       await expectClean(page);
     });
   });

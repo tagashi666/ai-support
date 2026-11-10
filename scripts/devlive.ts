@@ -11,13 +11,15 @@
  * черновики разной уверенности, картинка, Business-диалог с закрытым окном
  * 24 ч, коллега с закреплением, поддельные карточка клиента, Remnawave и
  * Bedolaga. Данные вымышленные; база удаляется при выходе (Ctrl+C).
- * DEVLIVE_QUIET=1 — без потока событий.
+ * DEVLIVE_QUIET=1 — без потока событий. DEVSEED_HEAVY=1 — замеры (раздел D):
+ * ещё 460 диалогов (всего 500) и «Длинный диалог» на 1000 сообщений.
  */
 import { startDevPanel, TEXTS } from './devseed.js';
 
 const panel = await startDevPanel({
   port: Number(process.env.PANEL_PORT ?? 8195),
   token: process.env.PANEL_TOKEN ?? 'dev-live-0123456789abcdef',
+  ...(process.env.DEVSEED_HEAVY === '1' ? { extra: 460, longThread: 1000 } : {}),
 });
 console.log(`Панель: ${panel.url}/next/?live=1  ключ: ${process.env.PANEL_TOKEN}`);
 

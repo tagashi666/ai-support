@@ -9,7 +9,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { expectNoHorizontalScroll, openItems, signIn, TOKEN } from './helpers';
 
 async function serious(page: Page): Promise<string[]> {
-  await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))); });
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   return result.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical')
     .map((violation) => `${violation.id}: ${violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')}`);

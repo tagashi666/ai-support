@@ -10,6 +10,7 @@ const PORT = Number(process.env.E2E_PORT ?? 8197);
 const LOAD_PORT = PORT + 2;
 // PANEL_UI=classic для всей установки (этап 8): только переключатель на /, база своя.
 const CLASSIC_PORT = PORT + 4;
+const CROSS = /(core|feed|overlay|layout)\.e2e\.ts$/;
 
 export default defineConfig({
   testDir: '.',
@@ -32,6 +33,11 @@ export default defineConfig({
     { name: 'mobile', testIgnore: /load\.e2e\.ts$/, use: { ...devices['Pixel 7'], viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 } },
     // Нагрузка (11.6): свой сервер на ~500 диалогах, чтобы не менять базу остальных тестов.
     { name: 'load', testMatch: /load\.e2e\.ts$/, use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 }, baseURL: `http://127.0.0.1:${LOAD_PORT}` } },
+    // Другие движки (R2 D): каркас, лента, окна и вёрстка — на WebKit и Firefox; кадры под нагрузкой — там же.
+    { name: 'webkit', testMatch: CROSS, use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 800 } } },
+    { name: 'firefox', testMatch: CROSS, use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 } } },
+    { name: 'load-webkit', testMatch: /load\.e2e\.ts$/, grep: /кадры/, use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 800 }, baseURL: `http://127.0.0.1:${LOAD_PORT}` } },
+    { name: 'load-firefox', testMatch: /load\.e2e\.ts$/, grep: /кадры/, use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 }, baseURL: `http://127.0.0.1:${LOAD_PORT}` } },
   ],
   webServer: [{
     command: 'node --import tsx scripts/e2eserver.ts',
@@ -46,7 +52,7 @@ export default defineConfig({
     url: `http://127.0.0.1:${LOAD_PORT}/next/`,
     reuseExistingServer: !process.env.CI,
     timeout: 60_000,
-    env: { E2E_PORT: String(LOAD_PORT), E2E_EXTRA: '460' },
+    env: { E2E_PORT: String(LOAD_PORT), E2E_EXTRA: '460', E2E_LONG: '1000' },
   }, {
     command: 'node --import tsx scripts/e2eserver.ts',
     cwd: '../..',

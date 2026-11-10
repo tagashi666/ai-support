@@ -64,6 +64,7 @@ scripts/minishoptest.ts
 scripts/nexttest.ts
 scripts/notifytest.ts
 scripts/pack.sh
+scripts/perfbench.ts
 scripts/releasecheck.sh
 scripts/sectest.ts
 scripts/setuptest.ts
@@ -347,6 +348,7 @@ web/src/lib/onboarding.ts
 web/src/lib/palette/commands.ts
 web/src/lib/palette/palette.test.ts
 web/src/lib/palette/run.ts
+web/src/lib/perf.ts
 web/src/lib/reports/model.ts
 web/src/lib/reports/reports.test.ts
 web/src/lib/reports/store.ts
@@ -388,9 +390,11 @@ web/src/ui/Bubble.tsx
 web/src/ui/Button.tsx
 web/src/ui/Card.tsx
 web/src/ui/Chip.tsx
+web/src/ui/Collapse.tsx
 web/src/ui/Icon.tsx
 web/src/ui/InlineField.tsx
 web/src/ui/Row.tsx
+web/src/ui/Segmented.tsx
 web/src/ui/Sheet.tsx
 web/src/ui/Tabs.tsx
 web/src/ui/Toaster.tsx

@@ -4,13 +4,13 @@
  * без горизонтальной прокрутки.
  */
 import { expect, test, type WebSocketRoute } from '@playwright/test';
-import { api, control, expectNoHorizontalScroll, rowOrder, signIn, stats, threadWithDraft } from './helpers';
+import { api, control, desktopLike, expectNoHorizontalScroll, rowOrder, signIn, stats, threadWithDraft } from './helpers';
 import type { ThreadResponse } from '@shared/api-types';
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
 
 test('список не скачет под курсором при потоке кадров', async ({ page, request }, info) => {
-  test.skip(info.project.name !== 'desktop', 'наведение — только мышью');
+  test.skip(!desktopLike(info.project.name), 'наведение — только мышью');
   await page.goto('/next/chats');
   const rows = page.locator('[data-row-id]');
   await expect(rows.first()).toBeVisible();

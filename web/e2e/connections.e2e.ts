@@ -22,7 +22,7 @@ async function waitIdle(request: APIRequestContext): Promise<void> {
 
 async function serious(page: Page): Promise<string> {
   // Лист открывается с проявлением: контраст на середине анимации axe считает неверно.
-  await page.evaluate(async () => { await Promise.all(document.getAnimations().map((animation) => animation.finished.catch(() => undefined))); });
+  await page.evaluate(async () => { await Promise.all(document.getAnimations().filter((animation) => animation.effect?.getTiming().iterations !== Infinity).map((animation) => animation.finished.catch(() => undefined))); });
   const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   const bad = result.violations.filter((violation) => violation.impact === 'serious' || violation.impact === 'critical');
   return bad.length === 0 ? '' : JSON.stringify(bad.map((violation) => [violation.id, violation.nodes.slice(0, 3).map((node) => node.target.join(' ')).join(' | ')]));
