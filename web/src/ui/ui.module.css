@@ -426,6 +426,10 @@
 .tabs[data-stretch="true"] { display: flex; width: 100%; }
 .tabs[data-stretch="true"] .tab { flex: 1 1 auto; justify-content: center; padding: 0 var(--s2); }
 .tabCount { color: var(--attention); font-variant-numeric: tabular-nums; }
+/* Не влезло — край обёртки гаснет на 24 px со стороны скрытых вкладок. */
+:has(> .tabs[data-more="end"]) { mask-image: linear-gradient(to right, var(--text) calc(100% - var(--s6)), transparent); }
+:has(> .tabs[data-more="start"]) { mask-image: linear-gradient(to left, var(--text) calc(100% - var(--s6)), transparent); }
+:has(> .tabs[data-more="both"]) { mask-image: linear-gradient(to right, transparent, var(--text) var(--s6), var(--text) calc(100% - var(--s6)), transparent); }
 
 /* ---------- Карточка ---------- */
 .card {
