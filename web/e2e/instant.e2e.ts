@@ -2,6 +2,7 @@
  * Мгновенность для второго человека (live.md, L-2, L-4, L-5): коллега видит
  * чужое «Решено», правку знаний и смену своих прав за ~1 с — кадрами сервера
  * (intent, invalidate, me), без опроса и перезагрузки. Два браузера — два контекста.
+ * Свои диалоги (клиенты 201, 202) и свои люди: общие сиды (черновики, «Люди») не трогаем.
  */
 import { expect, test, type Browser, type Page } from '@playwright/test';
 import { control, signIn, TOKEN } from './helpers';
@@ -34,9 +35,9 @@ test.describe('мгновенно у коллеги', () => {
   test.beforeEach(({}, info) => { test.skip(info.project.name !== 'desktop', 'два браузера — на компьютере'); });
 
   test('L-2: чужое «Решено» видно сразу, строка уходит анимацией выхода', async ({ browser, request }) => {
-    const { id } = await control<{ id: number }>(request, `/inbound?i=33&text=${encodeURIComponent('Вопрос для двоих')}`);
+    const { id } = await control<{ id: number }>(request, `/inbound?i=201&text=${encodeURIComponent('Вопрос для двоих')}`);
     const owner = await open(browser);
-    const ivan = await open(browser, (await agent(owner, `Иван ${Date.now() % 100000}`)).token);
+    const ivan = await open(browser, (await agent(owner, `Коллега кадров ${Date.now() % 100000}`)).token);
     await goLive(ivan, '/next/chats');
     const row = ivan.locator(`[data-row-id="${id}"]`);
     await expect(row).toBeVisible();
@@ -65,7 +66,7 @@ test.describe('мгновенно у коллеги', () => {
   });
 
   test('L-2: чужое «Убрать» — строка уходит той же анимацией выхода, отмена возвращает', async ({ browser, request }) => {
-    const { id } = await control<{ id: number }>(request, `/inbound?i=34&text=${encodeURIComponent('Уберут при вас')}`);
+    const { id } = await control<{ id: number }>(request, `/inbound?i=202&text=${encodeURIComponent('Уберут при вас')}`);
     const ivan = await open(browser);
     await goLive(ivan, '/next/chats');
     const row = ivan.locator(`[data-row-id="${id}"]`);
@@ -105,7 +106,7 @@ test.describe('мгновенно у коллеги', () => {
 
   test('L-5: права изменились — панель знает без перезагрузки', async ({ browser, request }) => {
     const owner = await open(browser);
-    const person = await agent(owner, `Пётр ${Date.now() % 100000}`);
+    const person = await agent(owner, `Права кадров ${Date.now() % 100000}`);
     const peter = await open(browser, person.token);
     await goLive(peter, '/next/chats');
     await expect(peter.getByRole('navigation').first()).toBeVisible();
