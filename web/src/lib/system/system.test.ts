@@ -144,5 +144,6 @@ describe('уведомления и настройки', () => {
     expect(rows[0]).toEqual({ key: 'aiMode', label: 'Режим помощника по умолчанию', value: 'auto' });
     expect(rows[1]!.value).toBe('да');
     expect(rows[2]!.label).toBe('Другая настройка');
+    expect(overrideRows([{ key: 'uiDefault', value: 'classic', env: 'next' }])[0]).toEqual({ key: 'uiDefault', label: 'Панель по умолчанию', value: 'Классическая' });
   });
 });

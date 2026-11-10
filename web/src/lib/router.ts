@@ -50,10 +50,22 @@ export function href(route: Route): string {
  * Ссылка `/#c<id>` (уведомления в Telegram, 7.7) открывает нужный интерфейс:
  * с cookie ui=next сервер отправляет в /next/, а фрагмент адреса сохраняется.
  */
+/**
+ * Старые адреса классики `/#v=<раздел>` (раздел 12): с 3.0 `/` без выбора
+ * открывает новую панель, и такая закладка ведёт в тот же раздел здесь.
+ */
+const CLASSIC_VIEWS: Record<string, Route> = {
+  inbox: { name: 'chats', id: null }, queue: { name: 'section', key: 'reports', sub: 'sla' },
+  kb: { name: 'section', key: 'knowledge' }, lab: { name: 'section', key: 'assistant' },
+  nodes: { name: 'section', key: 'system', sub: 'servers' }, stats: { name: 'section', key: 'reports' },
+  team: { name: 'section', key: 'team' }, diagnostics: { name: 'section', key: 'system' }, settings: { name: 'section', key: 'system' },
+};
+
 function initialRoute(): Route {
   const hashed = /^#c(\d{1,15})$/.exec(location.hash);
-  if (!hashed) return parse(location.pathname);
-  const next: Route = { name: 'chats', id: hashed[1] ?? null };
+  const view = /^#v=([a-z]+)$/.exec(location.hash)?.[1];
+  const next: Route | undefined = hashed ? { name: 'chats', id: hashed[1] ?? null } : view && Object.hasOwn(CLASSIC_VIEWS, view) ? CLASSIC_VIEWS[view] : undefined;
+  if (!next) return parse(location.pathname);
   history.replaceState(null, '', href(next));
   return next;
 }

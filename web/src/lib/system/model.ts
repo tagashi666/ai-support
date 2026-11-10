@@ -30,6 +30,10 @@ export interface NodesSnapshot { at: number; error?: string; nodes: NodeRow[] }
 export type NodesState = { kind: 'ok'; snapshot: NodesSnapshot } | { kind: 'off'; message: string } | { kind: 'error'; message: string };
 export type NotifyLevel = 'all' | 'important' | 'minimal';
 export interface NotificationsInfo { configured: boolean; level: NotifyLevel; lastError: string | null }
+/** «Система → Панель» (раздел 12): что открывается на `/` и откуда это решение. */
+export type PanelChoice = 'classic' | 'next';
+export interface PanelInfo { choice: PanelChoice; source: 'env' | 'panel' | 'default'; built: boolean }
+export const PANEL_CHOICES: readonly PanelChoice[] = ['next', 'classic'];
 export type UpdateStatus = 'queued' | 'backing_up' | 'installing' | 'checking' | 'completed' | 'rolled_back' | 'failed';
 export interface UpdateProgress { action: 'update' | 'rollback'; status: UpdateStatus; stage?: string; percent?: number; version?: string; detail?: string; startedAt?: string; updatedAt?: string }
 export interface HistoryRow { id: number; action: string; version: string | null; status: string; detail: string | null; created_at: number }
@@ -285,14 +289,15 @@ const OVERRIDE_LABEL: Record<string, string> = {
   slaFirstResponseMinutes: 'system.setting.slaFirstResponseMinutes', brand: 'system.setting.brand',
   handoffRepeatMinutes: 'system.setting.handoffRepeatMinutes', notifyLevel: 'system.setting.notifyLevel', model: 'system.setting.model',
   fallbackModel: 'system.setting.fallbackModel', modelKey: 'system.setting.modelKey', fallbackKey: 'system.setting.fallbackKey',
-  requireKb: 'system.setting.requireKb', autoLearn: 'system.setting.autoLearn',
+  requireKb: 'system.setting.requireKb', autoLearn: 'system.setting.autoLearn', uiDefault: 'system.setting.uiDefault',
 };
 
 export function overrideRows(list: Diagnostics['settingOverrides']): Array<{ key: string; label: string; value: string }> {
   return list.map((item) => {
     const labelKey = OVERRIDE_LABEL[item.key];
     const value = typeof item.value === 'boolean' ? (item.value ? tr('system.yes') : tr('system.no'))
-      : typeof item.value === 'object' ? tr('system.setting.custom') : String(item.value);
+      : typeof item.value === 'object' ? tr('system.setting.custom')
+      : item.key === 'uiDefault' ? tr(item.value === 'classic' ? 'system.panel.classic' : 'system.panel.next') : String(item.value);
     return { key: item.key, label: labelKey ? tr(labelKey as 'system.setting.aiMode') : tr('system.setting.other'), value };
   });
 }

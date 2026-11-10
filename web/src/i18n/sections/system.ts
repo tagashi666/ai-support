@@ -8,6 +8,7 @@ export const dict = {
   'system.tab.servers': 'Серверы',
   'system.tab.update': 'Обновление',
   'system.tab.notifications': 'Уведомления',
+  'system.tab.panel': 'Панель',
 
   // Общее
   'system.retry': 'Повторить',
@@ -123,6 +124,7 @@ export const dict = {
   'system.setting.brand': 'Название сервиса',
   'system.setting.handoffRepeatMinutes': 'Как часто напоминать о передаче',
   'system.setting.notifyLevel': 'Что присылать в Telegram',
+  'system.setting.uiDefault': 'Панель по умолчанию',
   'system.setting.model': 'Основная модель',
   'system.setting.fallbackModel': 'Запасная модель',
   'system.setting.modelKey': 'Ключ основной модели',
@@ -232,6 +234,19 @@ export const dict = {
   'system.update.reinstallConfirm': 'Переустановить',
 
   // Уведомления
+  'system.panel.what': 'Какая панель открывается по адресу панели',
+  'system.panel.next': 'Новая',
+  'system.panel.nextHint': 'У всех, кто на своём устройстве не выбрал классическую.',
+  'system.panel.classic': 'Классическая',
+  'system.panel.classicHint': 'Для всей команды. Новую каждый может открыть сам: «Попробовать новую панель» в меню классической.',
+  'system.panel.device': 'Выбор человека на своём устройстве сильнее этой настройки: «Вернуться к классической» и «Попробовать новую панель» запоминаются в браузере.',
+  'system.panel.env': 'Задано на сервере переменной {name} — поменять можно только там.',
+  'system.panel.locked': 'Менять могут только те, у кого есть на это право.',
+  'system.panel.notBuilt': 'Новая панель на сервере не собрана, поэтому все сейчас открывают классическую.',
+  'system.panel.doneNext': 'Теперь по умолчанию открывается новая панель',
+  'system.panel.doneClassic': 'Теперь по умолчанию открывается классическая панель',
+  'system.panel.failed': 'Не сохранилось: {reason}',
+  'system.panel.loadFailed': 'Не удалось узнать, какая панель открывается по умолчанию.',
   'system.notify.what': 'Что присылать в Telegram',
   'system.level.all': 'Каждое событие',
   'system.level.all.hint': 'Новые обращения, каждое сообщение клиента, ответы помощника, передачи и просрочки.',

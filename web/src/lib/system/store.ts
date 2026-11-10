@@ -10,7 +10,7 @@ import { showToast, undoToast } from '@/lib/actions/toasts';
 import { ApiError, getJson, readToken, sendJson } from '@/lib/live/api';
 import { announceUpdated, bootstrap } from '@/lib/live/store';
 import type { ConnectionsResponse } from '@shared/api-types';
-import type { Diagnostics, Health, NodesState, NodesSnapshot, NotificationsInfo, NotifyLevel, UpdateInfo } from './model';
+import type { Diagnostics, Health, NodesState, NodesSnapshot, NotificationsInfo, NotifyLevel, PanelChoice, PanelInfo, UpdateInfo } from './model';
 
 export type Load<T> = { state: 'idle' } | { state: 'loading' } | { state: 'error'; message: string } | { state: 'ready'; data: T };
 
@@ -23,6 +23,7 @@ export const rights = computed(() => ({
   update: can('settings:update'),
   alerts: can('settings:alerts'),
   level: can('setting:notifyLevel'),
+  panel: can('setting:uiDefault'),
 }));
 
 export const reason = (err: unknown): string => (err instanceof ApiError || err instanceof Error ? err.message : String(err));
@@ -159,6 +160,30 @@ export async function changeLevel(next: NotifyLevel, labelOf: (level: NotifyLeve
   undoToast(tr('system.notify.levelDone', { level: labelOf(next) }), () => {
     postLevel(prev).catch((err: unknown) => showToast({ text: tr('system.notify.levelFailed', { reason: reason(err) }), kind: 'error', ttl: null }));
   }, tr('system.undo'));
+}
+
+/* ---------- Панель по умолчанию ---------- */
+
+export const panelInfo = signal<PanelInfo | null | undefined>(undefined);
+
+export async function loadPanel(): Promise<void> {
+  if (!rights.peek().read) return;
+  try { panelInfo.value = await getJson<PanelInfo>('/api/system/panel', token()); } catch { panelInfo.value = null; }
+}
+
+async function postPanel(choice: PanelChoice): Promise<void> {
+  await sendJson<{ ok: boolean }>('/api/settings', token(), { uiDefault: choice });
+  const info = panelInfo.peek();
+  if (info) panelInfo.value = { ...info, choice, source: 'panel' };
+}
+
+/** Применяется сразу для всей установки; «Отменить» в тосте возвращает прежнее (ярус 0). */
+export async function changePanel(next: PanelChoice): Promise<void> {
+  const prev = panelInfo.peek()?.choice;
+  if (!prev || prev === next) return;
+  const failed = (err: unknown): void => { showToast({ text: tr('system.panel.failed', { reason: reason(err) }), kind: 'error', ttl: null }); };
+  try { await postPanel(next); } catch (err) { failed(err); return; }
+  undoToast(tr(next === 'classic' ? 'system.panel.doneClassic' : 'system.panel.doneNext'), () => { postPanel(prev).catch(failed); }, tr('system.undo'));
 }
 
 /** «Отправить тест»: итог словами, причина — при сбое. */

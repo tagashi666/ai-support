@@ -6,12 +6,13 @@ import { rights } from '@/lib/system/store';
 import { Tabs } from '@/ui/Tabs';
 import { HealthPanel } from './HealthPanel';
 import { NotificationsPanel } from './NotificationsPanel';
+import { PanelPanel } from './PanelPanel';
 import { ServersPanel } from './ServersPanel';
 import { UpdatePanel } from './UpdatePanel';
 import s from './system.module.css';
 
-type Tab = 'health' | 'servers' | 'update' | 'notifications';
-const SUB: Record<Tab, string | undefined> = { health: undefined, servers: 'servers', update: 'update', notifications: 'notifications' };
+type Tab = 'health' | 'servers' | 'update' | 'notifications' | 'panel';
+const SUB: Record<Tab, string | undefined> = { health: undefined, servers: 'servers', update: 'update', notifications: 'notifications', panel: 'panel' };
 
 /** Вкладки по правам (6.9, состояния): без settings:update нет «Обновления», серверы — при чтении настроек и включённом опросе. */
 function tabsFor(): Tab[] {
@@ -20,16 +21,16 @@ function tabsFor(): Tab[] {
   const tabs: Tab[] = ['health'];
   if (r.servers) tabs.push('servers');
   if (r.update) tabs.push('update');
-  if (r.read) tabs.push('notifications');
+  if (r.read) tabs.push('notifications', 'panel');
   return tabs;
 }
 
 function labelOf(tab: Tab): string {
   return tab === 'health' ? tr('system.tab.health') : tab === 'servers' ? tr('system.tab.servers')
-    : tab === 'update' ? tr('system.tab.update') : tr('system.tab.notifications');
+    : tab === 'update' ? tr('system.tab.update') : tab === 'panel' ? tr('system.tab.panel') : tr('system.tab.notifications');
 }
 
-/** «Система» (6.9): Здоровье · Серверы · Обновление · Уведомления. */
+/** «Система» (6.9): Здоровье · Серверы · Обновление · Уведомления · Панель (этап 8). */
 export function SystemScreen({ sub }: { sub?: string; item?: string }): JSX.Element {
   const ready = bootstrap.value !== null;
   const tabs = tabsFor();
@@ -50,6 +51,7 @@ export function SystemScreen({ sub }: { sub?: string; item?: string }): JSX.Elem
             {tab === 'servers' && <ServersPanel />}
             {tab === 'update' && <UpdatePanel />}
             {tab === 'notifications' && <NotificationsPanel />}
+            {tab === 'panel' && <PanelPanel />}
           </>
         )}
       </div>

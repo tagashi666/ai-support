@@ -59,6 +59,7 @@ const PERM_KEY: Record<string, TKey> = {
   'settings:alerts': 'team.perm.settings.alerts',
   'settings:update': 'team.perm.settings.update',
   'settings:ai_tools': 'team.perm.settings.ai_tools',
+  'setting:uiDefault': 'team.perm.setting.uiDefault',
   'setting:aiMode': 'team.perm.setting.aiMode',
   'setting:requireKb': 'team.perm.setting.requireKb',
   'setting:autoLearn': 'team.perm.setting.autoLearn',

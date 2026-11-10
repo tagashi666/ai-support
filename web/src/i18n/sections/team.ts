@@ -277,6 +277,7 @@ export const dict = {
   'team.perm.settings.alerts': 'Проверять системные уведомления',
   'team.perm.settings.update': 'Устанавливать обновления и откаты',
   'team.perm.settings.ai_tools': 'Проверять модель и ключи помощника',
+  'team.perm.setting.uiDefault': 'Выбирать панель по умолчанию',
   'team.perm.setting.aiMode': 'Менять режим помощника по умолчанию',
   'team.perm.setting.requireKb': 'Менять правило «отвечать только по знаниям»',
   'team.perm.setting.autoLearn': 'Менять обучение на закрытых диалогах',

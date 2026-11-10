@@ -261,6 +261,7 @@ web/src/features/reports/SummaryPanel.tsx
 web/src/features/reports/reports.module.css
 web/src/features/system/HealthPanel.tsx
 web/src/features/system/NotificationsPanel.tsx
+web/src/features/system/PanelPanel.tsx
 web/src/features/system/ServersPanel.tsx
 web/src/features/system/SystemScreen.tsx
 web/src/features/system/UpdatePanel.tsx
