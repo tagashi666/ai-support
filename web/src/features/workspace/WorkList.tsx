@@ -1,11 +1,12 @@
 import type { JSX } from 'preact';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { InboxItem, InboxResponse } from '@shared/api-types';
 import type { Section } from '@shared/attention';
 import { ConnectionLine } from '@/features/live/ConnectionLine';
 import { t, tn } from '@/i18n/ru';
 import { listTime } from '@/lib/format/format';
 import { useFrozenList } from '@/lib/hooks/useFrozenList';
+import { useRowWindow } from '@/lib/hooks/useRowWindow';
 import { sectionLabel } from '@/lib/labels';
 import { getJson, readToken } from '@/lib/live/api';
 import { isUrgentCode, liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
@@ -265,12 +266,53 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
     .filter((item): item is InboxItem => item !== null && item !== undefined) : null;
   const isCollapsed = (section: Section, size: number): boolean => collapsed[section] ?? (section === 'client' && size > 5);
   const visible = searchRows ?? sections.flatMap((group) => (isCollapsed(group.section, group.rows.length) ? [] : group.rows));
-  const focusId = active && visible.some((item) => String(item.id) === active) ? active
+  // Окно отрисовки (6.2): больше 100 строк — рисуем видимые ±2 экрана.
+  const groups = searchRows ? [{ key: 'found', rows: searchRows }]
+    : sections.filter((group) => !isCollapsed(group.section, group.rows.length)).map((group) => ({ key: group.section as string, rows: group.rows }));
+  const win = useRowWindow(list.scroller, visible.length, groups.map((group) => `${group.key}:${group.rows.length}`).join(','));
+  const drawn = new Map(groups.map((group) => [group.key, win.range(group.key, group.rows.length)]));
+  const isDrawn = (id: string): boolean => groups.some((group) => {
+    const [from, to] = drawn.get(group.key)!;
+    return group.rows.slice(from, to).some((item) => String(item.id) === id);
+  });
+  const wanted = active && visible.some((item) => String(item.id) === active) ? active
     : pinned && visible.some((item) => String(item.id) === pinned) ? pinned : visible[0] ? String(visible[0].id) : null;
+  // Строка с фокусом за окном: одна остановка Tab всё равно есть — первая нарисованная.
+  const focusId = !win.on || wanted === null || isDrawn(wanted) ? wanted
+    : (groups.map((group) => group.rows[drawn.get(group.key)![0]]).find(Boolean)?.id.toString() ?? wanted);
+  const focusAfter = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const id = focusAfter.current;
+    if (!id) return;
+    const row = list.scroller.current?.querySelector<HTMLElement>(`[data-row-id="${id}"] button`);
+    if (row) { focusAfter.current = null; row.focus(); }
+  });
   // Порядок видимых строк — для [ и ] в открытом диалоге (7.3).
   const visibleKey = visible.map((item) => item.id).join(',');
   useEffect(() => { listOrder.value = visible.map((item) => item.id); }, [visibleKey]);
-  const onRowKey = (event: KeyboardEvent): void => { const next = list.onRowKey(event); if (next) setActive(next); };
+  const onRowKey = (event: KeyboardEvent): void => {
+    // Home / End за окном отрисовки: прокрутить к краю и поставить фокус, когда строка появится.
+    if (win.on && (event.key === 'Home' || event.key === 'End') && visible.length > 0) {
+      event.preventDefault();
+      const edge = String((event.key === 'Home' ? visible[0] : visible[visible.length - 1])!.id);
+      const el = list.scroller.current;
+      if (el) el.scrollTop = event.key === 'Home' ? 0 : el.scrollHeight;
+      focusAfter.current = edge;
+      setActive(edge);
+      return;
+    }
+    const next = list.onRowKey(event);
+    if (next) setActive(next);
+  };
+  const windowed = (key: string, rows: InboxItem[]): JSX.Element => {
+    const [from, to] = drawn.get(key) ?? [0, rows.length];
+    const pad = (n: number): JSX.Element | null => (n > 0 ? <div aria-hidden="true" style={{ height: `${n * win.pitch - 2}px` }} /> : null);
+    return (
+      <div class={s.rows} data-rows={key} data-count={String(rows.length)}>
+        {pad(from)}{rows.slice(from, to).map(renderRow)}{pad(rows.length - to)}
+      </div>
+    );
+  };
 
   const rowItem = sheet && typeof sheet === 'object' && 'row' in sheet ? itemFor(sheet.row) : undefined;
   function itemFor(id: number): InboxItem | undefined { return byId.get(String(id)) ?? found?.items.get(id); }
@@ -378,7 +420,7 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
           ]}
         />
       </header>
-      <div class={s.scroller} ref={list.scroller} aria-busy={state === 'loading' ? 'true' : 'false'} {...list.handlers}>
+      <div class={s.scroller} ref={list.scroller} data-scroller="chats" aria-busy={state === 'loading' ? 'true' : 'false'} {...list.handlers}>
         {state === 'loading' && nothing && (
           <div class={w.skeletons} aria-label={t('live.loading')}>
             {Array.from({ length: 8 }, (_, index) => <div key={index} class={w.skeletonRow} />)}
@@ -415,7 +457,7 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
           searchRows.length > 0 && (
             <section class={s.section} aria-label={t('list.found', { n: searchRows.length })}>
               <p class={s.sectionHint}>{t('list.found', { n: searchRows.length })}</p>
-              <div class={s.rows}>{searchRows.map(renderRow)}</div>
+              {windowed('found', searchRows)}
             </section>
           )
         ) : sections.map(({ section, rows }) => {
@@ -434,7 +476,7 @@ export function WorkList({ openId }: { openId: number | null }): JSX.Element {
                 </button>
               </h2>
               {section === 'mine' && !closed && <p class={s.sectionHint}>{t('chats.mineHint')}</p>}
-              {!closed && <div class={s.rows}>{rows.map(renderRow)}</div>}
+              {!closed && windowed(section, rows)}
             </section>
           );
         })}

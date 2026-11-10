@@ -4,6 +4,7 @@
  * тест сам решает, когда прийти кадрам и когда оборвать связь.
  *
  *   E2E_PORT=8197 node --import tsx scripts/e2eserver.ts
+ *   E2E_EXTRA=460 — ещё столько диалогов (нагрузочный проект load, 11.6)
  *   POST :8198/burst?n=20&ms=50  — n сообщений клиентов с паузой ms
  *   POST :8198/drop              — разорвать все сокеты
  *   GET  :8198/stats             — {sent, extensions}
@@ -13,7 +14,7 @@ import { createServer } from 'node:http';
 import { startDevPanel } from './devseed.js';
 
 const port = Number(process.env.E2E_PORT ?? 8197);
-const panel = await startDevPanel({ port, token: process.env.E2E_TOKEN ?? 'e2e-key-0123456789abcdef' });
+const panel = await startDevPanel({ port, token: process.env.E2E_TOKEN ?? 'e2e-key-0123456789abcdef', extra: Number(process.env.E2E_EXTRA ?? 0) });
 
 const control = createServer((request, response) => {
   const url = new URL(request.url ?? '/', 'http://127.0.0.1');
@@ -21,7 +22,7 @@ const control = createServer((request, response) => {
   if (url.pathname === '/stats') return reply({ sent: panel.sent(), extensions: panel.extensions() });
   if (url.pathname === '/drop') { panel.dropSockets(); return reply({ ok: true }); }
   if (url.pathname === '/burst') {
-    const n = Math.min(500, Number(url.searchParams.get('n') ?? 10));
+    const n = Math.min(1000, Number(url.searchParams.get('n') ?? 10));
     const ms = Math.max(0, Number(url.searchParams.get('ms') ?? 50));
     let done = 0;
     const tick = (): void => {

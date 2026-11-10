@@ -14,6 +14,8 @@ import { loadPresence, onCollabFrame } from '@/lib/workspace/collab';
 export type Mode = 'demo' | 'live';
 const MODE_KEY = 'next.mode';
 const OPEN_LIMIT = 200;
+/** Открытых догружаем страницами до этого числа (риск 13: установки на 200+ диалогов). */
+const OPEN_MAX = 1000;
 const DONE_LIMIT = 50;
 
 function initialMode(): Mode {
@@ -108,9 +110,22 @@ async function loadSnapshot(): Promise<Position> {
   snapshotEpoch = open.epoch;
   let state = mergeSnapshot(previous, open.items, open.seq, open.counts, new Set(['mine', 'colleagues', 'ai', 'client']), base);
   state = mergeSnapshot(state, done.items, done.seq, null, new Set(['done']), base);
+  // Следующие страницы открытых — по курсору; строки только добавляются (пустой scope),
+  // а всё, что сдвинулось между страницами, придёт кадрами с seq больше base.
+  let next = open.next;
+  let seq = base;
+  let epoch = open.epoch === done.epoch ? open.epoch : '';
+  for (let total = open.items.length; next && total < OPEN_MAX; ) {
+    const page = await getJson<InboxResponse>(`/api/inbox?view=open&limit=${OPEN_LIMIT}&cursor=${encodeURIComponent(next)}`, token());
+    if (page.epoch !== open.epoch) { epoch = ''; break; }
+    state = mergeSnapshot(state, page.items, page.seq, null, new Set(), base);
+    seq = Math.min(seq, page.seq);
+    total += page.items.length;
+    next = page.next;
+  }
   inbox.value = state;
   syncedAt.value = Date.now();
-  return open.epoch === done.epoch ? { seq: Math.min(open.seq, done.seq), epoch: open.epoch } : { seq: 0, epoch: '' };
+  return epoch ? { seq, epoch } : { seq: 0, epoch: '' };
 }
 
 /**

@@ -180,6 +180,7 @@ web/e2e/core.e2e.ts
 web/e2e/helpers.ts
 web/e2e/knowledge.e2e.ts
 web/e2e/list.e2e.ts
+web/e2e/load.e2e.ts
 web/e2e/media.e2e.ts
 web/e2e/palette.e2e.ts
 web/e2e/playwright.config.ts
@@ -308,6 +309,8 @@ web/src/lib/format/format.ts
 web/src/lib/hooks/swipe.test.ts
 web/src/lib/hooks/swipe.ts
 web/src/lib/hooks/useFrozenList.ts
+web/src/lib/hooks/useRowWindow.test.ts
+web/src/lib/hooks/useRowWindow.ts
 web/src/lib/keys.ts
 web/src/lib/knowledge/hints.ts
 web/src/lib/knowledge/knowledge.test.ts
@@ -342,6 +345,8 @@ web/src/lib/team/store.ts
 web/src/lib/team/team.test.ts
 web/src/lib/types.ts
 web/src/lib/workspace/actions.ts
+web/src/lib/workspace/collab.test.ts
+web/src/lib/workspace/collab.ts
 web/src/lib/workspace/deferred.ts
 web/src/lib/workspace/drafts.ts
 web/src/lib/workspace/errors.ts
@@ -349,6 +354,7 @@ web/src/lib/workspace/filter.ts
 web/src/lib/workspace/labels.ts
 web/src/lib/workspace/local.ts
 web/src/lib/workspace/registry.ts
+web/src/lib/workspace/serverDrafts.ts
 web/src/lib/workspace/thread.ts
 web/src/lib/workspace/typing.ts
 web/src/lib/workspace/who.ts

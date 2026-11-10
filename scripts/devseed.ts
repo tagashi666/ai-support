@@ -23,6 +23,8 @@ import { FakeSources, FakeUpdates, fakeNodes, fakeNotifier } from './devfakes.js
 export interface DevPanelOptions {
   port: number;
   token: string;
+  /** Ещё столько выдуманных диалогов — нагрузочный e2e (план, 11.6: 500 диалогов). */
+  extra?: number;
 }
 
 export interface DevPanel {
@@ -173,6 +175,13 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
     if (i % 11 === 6) operations.claim(conversation.id, colleague);
     if (i % 10 === 9) store.setStatus(conversation.id, 'resolved');
     if (i % 13 === 7) store.setSuspicious(conversation.id, true);
+  }
+  // Нагрузка (11.6): только у отдельного e2e-сервера; каждый третий ждёт человека.
+  for (let i = 0; i < (options.extra ?? 0); i += 1) {
+    const at = now - (i * 3 + 2) * 60_000;
+    const result = store.recordInbound({ channel: 'tg_bot', externalId: `load-${i}`, displayName: `Клиент ${i + 1}`,
+      text: TEXTS[i % TEXTS.length]!, externalMsgId: `load-${i}-1`, sentAt: at });
+    if (result && i % 3 === 0) store.setHandoff(result.conversation.id, at + 5_000);
   }
 
   // Картинка 64×32 (настоящий PNG — её можно открыть в редакторе), чтобы в ленте было фото с размерами.
