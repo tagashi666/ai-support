@@ -3,6 +3,7 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { saveNote, sendDraft, sendText } from '@/lib/actions/chat';
 import { duration } from '@/lib/format/format';
+import { tabArrows } from '@/lib/keys';
 import { composerMode, now, setText, textOf } from '@/lib/store/state';
 import type { Chat } from '@/lib/types';
 import { Icon } from '@/ui/Icon';
@@ -60,7 +61,7 @@ export function Composer({ chat, noteOnly, closed }: { chat: Chat; noteOnly: boo
 
   return (
     <div class={s.composer} data-mode={mode}>
-      <div class={s.modes} role="tablist" aria-label={t('composer.modes')}>
+      <div class={s.modes} role="tablist" aria-label={t('composer.modes')} onKeyDown={tabArrows}>
         <button type="button" role="tab" class={s.mode} aria-selected={mode === 'reply'} disabled={noteOnly}
           tabIndex={mode === 'reply' ? 0 : -1} onClick={() => setMode('reply')}>
           {noteOnly ? t('composer.replyBusy') : t('composer.reply')}

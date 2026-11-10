@@ -1,6 +1,6 @@
 import { ImageEditor } from '@/features/media/ImageEditor';
 import { isSendKey } from '@/lib/device';
-import { isMod, layerOpen, modLabel } from '@/lib/keys';
+import { isMod, layerOpen, modLabel, tabArrows } from '@/lib/keys';
 import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { InboxItem, ThreadHead } from '@shared/api-types';
@@ -214,7 +214,7 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
         </div>
       )}
       <div class={w.composerBar}>
-        <div class={s.modes} role="tablist" aria-label={t('composer.modes')}>
+        <div class={s.modes} role="tablist" aria-label={t('composer.modes')} onKeyDown={tabArrows}>
           <button type="button" role="tab" class={s.mode} aria-selected={mode === 'reply'} disabled={noteOnly}
             tabIndex={mode === 'reply' ? 0 : -1} onClick={() => update({ mode: 'reply' })}>
             {noteOnly ? t('composer.replyBusy') : t('composer.reply')}

@@ -33,3 +33,17 @@ export function codeLabel(code: string): string {
   const named: Record<string, string> = { BracketLeft: '[', BracketRight: ']', Slash: '/', Enter: '↵', Escape: 'Esc', ArrowUp: '↑', ArrowDown: '↓' };
   return named[code] ?? code;
 }
+
+/** Стрелки в списке вкладок (role=tablist, 8.7): ← → переключают и переносят фокус; Home / End — к краю. */
+export function tabArrows(event: KeyboardEvent): void {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const list = event.currentTarget as HTMLElement;
+  const tabs = [...list.querySelectorAll<HTMLElement>('[role="tab"]:not([disabled])')];
+  if (!tabs.length) return;
+  const index = tabs.indexOf(document.activeElement as HTMLElement);
+  const next = event.key === 'Home' ? tabs[0] : event.key === 'End' ? tabs[tabs.length - 1]
+    : tabs[(index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+  event.preventDefault();
+  next?.click();
+  next?.focus();
+}

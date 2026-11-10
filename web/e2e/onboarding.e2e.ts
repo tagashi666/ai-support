@@ -123,3 +123,21 @@ for (const scheme of ['light', 'dark'] as const) {
     });
   });
 }
+
+test('клавиатура: «Ответ / Заметка» стрелками, в учебном диалоге тоже (8.7)', async ({ page, request }, info) => {
+  test.skip(info.project.name !== 'desktop', 'клавиатура — на компьютере');
+  await signIn(page);
+  const target = (await openItems(request)).find((item) => !item.owner && item.state !== 'done' && item.channel === 'telegram')!;
+  await page.goto(`/next/chats/${target.id}`);
+  const reply = page.getByRole('tab', { name: 'Ответ' });
+  await reply.focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('tab', { name: /Заметка/ })).toBeFocused();
+  await expect(page.getByRole('tab', { name: /Заметка/ })).toHaveAttribute('aria-selected', 'true');
+  await page.keyboard.press('ArrowLeft');
+  await expect(reply).toHaveAttribute('aria-selected', 'true');
+  await page.goto('/next/chats/learn');
+  await page.getByRole('tab', { name: 'Ответ' }).focus();
+  await page.keyboard.press('End');
+  await expect(page.getByRole('tab', { name: 'Заметка' })).toHaveAttribute('aria-selected', 'true');
+});

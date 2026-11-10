@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { tr } from '@/i18n/sections/onboarding';
 import { showToast, undoToast } from '@/lib/actions/toasts';
 import { clock } from '@/lib/format/format';
+import { tabArrows } from '@/lib/keys';
 import { onboarding, updateOnboarding } from '@/lib/onboarding';
 import { navigate } from '@/lib/router';
 import { Avatar } from '@/ui/Avatar';
@@ -108,7 +109,7 @@ export function TutorialThread(): JSX.Element {
       )}
       {!state.resolved && (
         <div class={s.tutComposer}>
-          <div class={s.tutModes} role="tablist" aria-label={tr('onb.tut.reply')}>
+          <div class={s.tutModes} role="tablist" aria-label={tr('onb.tut.modes')} onKeyDown={tabArrows}>
             <button type="button" role="tab" aria-selected={mode === 'reply'} tabIndex={mode === 'reply' ? 0 : -1} onClick={() => setMode('reply')}>{tr('onb.tut.reply')}</button>
             <button type="button" role="tab" aria-selected={mode === 'note'} tabIndex={mode === 'note' ? 0 : -1} onClick={() => setMode('note')}>{tr('onb.tut.note')}</button>
           </div>

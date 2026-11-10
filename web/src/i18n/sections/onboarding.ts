@@ -60,6 +60,7 @@ export const dict = {
   'onb.tut.send': 'Отправить',
   'onb.tut.edit': 'Править',
   'onb.tut.reply': 'Ответ',
+  'onb.tut.modes': 'Ответ или заметка',
   'onb.tut.note': 'Заметка',
   'onb.tut.placeholderReply': 'Ваш ответ…',
   'onb.tut.placeholderNote': 'Заметка для команды — клиент её не увидит',
