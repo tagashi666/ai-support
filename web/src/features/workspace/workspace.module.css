@@ -170,6 +170,11 @@
 .swipeBtn + .swipeBtn { border-left: 1px solid var(--border); }
 .swipeScrim { position: fixed; inset: 0; z-index: 0; border: 0; background: transparent; padding: 0; }
 .rowWrap[data-swiped="true"] { z-index: 1; }
+/* Своё «Решено/Убрать» (M-1): строка уходит влево и гаснет, соседи потом переезжают FLIP-ом. */
+.rowWrap[data-state="closing"] { animation: var(--kf-leave-left) var(--dur-exit) var(--ease-exit) forwards; }
+/* Сервер уже унёс строку, а список стоит под курсором (L-12): приглушить на месте, не двигать.
+   Фон «утоплен», а не прозрачность: текст строки сохраняет контраст, причина в строке уже новая («Решено…», «Ведёт Мария»). */
+.rowWrap[data-moved="true"] .rowFront { background: var(--surface-sunken); transition: background-color var(--dur-fast) var(--ease-out); }
 .check { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 2px solid var(--control-border); border-radius: 50%; color: var(--on-accent); font-weight: 600; }
 .check[data-checked="true"] { background: var(--accent); border-color: var(--accent); }
 @media (pointer: coarse) { .check { width: var(--target); height: var(--target); } }

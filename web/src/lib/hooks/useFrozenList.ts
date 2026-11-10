@@ -48,8 +48,8 @@ export interface FrozenList {
     onTouchEnd: () => void;
     onScroll: () => void;
   };
-  /** Применить сейчас с переездом строк (пилюля, свои действия). */
-  applyNow: () => void;
+  /** Применить сейчас с переездом строк (пилюля, свои действия); change — своя перемена вместо накопленного. */
+  applyNow: (change?: () => void) => void;
   /** Открыто меню строки или режим выбора — держать заморозку. */
   hold: (value: boolean) => void;
   /** ↑ ↓ Home End по строкам: только фокус, «прочитано» не уходит. */
@@ -70,13 +70,14 @@ export function useFrozenList({ pendingKey, apply, shown, onFrozen }: Options): 
   };
   const settleLater = (): void => { setTimeout(recompute, SCROLL_SETTLE_MS + 50); };
 
-  const applyNow = (): void => {
+  const applyNow = (change: () => void = apply): void => {
     const before = new Map<string, number>();
     scroller.current?.querySelectorAll<HTMLElement>('[data-row-id]').forEach((row) => {
       before.set(row.dataset.rowId ?? '', row.getBoundingClientRect().top);
     });
-    flipFrom.current = before;
-    apply();
+    // Замер не затирает ещё не сыгранный (две перемены в одном кадре — переезд от первого положения).
+    flipFrom.current = flipFrom.current ? new Map([...before, ...flipFrom.current]) : before;
+    change();
   };
 
   useEffect(() => () => onFrozen?.(false), []);

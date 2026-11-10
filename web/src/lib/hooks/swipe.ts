@@ -20,16 +20,25 @@ export function lockOf(startX: number, dx: number, dy: number): SwipeLock {
   return Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical';
 }
 
-/** Сдвиг строки во время жеста: только влево, не дальше панели; вправо — с упором (без действия). */
+/** За панелью — резина: сдвиг растёт всё медленнее и не уходит дальше RUBBER_PX (M-9). */
+export const RUBBER_PX = 40;
+/** Бросок: быстрее этого (px/мс) — решает направление, а не пройденный путь. */
+export const FLING = 0.3;
+
+/** Сдвиг строки во время жеста: только влево, за панелью — резина; вправо — с упором (без действия). */
 export function offsetOf(dx: number, open: boolean): number {
   const base = open ? -PANEL_PX : 0;
   const next = base + dx;
   if (next > 0) return Math.min(12, next / 4);
-  return Math.max(-PANEL_PX - 24, next);
+  if (next >= -PANEL_PX) return next;
+  const over = -PANEL_PX - next;
+  return -PANEL_PX - (RUBBER_PX * over) / (over + RUBBER_PX);
 }
 
-/** Чем закончится жест: панель открыта или закрыта. Вправо никогда ничего не делает. */
-export function settle(dx: number, open: boolean): boolean {
+/** Чем закончится жест: панель открыта или закрыта; v — скорость в конце (px/мс). Вправо никогда ничего не открывает. */
+export function settle(dx: number, open: boolean, v = 0): boolean {
   const offset = (open ? -PANEL_PX : 0) + dx;
+  if (v <= -FLING && offset < 0) return true;
+  if (v >= FLING) return false;
   return offset < -OPEN_AT;
 }

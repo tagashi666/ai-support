@@ -66,6 +66,7 @@ svg { flex: none; }
   --kf-sheet-down-out: ui-sheet-down-out;
   --kf-sheet-left-in: ui-sheet-left-in;
   --kf-sheet-right-out: ui-sheet-right-out;
+  --kf-leave-left: ui-leave-left;
 }
 @keyframes ui-fade-in { from { opacity: 0; } }
 @keyframes ui-fade-out { to { opacity: 0; } }
@@ -76,6 +77,7 @@ svg { flex: none; }
 @keyframes ui-sheet-up-in { from { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); } }
 @keyframes ui-sheet-down-out { to { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); } }
 @keyframes ui-sheet-left-in { from { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); } }
+@keyframes ui-leave-left { to { opacity: 0; transform: translateX(calc(-2 * var(--shift))); } }
 @keyframes ui-sheet-right-out { to { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); } }
 
 /*

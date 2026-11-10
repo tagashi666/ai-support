@@ -44,7 +44,8 @@ export function Row(props: RowProps): JSX.Element {
       <span class={s.rowBody}>
         <span class={s.rowTop}>
           <span class={s.rowTitle}>{title}</span>
-          {unread && <span class={s.unreadDot} role="img" aria-label={t('chats.unread')} />}
+          {/* Точка всегда на месте, видна только у непрочитанного (J-12): имя не сдвигается, когда её снимают. */}
+          <span class={s.unreadDot} role={unread ? 'img' : undefined} aria-label={unread ? t('chats.unread') : undefined} aria-hidden={unread ? undefined : 'true'} />
           <span class={`${s.rowTime} num`}>{time}</span>
         </span>
         <span class={s.rowLine}>

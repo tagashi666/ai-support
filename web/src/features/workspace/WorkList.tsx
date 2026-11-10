@@ -34,7 +34,7 @@ import { Tabs } from '@/ui/Tabs';
 import s from '@/features/chats/chats.module.css';
 import { FilterSheet } from './FilterSheet';
 import w from './workspace.module.css';
-import { DUR, EASE } from '@/ui/motion';
+import { DUR, EASE, dur } from '@/ui/motion';
 
 type View = 'waiting' | 'open' | 'done';
 const VIEW_SECTIONS: Record<View, readonly Section[]> = {
@@ -75,8 +75,12 @@ const LONG_PRESS_MS = 500;
  * всегда (цель 44 px). На телефоне свайп влево открывает «Решено · Важно ·
  * Убрать · ⋯» (7.5), долгое нажатие — режим выбора. У каждого жеста есть кнопка.
  */
-function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
+function WorkRow({ item, current, tabIndex, onKeyDown, actions, leaving = false, moved = false }: {
   item: InboxItem; current: boolean; tabIndex: number; onKeyDown: (event: KeyboardEvent) => void; actions: RowActions;
+  /** Своё «Решено/Убрать»: строка ещё на месте и уходит (M-1). */
+  leaving?: boolean;
+  /** Сервер уже унёс строку в другую секцию, а список заморожен: приглушить на месте (L-12). */
+  moved?: boolean;
 }): JSX.Element {
   const at = now.value;
   const reason = liveReasonView(item, at);
@@ -86,7 +90,7 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
   // Кто из коллег сейчас в диалоге (7.7): мини-аватар вместо точки «прочитано».
   const here = colleaguesIn(presence.value.get(item.id), bootstrap.value?.me.id ?? '', at)[0];
   const front = useRef<HTMLDivElement>(null);
-  const gesture = useRef<{ x: number; y: number; lock: SwipeLock; dx: number; timer: ReturnType<typeof setTimeout> | null; long: boolean } | null>(null);
+  const gesture = useRef<{ x: number; y: number; lock: SwipeLock; dx: number; timer: ReturnType<typeof setTimeout> | null; long: boolean; v: number; at: number } | null>(null);
 
   const setOffset = (px: number, animate: boolean): void => {
     const el = front.current;
@@ -101,7 +105,7 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
     const timer = setTimeout(() => {
       if (gesture.current && gesture.current.lock === 'none') { gesture.current.long = true; actions.onLongPress(); }
     }, LONG_PRESS_MS);
-    gesture.current = { x: event.clientX, y: event.clientY, lock: 'none', dx: 0, timer, long: false };
+    gesture.current = { x: event.clientX, y: event.clientY, lock: 'none', dx: 0, timer, long: false, v: 0, at: event.timeStamp };
   };
   const onPointerMove = (event: PointerEvent): void => {
     const g = gesture.current;
@@ -113,6 +117,10 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
       if (g.lock !== 'none' && g.timer) { clearTimeout(g.timer); g.timer = null; }
     }
     if (g.lock !== 'horizontal' || !actions.swipeEnabled || actions.selected !== null) return;
+    // Скорость — по последнему отрезку (px/мс), для броска (M-9).
+    const dt = event.timeStamp - g.at;
+    if (dt > 0) g.v = (dx - g.dx) / dt;
+    g.at = event.timeStamp;
     g.dx = dx;
     setOffset(offsetOf(dx, actions.swiped), false);
   };
@@ -122,7 +130,7 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
     if (!g) return;
     if (g.timer) clearTimeout(g.timer);
     if (g.lock === 'horizontal' && actions.swipeEnabled && actions.selected === null) {
-      const open = settle(g.dx, actions.swiped);
+      const open = settle(g.dx, actions.swiped, g.v);
       actions.onSwipe(open);
       setOffset(open ? -PANEL_PX : 0, true);
     }
@@ -137,7 +145,8 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions }: {
 
   const selecting = actions.selected !== null;
   return (
-    <div class={w.rowWrap} data-row-id={String(item.id)} data-swiped={actions.swiped ? 'true' : 'false'} data-selecting={selecting ? 'true' : 'false'}>
+    <div class={w.rowWrap} data-row-id={String(item.id)} data-swiped={actions.swiped ? 'true' : 'false'} data-selecting={selecting ? 'true' : 'false'}
+      data-state={leaving ? 'closing' : undefined} data-moved={moved ? 'true' : undefined} inert={leaving || undefined}>
       {actions.swipeEnabled && (
         <div class={w.swipePanel} aria-hidden={actions.swiped ? undefined : 'true'}>
           <button type="button" class={w.swipeBtn} data-tone="ok" tabIndex={actions.swiped ? 0 : -1} onClick={() => { actions.onSwipe(false); actions.onResolve(); }}>{t('thread.resolve')}</button>
@@ -221,9 +230,23 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
   });
   const list = useFrozenList({ pendingKey: pending.join(','), apply: () => setShown(target), shown });
 
+  /**
+   * Своё «Решено/Убрать» (M-1): строка ещё dur('exit') на месте и уходит
+   * (прозрачность и сдвиг влево), потом снимается, а соседи переезжают FLIP-ом.
+   * Пока строки уходят, заплатки к показу не применяются — иначе строка исчезла бы сразу.
+   */
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
+  const leave = (ids: readonly string[]): void => {
+    setLeaving((prev) => new Set([...prev, ...ids]));
+    setTimeout(() => {
+      list.applyNow(() => setShown((prev) => ids.reduce((acc, id) => removeShown(acc, id).list, prev)));
+      setLeaving((prev) => new Set([...prev].filter((id) => !ids.includes(id))));
+    }, dur('exit'));
+  };
+
   // Первый снимок — сразу; свои действия (заплатки) и смена фильтра — сразу (7.1 п.5).
   useEffect(() => { if (shown.length === 0 && server.length > 0) setShown(server); }, [server]);
-  useEffect(() => { list.applyNow(); }, [map, filter]);
+  useEffect(() => { if (leaving.size === 0) list.applyNow(); }, [map, filter, leaving.size === 0]);
   useEffect(() => { list.hold(sheet !== null || selected !== null || swiped !== null); }, [sheet, selected !== null, swiped]);
 
   // Поиск на сервере в текущем виде (/api/inbox?q=); строки дальше обновляются живыми кадрами.
@@ -263,6 +286,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
       .map((entry) => byId.get(entry.id))
       .filter((item): item is InboxItem => item !== undefined),
   }));
+  const shownIn = new Map(shown.map((entry) => [entry.id, entry.section]));
   const searchRows = found ? found.ids
     .map((id) => byId.get(String(id)) ?? patched(found.items.get(id)!, map))
     .filter((item): item is InboxItem => item !== null && item !== undefined) : null;
@@ -326,7 +350,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
   const resolveRow = (item: InboxItem): void => {
     close();
     if (isTicket(item)) { setSheet({ confirmResolve: item.id }); return; }
-    setShown(removeShown(shown, String(item.id)).list);
+    leave([String(item.id)]);
     resolve(item.id);
   };
 
@@ -345,6 +369,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
   const phone = !isSplit.value;
   const renderRow = (item: InboxItem): JSX.Element => (
     <WorkRow key={item.id} item={item} current={String(item.id) === pinned} tabIndex={String(item.id) === focusId ? 0 : -1}
+      leaving={leaving.has(String(item.id))} moved={!searchRows && !leaving.has(String(item.id)) && (shownIn.get(String(item.id)) ?? item.section) !== item.section}
       onKeyDown={onRowKey} actions={{
         onMenu: () => setSheet({ row: item.id }),
         selected: selected === null ? null : selected.has(item.id),
@@ -355,7 +380,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
         swipeEnabled: phone && gestures.value && can('conv.resolve') && item.state !== 'done',
         onResolve: () => resolveRow(item),
         onImportant: can('conv.important') ? () => setImportant(item.id, !item.flags.important) : null,
-        onHide: can('conv.hide') ? () => { setShown(removeShown(shown, String(item.id)).list); hide(item.id); } : null,
+        onHide: can('conv.hide') ? () => { leave([String(item.id)]); hide(item.id); } : null,
       }} />
   );
 
@@ -365,11 +390,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
     const ids = chosen.map((item) => item.id);
     if (!ids.length) return;
     if (action === 'resolve' && !confirmed && chosen.some(isTicket)) { setSheet({ confirmBulk: ids }); return; }
-    if (action === 'resolve' || action === 'hide') {
-      let next = shown;
-      for (const id of ids) next = removeShown(next, String(id)).list;
-      setShown(next);
-    }
+    if (action === 'resolve' || action === 'hide') leave(ids.map(String));
     bulk(ids, action);
     setSelected(null);
   };
@@ -548,7 +569,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
             )}
             {can('conv.hide') && (
               <Option label={t('thread.hide')} hint={t('list.hideHint')}
-                onSelect={() => { close(); setShown(removeShown(shown, String(rowItem.id)).list); hide(rowItem.id); }} />
+                onSelect={() => { close(); leave([String(rowItem.id)]); hide(rowItem.id); }} />
             )}
           </div>
         )}
@@ -561,7 +582,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
           <Button variant="primary" icon="check" onClick={() => {
             if (!confirmItem) return;
             close();
-            setShown(removeShown(shown, String(confirmItem.id)).list);
+            leave([String(confirmItem.id)]);
             resolve(confirmItem.id);
           }}>{t('resolveTicket.yes')}</Button>
         </div>
