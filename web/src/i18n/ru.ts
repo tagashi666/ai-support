@@ -21,7 +21,8 @@ export const ru = {
   'nav.system': 'Система',
   'nav.more': 'Ещё',
   'nav.device': 'Это устройство',
-  'nav.classic': 'Вернуться к классической',
+  'nav.classic': 'Классическая панель',
+  'nav.account': 'Аккаунт',
   'nav.main': 'Разделы',
   'shell.newVersion': 'Вышла новая версия панели {version}',
   'shell.reload': 'Обновить страницу',
@@ -37,16 +38,6 @@ export const ru = {
   'status.resume': 'Возобновить',
 
   // Сегодня (6.1)
-  'today.morning': 'Доброе утро, {name}',
-  'today.day': 'Добрый день, {name}',
-  'today.evening': 'Добрый вечер, {name}',
-  'today.night': 'Доброй ночи, {name}',
-  'today.waiting': 'Вас ждёт {n} {dialogs}.',
-  'today.waitingMany': 'Вас ждут {n} {dialogs}.',
-  'today.calm': 'Остальное спокойно.',
-  'today.nobody': 'Никто не ждёт ответа.',
-  'today.aiLeads': 'Помощник ведёт {n} {dialogs}.',
-  'today.pausedVerdict': 'Помощник на паузе до {time} — новые вопросы ждут вас.',
   'today.waitingCard': 'Ждут вас',
   'today.allChats': 'Все диалоги',
   'today.away': 'Пока вас не было',
@@ -71,16 +62,19 @@ export const ru = {
   'today.versionAction': 'Что нового',
   'today.system': 'Система',
   'today.systemOk': 'всё работает · связь в порядке',
-  'today.empty': 'Сегодня тихо. Новых обращений не было.',
 
   // Диалоги: список (6.2)
   'chats.title': 'Диалоги',
   'chats.search': 'Имя, @ник или текст…',
+  'chats.pick': 'Выберите диалог',
+  'chats.pickRows': 'по списку',
+  'chats.pickOpen': 'открыть',
+  'chats.pickSearch': 'поиск',
+  'chats.pickAll': 'все клавиши',
   'chats.view.waiting': 'Ждут вас',
   'chats.view.open': 'Открытые',
   'chats.view.done': 'Решённые',
   'chats.views': 'Виды списка',
-  'chats.mineHint': 'Сначала срочные, дальше — кто дольше ждёт',
   'chats.nobodyWaits': 'Никто не ждёт ответа. Помощник ведёт {n} {dialogs}.',
   'chats.nothingFound': 'Нет совпадений по «{q}».',
   'chats.clear': 'Очистить',
@@ -125,9 +119,6 @@ export const ru = {
   'preview.attachment': 'Вложение',
 
   // Живой список (этап 2): данные сервера, только чтение
-  'live.badge': 'Рабочая панель',
-  'live.text': 'Классическая панель пока остаётся запасной: вернуться в неё можно в любой момент.',
-  'live.toDemo': 'Прототип',
   'live.toLive': 'Войти по ключу',
   'live.toLiveShort': 'Войти',
   'live.signOut': 'Выйти',
@@ -616,6 +607,7 @@ export const ru = {
   'device.logoutText': 'Ключ входа забудется в этом браузере, свои черновики останутся. Чтобы вернуться, понадобится ключ.',
   'device.logoutYes': 'Выйти',
   'device.you': 'Вы: {name} · {role}',
+  'device.youName': 'Вы: {name}',
 
   // Свайпы и пакетные действия (7.5, 6.2)
   'swipe.important': 'Важно',
@@ -1098,11 +1090,14 @@ export const ru = {
   'expert.pingOk': 'Модель отвечает: {model}, {ms} мс',
   'expert.pingFailed': 'Модель не ответила: {error}',
 
-  'today.pausedVerdictLive': 'Помощник на паузе {until} — новые вопросы ждут вас.',
   'today.awayLive': 'Обновились {n} {dialogs}',
   'today.awayAi': 'помощник ответил сам: {auto} · передал вам: {handoffs}',
   'today.assistantLine': 'Помощник: {mode}',
-  'today.dayStatsLive': 'За сутки: ответил сам {auto}, черновиков {drafts} ({sent} без правок), передал вам {handoffs}.',
+  'today.metric.waiting': 'Ждут вас',
+  'today.metric.ai': 'Ведёт помощник',
+  'today.metric.auto': 'Ответил сам, 24 ч',
+  'today.metric.drafts': 'Черновики, 24 ч',
+  'today.metric.handoffs': 'Передал вам, 24 ч',
   'today.blockFailed': 'Не удалось получить сводку.',
   'today.ideasLive': 'Идей для статей ждут проверки: {n}',
   'today.versionLive': 'Вышла версия {version}',
@@ -1345,7 +1340,6 @@ export const ru = {
   'problem.jobFailed': 'Фоновая задача завершилась с ошибкой',
   'problem.other': 'Есть что проверить',
   'problem.more': 'Подробнее',
-  'today.problemLine': 'Есть неполадка: {text}.',
 
   // Мелкое поле (6.12): изменено → сохраняется → сохранено ✓ → ошибка у поля
   'field.saving': 'Сохраняется…',

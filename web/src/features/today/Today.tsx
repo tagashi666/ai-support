@@ -1,12 +1,10 @@
 import type { JSX } from 'preact';
-import { ME } from '@/demo/seed';
-import { t, tn } from '@/i18n/ru';
+import { t } from '@/i18n/ru';
 import { pause, resume } from '@/lib/actions/chat';
 import { clock, fullDate } from '@/lib/format/format';
-import { isDesktop } from '@/lib/media';
 import { navigate } from '@/lib/router';
 import { serverOrder } from '@/lib/store/order';
-import { aiLeads, chats, now, pausedUntil, waitingYou } from '@/lib/store/state';
+import { chats, now, pausedUntil, waitingYou } from '@/lib/store/state';
 import type { Message } from '@/lib/types';
 import { ChatRow } from '@/features/chats/ChatRow';
 import { StatusLine } from '@/features/chats/StatusLine';
@@ -14,22 +12,6 @@ import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
 import { Icon } from '@/ui/Icon';
 import s from './today.module.css';
-
-function greeting(at: number): string {
-  const hour = new Date(at).getHours();
-  const key = hour < 5 ? 'today.night' : hour < 12 ? 'today.morning' : hour < 18 ? 'today.day' : hour < 23 ? 'today.evening' : 'today.night';
-  return t(key, { name: ME.name });
-}
-
-/** Вердикт одной-двумя фразами (6.1). */
-function verdict(waiting: number, ai: number, paused: number | null): string[] {
-  if (paused !== null) return [t('today.pausedVerdict', { time: clock(paused) })];
-  if (waiting > 0) {
-    return [t(waiting === 1 ? 'today.waiting' : 'today.waitingMany', { n: waiting, dialogs: tn('plural.dialogs', waiting) }), t('today.calm')];
-  }
-  if (ai > 0) return [t('today.nobody'), t('today.aiLeads', { n: ai, dialogs: tn('plural.dialogs', ai) })];
-  return [t('today.empty')];
-}
 
 /**
  * «Сегодня»: одна фраза и три карточки — кому ответить, что делает помощник,
@@ -39,7 +21,6 @@ export function Today({ compact = false }: { compact?: boolean }): JSX.Element {
   const at = now.value;
   const waiting = serverOrder(waitingYou.value);
   const paused = pausedUntil.value;
-  const lines = verdict(waiting.length, aiLeads.value.length, paused);
   const open = (id: string) => navigate({ name: 'chats', id });
   const Heading = compact ? 'h2' : 'h1';
   // Последнее действие помощника — из тех же данных, что и список.
@@ -127,11 +108,8 @@ export function Today({ compact = false }: { compact?: boolean }): JSX.Element {
       {!compact && <StatusLine />}
       <div class={s.inner}>
         <header class={s.head}>
-          <div class={s.headRow}>
-            <Heading class={s.greeting}>{greeting(at)}</Heading>
-            {(isDesktop.value || compact) && <span class={s.date}>{fullDate(at)}</span>}
-          </div>
-          <p class={s.verdict}>{lines.join(' ')}</p>
+          <Heading class={s.title}>{t('nav.today')}</Heading>
+          <span class={s.date}>{fullDate(at)}</span>
         </header>
         <div class={s.grid}>
           <div class={s.col}>

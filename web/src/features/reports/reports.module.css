@@ -1,6 +1,5 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
-@media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
+.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 .inner > * { min-width: 0; }
 .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
@@ -30,9 +29,7 @@
 .menuItem:hover { background: var(--surface-hover); }
 
 /* Карточки показателей */
-.cards { display: grid; gap: var(--s3); grid-template-columns: 1fr; }
-@media (min-width: 640px) { .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (min-width: 1024px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.cards { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(15rem, 100%), 1fr)); }
 .card { display: grid; gap: var(--s1); align-content: start; padding: var(--pad-card); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); min-width: 0; }
 .cardTitle { font-size: var(--fs-body); font-weight: 600; color: var(--text-2); }
 .big { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; overflow-wrap: anywhere; }
@@ -47,7 +44,7 @@
 .blockHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .blockTitle { font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 600; }
 .two { display: grid; gap: var(--s4); }
-@media (min-width: 1024px) { .two { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.two { grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); align-items: start; }
 .charts { display: grid; gap: var(--s4); }
 @media (min-width: 1024px) { .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .bars { display: flex; align-items: flex-end; gap: 2px; height: 5rem; }
@@ -95,3 +92,6 @@
 .wide { display: none; }
 .narrow { display: grid; }
 @media (min-width: 768px) { .wide { display: block; } .narrow { display: none; } }
+
+/* Ширина блоков, а не раздела (R2 A4). */
+.muted, .hint { max-width: 72ch; }

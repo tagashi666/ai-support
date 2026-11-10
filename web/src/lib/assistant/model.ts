@@ -3,7 +3,7 @@
  * пресеты паузы, «Вернуть как было» на устройстве, подписи ленты. Чистые
  * функции — их проверяет assistant.test.ts.
  */
-import { t, tn, type Key } from '@/i18n/ru';
+import type { Key } from '@/i18n/ru';
 import type { ActivityKind, ActivityReason, FeedbackReason } from '@shared/api-types';
 import type { AiMode } from '@shared/attention';
 
@@ -240,17 +240,3 @@ export function awaySince(lastVisit: number | null, now: number): number | null 
   return now - lastVisit > AWAY_MS ? lastVisit : null;
 }
 
-/** Вердикт одной-двумя фразами (6.1, таблица «Вердикт»). */
-export function verdictLines(input: { waiting: number; ai: number; paused: string | null; quiet: boolean }): string[] {
-  if (input.paused !== null && input.waiting === 0) return [t('today.pausedVerdictLive', { until: input.paused })];
-  const lines: string[] = [];
-  if (input.waiting > 0) {
-    lines.push(t(input.waiting === 1 ? 'today.waiting' : 'today.waitingMany', { n: input.waiting, dialogs: tn('plural.dialogs', input.waiting) }));
-    lines.push(input.paused !== null ? t('today.pausedVerdictLive', { until: input.paused }) : t('today.calm'));
-  } else if (input.ai > 0) {
-    lines.push(t('today.nobody'), t('today.aiLeads', { n: input.ai, dialogs: tn('plural.dialogs', input.ai) }));
-  } else {
-    lines.push(input.quiet ? t('today.empty') : t('today.nobody'));
-  }
-  return lines;
-}

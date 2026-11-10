@@ -1,6 +1,5 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
-@media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
+.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 .inner > * { min-width: 0; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -13,7 +12,7 @@
 .empty { display: grid; gap: var(--s3); justify-items: start; padding: var(--s6) 0; }
 .emptyTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; }
 
-.grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
+.grid { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr)); }
 .card { display: grid; gap: var(--s3); align-content: start; height: 100%; }
 .cardTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; overflow-wrap: anywhere; }
 .state { display: flex; align-items: baseline; gap: var(--s2); font-size: var(--fs-body); line-height: var(--lh-body); }
@@ -63,7 +62,7 @@
 
 /* Профиль и пример */
 .profile { display: grid; gap: var(--s4); }
-@media (min-width: 900px) { .profile { grid-template-columns: minmax(0, 1fr) minmax(0, 20rem); align-items: start; } }
+@media (min-width: 900px) { .profile { grid-template-columns: minmax(0, 44rem) minmax(0, 20rem); align-items: start; } }
 .preview { display: grid; gap: var(--s2); padding: var(--s3); border-radius: var(--r-card); background: var(--surface-sunken); align-content: start; }
 .previewTitle { font-size: var(--fs-name); font-weight: 600; }
 
@@ -81,3 +80,6 @@
 .color:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 0; }
 .color input:checked + span { box-shadow: 0 0 0 2px var(--text); }
 .checks { display: grid; }
+
+/* Ширина блоков, а не раздела (R2 A4). */
+.muted, .hint { max-width: 72ch; }

@@ -1,10 +1,12 @@
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { LiveClient } from '@/features/client/LiveClient';
-import { LiveToday } from '@/features/today/LiveToday';
 import { t } from '@/i18n/ru';
 import { layerOpen } from '@/lib/keys';
-import { isHuge, isSplit, isWide } from '@/lib/media';
+import { isSplit, isWide } from '@/lib/media';
+import { modLabel } from '@/lib/keys';
+import { keysHelpOpen } from '@/lib/palette/run';
+import { Icon } from '@/ui/Icon';
 import { navigate } from '@/lib/router';
 import { clientPinned } from '@/lib/store/state';
 import { itemOf, undoLast } from '@/lib/workspace/actions';
@@ -21,18 +23,34 @@ import { WorkList } from './WorkList';
 const TutorialThread = lazyScreen(() => import('@/features/onboarding/Tutorial').then((module) => module.TutorialThread), () => <div aria-busy="true" />);
 import { WorkThread } from './WorkThread';
 
+/** Правая часть без выбранного диалога (R2 A6): тихо — значок, одна строка, клавиши. */
+function NoThread(): JSX.Element {
+  return (
+    <div class={s.pick}>
+      <Icon name="chats" size={28} />
+      <p class={s.pickTitle}>{t('chats.pick')}</p>
+      <p class={s.pickKeys}>
+        <span><kbd>↑</kbd><kbd>↓</kbd> {t('chats.pickRows')}</span>
+        <span><kbd>Enter</kbd> {t('chats.pickOpen')}</span>
+        <span><kbd>{modLabel().replace('+', '')}K</kbd> {t('chats.pickSearch')}</span>
+        <button type="button" class={s.pickAll} onClick={() => { keysHelpOpen.value = true; }}><kbd>?</kbd> {t('chats.pickAll')}</button>
+      </p>
+    </div>
+  );
+}
+
 /**
  * «Диалоги» на живых данных (6.0, 6.2, 6.3): <768 — стек экранов (список →
  * диалог, системное «Назад» по шагам), ≥768 — список и диалог рядом.
- * «Клиент» (6.4): от 1440 px — колонка справа (от 1800 закреплена по
- * умолчанию), уже — боковой лист, на телефоне — нижний лист; адрес
+ * «Клиент» (6.4, R2 A5): от 1600 px — колонка справа, закреплена по
+ * умолчанию; уже — боковой лист, на телефоне — нижний лист; адрес
  * /next/chats/<id>/client. Панель не перекрывает поле ответа на широком экране.
  */
 export function Workspace({ id, client = false }: { id: string | null; client?: boolean }): JSX.Element {
   const open = id !== null && /^\d+$/.test(id) ? Number(id) : null;
   threads.value; inbox.value; patches.value;
   const item = open !== null ? itemOf(open) : undefined;
-  const pinned = clientPinned.value ?? isHuge.value;
+  const pinned = clientPinned.value ?? true;
   const column = open !== null && item !== undefined && isWide.value && (client || pinned);
   const sheet = open !== null && item !== undefined && client && !isWide.value;
   const closeClient = (): void => {
@@ -62,7 +80,7 @@ export function Workspace({ id, client = false }: { id: string | null; client?: 
         {/* Без key: шапка и поле ответа не перемонтируются при смене диалога (J-2, M-8), лента — по своему key. */}
         {open !== null ? <WorkThread id={open} />
           : id === TUTORIAL_ID ? <TutorialThread />
-          : <div class={s.summary}><LiveToday compact /></div>}
+          : <NoThread />}
       </section>
       {column && item && open !== null && (
         <aside class={s.clientCol} aria-label={t('client.title')}>

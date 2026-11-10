@@ -1,22 +1,26 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
-.inner { max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); }
-@media (min-width: 1024px) { .inner { padding: var(--s8) var(--s8) var(--s12); } }
-.screen[data-compact="true"] .inner { max-width: 60rem; padding: var(--s8) var(--s6); }
+.inner { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s6); align-content: start; padding: var(--s6) var(--page-x) var(--s12); }
+/* Demo-«Сегодня» в правой части прототипа. */
+.screen[data-compact="true"] .inner { padding: var(--s6); }
 
-.head { display: grid; gap: var(--s2); margin-bottom: var(--s6); }
-.headRow { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
-.greeting { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; }
+/* Заголовок + дата, без приветствия и вердикта (R2 B). */
+.head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--s1) var(--s3); }
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; margin: 0; }
 .date { color: var(--text-3); font-size: var(--fs-body); }
 .date::first-letter { text-transform: uppercase; }
-/* Вердикт — вводная фраза под заголовком, не второй заголовок (P-5). */
-.verdict { font-size: var(--fs-lead); line-height: var(--lh-lead); color: var(--text-2); max-width: 44rem; text-wrap: pretty; margin: 0; min-height: calc(2 * var(--lh-lead)); }
-/* На телефоне вердикт с паузой/неполадкой переносится на 3 строки — резерв под них, чтобы фраза не толкала карточки. */
-@media (max-width: 599px) { .verdict { min-height: calc(3 * var(--lh-lead)); } }
 
-.grid { display: grid; gap: var(--s4); align-items: start; }
-@media (min-width: 900px) { .grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: var(--s6); } }
+/* Числа: ряд плиток слева, не растягиваются на весь экран. */
+.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: var(--s3); margin: 0; max-width: 64rem; }
+.metric { display: grid; gap: 2px; padding: var(--s3) var(--s4); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
+.metricLabel { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.metricValue { margin: 0; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; font-variant-numeric: tabular-nums; }
+.metric[data-tone="attention"] .metricValue { color: var(--attention); }
+@media (max-width: 767px) { .metrics { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: var(--s2); } .metric { padding: var(--s2) var(--s3); align-content: space-between; } .metricLabel { white-space: normal; } }
+
+/* Карточки: сетка по 22rem, «Ждут вас» — на две колонки, когда их хотя бы две. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); gap: var(--s4); align-items: start; grid-auto-flow: row dense; container-type: inline-size; }
+@container (min-width: 45rem) { .wide { grid-column: span 2; } }
 .screen[data-compact="true"] .grid { grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 1440px) { .screen[data-compact="true"] .grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
 .col { display: grid; gap: var(--s4); min-width: 0; }
 
 .card { display: grid; gap: var(--s3); }
@@ -53,7 +57,6 @@
 .okDot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex: none; }
 .warnDot { width: 8px; height: 8px; border-radius: 50%; background: var(--attention); flex: none; }
 .link { color: var(--accent-text); font-size: var(--fs-body); min-height: 44px; display: inline-flex; align-items: center; text-decoration: underline; }
-.skeletonLine { height: var(--lh-lead); max-width: 28rem; border-radius: var(--r-tag); background: var(--surface-sunken); }
 /* Заглушки карточек (J-6): та же сетка, высота — типичная готовой карточки; резерв вместо появления со сдвигом. */
 .cardSkeleton { min-height: 12rem; border-radius: var(--r-card); background: var(--surface-sunken); }
 .cardSkeleton[data-tall="true"] { min-height: 18rem; }

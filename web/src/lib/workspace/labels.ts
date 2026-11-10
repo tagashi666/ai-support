@@ -13,4 +13,6 @@ const VIEW_KEY: Record<string, Key> = { waiting: 'chats.view.waiting', open: 'ch
 export const modeLabel = (mode: string): string => t(MODE_KEY[mode] ?? 'mode.inherit');
 export const modeHereLabel = (mode: string): string => t(MODE_HERE_KEY[mode] ?? 'mode.inherit');
 export const roleLabel = (role: string): string => t(ROLE_KEY[role] ?? 'role.unknown');
+/** Роль вошедшего: ключ root — «Владелец», а не «Администратор» (R2 A2). */
+export const meRole = (me: { id: string; role: string }): string => (me.id === 'root' ? t('nav.role.owner') : roleLabel(me.role));
 export const viewLabel = (view: string): string => t(VIEW_KEY[view] ?? 'chats.view.open');

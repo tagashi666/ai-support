@@ -10,19 +10,14 @@
 .screen[data-open="true"] .listCol { display: none; }
 .screen[data-open="false"] .threadCol { display: none; }
 
+/* R2 A5: список — clamp(320, 24vw, 440); «Клиент» колонкой — с 1600 px (320–360). */
 @media (min-width: 768px) {
-  .screen { grid-template-columns: 300px minmax(0, 1fr); }
+  .screen { grid-template-columns: clamp(320px, 24vw, 440px) minmax(0, 1fr); }
   .screen[data-open="true"] .listCol,
   .screen[data-open="false"] .threadCol { display: flex; }
 }
-@media (min-width: 1024px) { .screen { grid-template-columns: 320px minmax(0, 1fr); } }
-@media (min-width: 1440px) {
-  .screen { grid-template-columns: 360px minmax(0, 1fr); }
-  .screen[data-client="true"] { grid-template-columns: 360px minmax(0, 1fr) 340px; }
-}
-@media (min-width: 1800px) {
-  .screen { grid-template-columns: 400px minmax(0, 1fr); }
-  .screen[data-client="true"] { grid-template-columns: 400px minmax(0, 1fr) 380px; }
+@media (min-width: 1600px) {
+  .screen[data-client="true"] { grid-template-columns: clamp(320px, 24vw, 440px) minmax(0, 1fr) clamp(320px, 18vw, 360px); }
 }
 
 .listCol, .threadCol, .clientCol { min-width: 0; min-height: 0; display: flex; flex-direction: column; }
@@ -30,6 +25,15 @@
 .threadCol { background: var(--bg); }
 .clientCol { border-left: 1px solid var(--border); background: var(--surface); }
 .summary { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* Ничего не выбрано (R2 A6). */
+.pick { flex: 1; display: grid; place-content: center; justify-items: center; gap: var(--s2); padding: var(--s6); color: var(--text-3); text-align: center; }
+.pickTitle { margin: 0; color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 500; }
+.pickKeys { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--s1) var(--s4); margin: var(--s2) 0 0; font-size: var(--fs-small); line-height: var(--lh-small); }
+.pickKeys kbd { display: inline-block; min-width: 20px; margin-right: 2px; padding: 0 var(--s1); border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface); color: var(--text-2); font: inherit; font-weight: 500; text-align: center; }
+.pickAll { border: 0; padding: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.pickAll:hover { color: var(--text); }
+@media (pointer: coarse) { .pickKeys { display: none; } }
 
 /* ---------- Строка состояния ---------- */
 .status {
@@ -58,7 +62,7 @@
 .statusAction::after { content: ""; position: absolute; inset: -10px -6px; }
 
 /* ---------- Список ---------- */
-.list { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
+.list { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); container: list / inline-size; }
 @media (min-width: 768px) { .list { background: var(--surface); } }
 .listHead { display: grid; gap: var(--s3); padding: var(--s3) var(--s4) var(--s3); }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; }

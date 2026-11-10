@@ -14,10 +14,8 @@ function watch(query: string) {
 export const isDesktop = watch('(min-width: 1024px)');
 /** ≥768: список и диалог рядом. */
 export const isSplit = watch('(min-width: 768px)');
-/** ≥1440: панель «Клиент» может стоять колонкой. */
-export const isWide = watch('(min-width: 1440px)');
-/** ≥1800: широкая лента, «Клиент» закреплён по умолчанию. */
-export const isHuge = watch('(min-width: 1800px)');
+/** ≥1600: панель «Клиент» стоит колонкой справа (R2 A5), уже — лист. */
+export const isWide = watch('(min-width: 1600px)');
 export const reducedMotion = watch('(prefers-reduced-motion: reduce)');
 
 /**

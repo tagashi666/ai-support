@@ -150,7 +150,6 @@ export function ChatList({ openId }: { openId: string | null }): JSX.Element {
                   <Icon name="down" size={16} class={isCollapsed ? s.chevronClosed : s.chevron} />
                 </button>
               </h2>
-              {section === 'mine' && !isCollapsed && <p class={s.sectionHint}>{t('chats.mineHint')}</p>}
               {!isCollapsed && (
                 <div class={s.rows}>
                   {items.map((chat) => (

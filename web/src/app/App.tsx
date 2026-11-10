@@ -1,13 +1,10 @@
 import type { JSX } from 'preact';
 import { signal } from '@preact/signals';
-import { ChatsScreen } from '@/features/chats/ChatsScreen';
 import { MoreScreen, Placeholder } from '@/features/placeholder/Placeholder';
-import { Today } from '@/features/today/Today';
 import { isDesktop, isSplit } from '@/lib/media';
 import { route, type Route } from '@/lib/router';
 import { announcement } from '@/lib/store/state';
 import { Toaster } from '@/ui/Toaster';
-import { LiveBar } from '@/features/live/LiveBar';
 import { SignIn } from '@/features/live/SignIn';
 import { mode, newVersion, session } from '@/lib/live/store';
 import { Button } from '@/ui/Button';
@@ -19,7 +16,6 @@ import { PauseStrip } from '@/features/assistant/PauseControls';
 import { LiveToday } from '@/features/today/LiveToday';
 import { KeysHelp } from '@/features/palette/KeysHelp';
 import { Palette } from '@/features/palette/Palette';
-import { DemoBar } from './DemoBar';
 import { lazyScreen } from './lazy';
 import { useGlobalKeys } from './useGlobalKeys';
 import { useAttention } from './useAttention';
@@ -32,6 +28,11 @@ const KnowledgeScreen = lazyScreen(
   () => import('@/features/knowledge/KnowledgeScreen').then((module) => module.KnowledgeScreen),
   () => <div class={s.lazy} aria-busy="true" />,
 );
+
+// Прототип (?demo=1, для разработки) — своими чанками: в рабочую панель не грузится.
+const DemoBar = lazyScreen(() => import('./DemoBar').then((module) => module.DemoBar), () => <span />);
+const Today = lazyScreen<{ compact?: boolean }>(() => import('@/features/today/Today').then((module) => module.Today), () => <div class={s.lazy} aria-busy="true" />);
+const ChatsScreen = lazyScreen<{ id: string | null }>(() => import('@/features/chats/ChatsScreen').then((module) => module.ChatsScreen), () => <div class={s.lazy} aria-busy="true" />);
 
 // Редкие разделы (этап 6) — каждый своим чанком: в начальный JS не входят.
 const busy = () => <div class={s.lazy} aria-busy="true" />;
@@ -88,9 +89,9 @@ export function App(): JSX.Element {
   }
   return (
     <div class={s.app} data-thread={inThread ? 'true' : 'false'} data-mode={live ? 'live' : 'demo'}>
-      {live ? (inThread ? <span /> : <LiveBar />) : <DemoBar />}
+      {live ? <span /> : <DemoBar />}
       <div class={s.body}>
-        {desktop && <Rail current={current} />}
+        <Rail current={current} />
         <main class={s.main}>
           {/* Полосы — поверх верха main, не в потоке: появление не сдвигает экран (J-8); «×» убирает полосу до новой паузы/версии. */}
           <div class={s.strips}>
@@ -106,7 +107,7 @@ export function App(): JSX.Element {
           {screen}
         </main>
       </div>
-      {!desktop && !inThread ? <TabBar current={current} /> : <span />}
+      {!inThread ? <TabBar current={current} /> : <span />}
       {live && session.value !== 'expired' && <><Palette /><KeysHelp /></>}
       <Toaster />
       <div class="visually-hidden" aria-live="polite" aria-atomic="true">{announcement.value}</div>

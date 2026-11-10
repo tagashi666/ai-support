@@ -243,7 +243,6 @@ web/src/features/knowledge/MineSheet.tsx
 web/src/features/knowledge/TemplatesPanel.tsx
 web/src/features/knowledge/knowledge.module.css
 web/src/features/live/ConnectionLine.tsx
-web/src/features/live/LiveBar.tsx
 web/src/features/live/SignIn.tsx
 web/src/features/live/live.module.css
 web/src/features/media/ImageEditor.tsx

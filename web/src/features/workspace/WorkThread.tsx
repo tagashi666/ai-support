@@ -18,7 +18,7 @@ import { colleaguesIn, presence as presenceMap, setPresence } from '@/lib/worksp
 import { patches } from '@/lib/workspace/local';
 import { availability, type ActionId } from '@/lib/workspace/registry';
 import { freshItem, loadThread, openThreadId, threads, updateThread } from '@/lib/workspace/thread';
-import { modeHereLabel, modeLabel, roleLabel } from '@/lib/workspace/labels';
+import { meRole, modeHereLabel, modeLabel, roleLabel } from '@/lib/workspace/labels';
 import { hereMode, isBolder, whoView, type HereMode } from '@/lib/workspace/who';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -303,7 +303,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
       </Sheet>
 
       <Sheet open={explainAction !== null} onClose={close} title={t('rights.title')}>
-        <p class={sheetStyles.text}>{t('rights.text', { role: roleLabel(bootstrap.value?.me.role ?? '') })}</p>
+        <p class={sheetStyles.text}>{t('rights.text', { role: bootstrap.value ? meRole(bootstrap.value.me) : roleLabel('') })}</p>
         <div class={sheetStyles.actions}><Button variant="secondary" onClick={close} autoFocus>{t('sheet.close')}</Button></div>
       </Sheet>
     </div>

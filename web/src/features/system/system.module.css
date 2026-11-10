@@ -1,6 +1,5 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
-@media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
+.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 .inner > * { min-width: 0; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -97,3 +96,6 @@
 .levelOpt input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .levelOpt:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .levelName { font-weight: 600; font-size: var(--fs-name); }
+
+/* Ширина блоков, а не раздела (R2 A4). */
+.muted, .hint { max-width: 72ch; }

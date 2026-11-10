@@ -1,6 +1,6 @@
-/* Левый край — как у остальных разделов (--page-max по центру), колонка настроек — 44rem (P-17). */
+/* Левый край — у навигации, как у остальных разделов (R2 A4); колонка настроек — 44rem. */
 .screen { flex: 1; overflow-y: auto; scrollbar-gutter: stable; display: grid; align-content: start; gap: var(--s6); width: 100%;
-  padding: var(--s6) max(var(--s4), calc((100% - var(--page-max)) / 2)) var(--s12); }
+  padding: var(--s6) var(--page-x) var(--s12); }
 .screen > * { max-width: 44rem; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .group { display: grid; gap: var(--s3); justify-items: start; }

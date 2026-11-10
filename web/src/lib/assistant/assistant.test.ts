@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { t } from '@/i18n/ru';
 import {
   awaySince, cautionIndex, changedKeys, changedSince, diffLines, filterActivity, isBolder, linkKey, pauseActive, pauseUntil,
-  periodSince, readRevert, REVERT_MS, saveRevert, tryOutcome, validLinkUrl, verdictLines,
+  periodSince, readRevert, REVERT_MS, saveRevert, tryOutcome, validLinkUrl,
 } from './model';
 
 const at = (h: number, m = 0): number => new Date(2026, 10, 10, h, m).getTime();
@@ -119,12 +119,5 @@ describe('«Сегодня»', () => {
     expect(awaySince(at(14), at(14, 20))).toBeNull();
     expect(awaySince(at(13), at(14))).toBe(at(13));
     expect(awaySince(null, at(14))).toBeNull();
-  });
-  it('вердикт: ждут, помощник ведёт, тихо, пауза', () => {
-    expect(verdictLines({ waiting: 1, ai: 0, paused: null, quiet: false })).toEqual(['Вас ждёт 1 диалог.', 'Остальное спокойно.']);
-    expect(verdictLines({ waiting: 3, ai: 0, paused: null, quiet: false })[0]).toBe('Вас ждут 3 диалога.');
-    expect(verdictLines({ waiting: 0, ai: 2, paused: null, quiet: false })).toEqual(['Никто не ждёт ответа.', 'Помощник ведёт 2 диалога.']);
-    expect(verdictLines({ waiting: 0, ai: 0, paused: null, quiet: true })).toEqual(['Сегодня тихо. Новых обращений не было.']);
-    expect(verdictLines({ waiting: 0, ai: 0, paused: 'до 15:00', quiet: false })).toEqual(['Помощник на паузе до 15:00 — новые вопросы ждут вас.']);
   });
 });

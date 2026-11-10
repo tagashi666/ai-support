@@ -33,9 +33,7 @@
 .feed { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s4) var(--s4) var(--s6); }
 .feed:focus-visible { outline-offset: -3px; }
 @media (min-width: 1024px) { .feed { padding: var(--s4) var(--s6) var(--s8); } }
-.column { display: flex; flex-direction: column; gap: var(--s3); margin: 0 auto; max-width: 100%; }
-@media (min-width: 1440px) { .column { max-width: 720px; } }
-@media (min-width: 1800px) { .column { max-width: 840px; } }
+.column { display: flex; flex-direction: column; gap: var(--s3); max-width: 100%; }
 .msg { margin-top: var(--s2); }
 .msgGrouped { margin-top: calc(-1 * var(--s2)); }
 .day { display: flex; justify-content: center; margin: var(--s2) 0; }
@@ -85,9 +83,7 @@
   background: var(--surface);
 }
 @media (min-width: 1024px) { .foot { padding: var(--s3) var(--s6) var(--s4); } }
-.foot > * { width: 100%; margin: 0 auto; }
-@media (min-width: 1440px) { .foot > * { max-width: 720px; } }
-@media (min-width: 1800px) { .foot > * { max-width: 840px; } }
+.foot > * { width: 100%; }
 
 .notice { padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 

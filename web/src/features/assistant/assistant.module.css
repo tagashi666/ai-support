@@ -1,6 +1,5 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
-@media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
+.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .panel { display: grid; gap: var(--s6); min-width: 0; }
 .group { display: grid; gap: var(--s3); min-width: 0; }
@@ -13,9 +12,9 @@
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .skeleton { height: 16rem; border-radius: var(--r-card); background: var(--surface-sunken); }
 
-/* Карточки режима: на телефоне — список, шире — четыре в ряд (6.7). */
-.cards { display: grid; gap: var(--s2); }
-@media (min-width: 900px) { .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s3); } }
+/* Карточки режима: сетка по 18rem (R2 A4) — на телефоне список, шире — в ряд. */
+.cards { display: grid; gap: var(--s2); grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr)); max-width: 96rem; }
+@media (min-width: 900px) { .cards { gap: var(--s3); } }
 .modeCard {
   position: relative; display: grid; gap: var(--s1); align-content: start; min-height: 44px; padding: var(--s3) var(--s4);
   border: 1px solid var(--control-border); border-radius: var(--r-card); background: var(--surface); cursor: pointer;
@@ -126,3 +125,8 @@
 .linkForm { display: grid; gap: var(--s3); padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-control); }
 .inner > * { min-width: 0; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+
+/* Ширина блоков, а не раздела (R2 A4): текст ≤ 72ch, формы ≤ 44rem. */
+.muted, .hint, .totals { max-width: 72ch; }
+.field, .numRow, .toggle, .linkForm, .links, .preview, .result, .revert, .pauseRow, .headRow { max-width: 44rem; }
+.activity, .activityBar { max-width: 72rem; }

@@ -4,6 +4,7 @@ import { navigate, type SectionKey } from '@/lib/router';
 import { Button } from '@/ui/Button';
 import { Icon, type IconName } from '@/ui/Icon';
 import { problems, problemText, systemDot } from '@/lib/system/problems';
+import { mode, signOut } from '@/lib/live/store';
 import s from './placeholder.module.css';
 
 const NAMES: Record<SectionKey, Key> = {
@@ -62,6 +63,14 @@ export function MoreScreen(): JSX.Element {
             <span class={s.itemText}>{t('nav.classic')}</span>
           </a>
         </li>
+        {mode.value === 'live' && (
+          <li>
+            <button type="button" class={s.item} onClick={signOut}>
+              <Icon name="lock" />
+              <span class={s.itemText}>{t('live.signOut')}</span>
+            </button>
+          </li>
+        )}
       </ul>
     </div>
   );

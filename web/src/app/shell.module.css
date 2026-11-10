@@ -1,4 +1,4 @@
-/* Каркас (6.0): полоса прототипа, рейка ≥1024, нижние вкладки <1024. */
+/* Каркас (R2): полоса прототипа (только ?demo), навигация слева ≥768, нижние вкладки <768. */
 
 .app {
   display: grid;
@@ -46,75 +46,164 @@
 .short { display: none; }
 @media (max-width: 479px) { .long { display: none; } .short { display: inline; } }
 
-/* Полоса рабочей панели на телефоне — одна строка ~52 px: подпись слева, три кнопки только со значками (J-8/шаг 3). */
-@media (max-width: 479px) {
-  .demo.liveBar { flex-wrap: nowrap; min-height: 52px; }
-  .demo.liveBar .demoTag { flex: 1; min-width: 0; }
-  .demo.liveBar .demoActions { flex: none; flex-wrap: nowrap; gap: 0; }
-  .demo.liveBar .demoActions > * { min-width: 44px; min-height: 44px; padding: 0; justify-content: center; }
-}
-
-/* ---------- Рейка ---------- */
+/* ---------- Навигация (R2 A1) ----------
+   ≥1280 — 232 px: значок 20 + подпись 14/20 в строку, счётчик справа.
+   768–1279 — значки 64 px, подпись в подсказке, счётчик на значке. <768 — нижние вкладки.
+   Ширины переключает только CSS; --rail в tokens.css следует за ними. */
 .rail {
-  display: flex;
+  display: none;
   flex-direction: column;
   flex: none;
   width: var(--rail);
   padding: var(--s3) var(--s2);
   border-right: 1px solid var(--border);
   background: var(--bg);
+  overflow-x: hidden;
   overflow-y: auto;
 }
+@media (min-width: 768px) { .rail { display: flex; } }
 .railList { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.railSep { height: 1px; margin: var(--s3) var(--s2); background: var(--border); }
+.railSep { flex: none; height: 1px; margin: var(--s3) var(--s2); background: var(--border); }
 .railItem {
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--s1);
+  justify-content: center;
+  gap: var(--s3);
   width: 100%;
-  padding: var(--s2) 2px;
+  height: 40px;
+  padding: 0;
   border: 0;
-  border-radius: var(--r-card);
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--text-2);
-  font-size: var(--fs-small);
-  line-height: var(--lh-small);
-  font-weight: 600;
+  font: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  font-weight: 500;
+  text-align: left;
   text-decoration: none;
+  white-space: nowrap;
   transition: background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out);
 }
+.railItem > svg { flex: none; }
 .railItem:hover { background: var(--surface-hover); color: var(--text); }
-.railItem[aria-current="page"] { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
-.railItem[aria-current="page"]::before {
-  content: "";
-  position: absolute;
-  left: -8px;
-  top: 12px;
-  bottom: 12px;
-  width: 3px;
-  border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  background: var(--accent);
+.railItem[aria-current="page"] { background: var(--surface-sunken); color: var(--text); font-weight: 600; }
+.railItem[aria-current="page"] > svg { color: var(--accent-text); }
+.navLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kbd { display: none; }
+
+/* Узкая: подпись только для чтения с экрана и в подсказке. */
+@media (max-width: 1279px) {
+  .rail .navLabel {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+  }
+  /* Счётчик на значке, от правого края строки: растёт влево и не выходит за колонку. */
+  .rail .badge { position: absolute; top: 2px; right: 2px; min-width: 16px; height: 16px; padding: 0 var(--s1); line-height: 16px; }
 }
-.railItem[aria-current="page"] .railIcon { color: var(--accent-text); }
-.railIcon { position: relative; display: grid; place-items: center; }
-.railRare { color: var(--text-3); }
-.railFoot { margin-top: auto; padding: var(--s2) 0; display: grid; justify-items: center; gap: var(--s1); text-align: center; color: inherit; text-decoration: none; border-radius: var(--r-md); }
-.railFoot:hover, .railFoot[aria-current="page"] { background: var(--surface-hover); }
-.railName { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; color: var(--text); }
-.railRole { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-3); }
+/* Широкая: строка 36 px, счётчик справа. */
+@media (min-width: 1280px) {
+  .rail { padding: var(--s3) var(--s3); }
+  .railItem { justify-content: flex-start; height: 34px; padding: 0 var(--s2) 0 var(--s3); }
+  .railItem > .navLabel { flex: 1; }
+  .rail .badge { position: static; box-shadow: none; }
+  .rail .dot { position: static; flex: none; margin-right: var(--s1); box-shadow: none; }
+  .kbd {
+    display: inline-block; flex: none; padding: 0 var(--s1); border-radius: var(--r-sm);
+    color: var(--text-3); font: inherit; font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* ---------- Аккаунт (R2 A2) ---------- */
+.account { margin-top: auto; padding-top: var(--s3); }
+.accountButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  width: 100%;
+  min-height: 44px;
+  padding: var(--s1);
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  transition: background-color var(--dur-press) var(--ease-out);
+}
+.accountButton:hover, .accountButton[data-current="true"] { background: var(--surface-hover); }
+.accountButton > :first-child { flex: none; }
+.accountText { display: none; min-width: 0; flex: 1; }
+@media (min-width: 1280px) {
+  .accountButton { justify-content: flex-start; padding: var(--s1) var(--s2); }
+  .accountText { display: grid; }
+}
+.accountName, .accountRole { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountName { font-size: var(--fs-body); line-height: var(--lh-body); font-weight: 600; }
+.accountRole { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-3); }
+
+/* Меню аккаунта: popover верхнего слоя; место — CSSOM (left/bottom) от кнопки. */
+.menu {
+  position: fixed;
+  inset: auto auto 0 0;
+  margin: 0;
+  width: 15rem;
+  padding: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+.menu:popover-open { display: grid; gap: 1px; animation: var(--kf-pop-in) var(--dur-fast) var(--ease-out); transform-origin: bottom left; }
+.menuItem {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 var(--s2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-body);
+  line-height: var(--lh-body);
+  text-align: left;
+  text-decoration: none;
+  transition: background-color var(--dur-press) var(--ease-out);
+}
+@media (pointer: coarse) { .menuItem { min-height: 44px; } }
+.menuItem:hover, .menuItem:focus-visible { background: var(--surface-hover); outline: none; }
+.menuSep { height: 1px; margin: var(--s1) calc(-1 * var(--s1)); background: var(--border); }
+.menuGroup { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 36px; padding: 0 var(--s1) 0 var(--s2); }
+.menuLabel { color: var(--text-2); font-size: var(--fs-body); }
+.menuSeg { display: inline-flex; padding: 2px; border-radius: var(--r-sm); background: var(--surface-sunken); }
+.menuSegItem {
+  min-height: 26px;
+  padding: 0 var(--s2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text-2);
+  font: inherit;
+  font-size: var(--fs-small);
+  font-weight: 500;
+  transition: background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out);
+}
+@media (pointer: coarse) { .menuSegItem { min-height: 36px; } }
+.menuSegItem:hover, .menuSegItem:focus-visible { color: var(--text); }
+.menuSegItem[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
 
 .badge {
-  position: absolute;
-  top: -6px;
-  left: calc(100% - 4px);
   min-width: 18px;
   height: 18px;
   padding: 0 var(--s1);
   border-radius: var(--r-pill);
-  background: var(--attention-bg);
-  color: var(--attention);
+  background: var(--surface-sunken);
+  color: var(--text-2);
   font-size: var(--fs-small);
   line-height: 18px;
   font-weight: 600;
@@ -122,13 +211,13 @@
   text-align: center;
   box-shadow: 0 0 0 2px var(--bg);
 }
-.badge[data-tone="quiet"] { background: var(--surface-sunken); color: var(--text-2); }
+.badge[data-tone="attention"] { background: var(--attention-bg); color: var(--attention); }
 .dot {
   position: absolute;
-  top: -2px;
-  right: -4px;
-  width: 9px;
-  height: 9px;
+  top: 8px;
+  left: calc(50% + 6px);
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
   background: var(--attention);
   box-shadow: 0 0 0 2px var(--bg);
@@ -163,8 +252,11 @@
   -webkit-tap-highlight-color: transparent;
 }
 .tab[aria-current="page"] { color: var(--accent-text); }
-.tab .badge { top: -4px; }
-.tab .dot { top: -1px; right: -3px; }
+.tab { position: relative; }
+.tab .badge { position: absolute; top: 2px; left: calc(50% + 4px); }
+.tab .dot { top: 6px; left: calc(50% + 6px); }
+.tab .navLabel { overflow: visible; }
+@media (min-width: 768px) { .tabbar { display: none; } }
 .lazy { flex: 1; min-height: 8rem; }
 
 /* Полосы над экраном (пауза, новая версия): поверх верха main, не в потоке — появление не сдвигает содержимое (J-8).

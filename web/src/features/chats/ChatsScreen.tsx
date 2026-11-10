@@ -4,7 +4,7 @@ import { ClientPanel } from '@/features/client/ClientPanel';
 import { Thread } from '@/features/thread/Thread';
 import { Today } from '@/features/today/Today';
 import { markRead } from '@/lib/actions/chat';
-import { isHuge, isWide } from '@/lib/media';
+import { isWide } from '@/lib/media';
 import { byId, clientPinned } from '@/lib/store/state';
 import { ChatList } from './ChatList';
 import s from './chats.module.css';
@@ -16,7 +16,7 @@ import s from './chats.module.css';
 export function ChatsScreen({ id }: { id: string | null }): JSX.Element {
   const chat = id ? byId.value.get(id) ?? null : null;
   useEffect(() => { if (id) markRead(id); }, [id]);
-  const pinned = clientPinned.value ?? isHuge.value;
+  const pinned = clientPinned.value ?? true;
   const showClient = Boolean(chat) && isWide.value && pinned;
   return (
     <div class={s.screen} data-open={chat ? 'true' : 'false'} data-client={showClient ? 'true' : 'false'}>

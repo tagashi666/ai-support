@@ -121,7 +121,7 @@
   --r-sheet: var(--r-lg);
 
   /* Размеры */
-  --rail: 96px;
+  --rail: 64px;            /* навигация 768–1279; ≥1280 — 232 px */
   --row-h: 76px;
   --control-h: 40px;
   --control-sm: 32px;
@@ -161,6 +161,10 @@
 @media (min-width: 1024px) {
   :root { --pad-card: 1.25rem; }
 }
+/* Поля разделов (R2 A4): 16 телефон, 24 до 1280, 32 шире; контент прижат к навигации. */
+:root { --page-x: var(--s4); }
+@media (min-width: 768px) { :root { --page-x: var(--s6); } }
+@media (min-width: 1280px) { :root { --page-x: var(--s8); --rail: 232px; } }
 
 /* «Это устройство → Плотность → Компактно» (6.12): для мыши; на касаниях цели остаются 44 px. */
 :root[data-density="compact"] {

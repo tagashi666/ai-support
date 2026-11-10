@@ -10,7 +10,7 @@ import { isMac } from '@/lib/keys';
 import { clearToken } from '@/lib/live/api';
 import { bootstrap, mode } from '@/lib/live/store';
 import { setTheme, theme, type Theme } from '@/lib/store/state';
-import { roleLabel } from '@/lib/workspace/labels';
+import { meRole } from '@/lib/workspace/labels';
 import { setsUp, showChecklistAgain, showHintsAgain } from '@/lib/onboarding';
 import { Button } from '@/ui/Button';
 import { Sheet, sheetStyles } from '@/ui/Sheet';
@@ -126,7 +126,7 @@ export function DeviceScreen(): JSX.Element {
       <section class={s.group}>
         <a class={s.link} href="/?ui=classic">{t('nav.classic')}</a>
         {mode.value === 'live' && <Button variant="secondary" onClick={() => setLogout(true)}>{t('device.logout')}</Button>}
-        {me && <p class={s.hint}>{t('device.you', { name: me.name, role: roleLabel(me.role) })}</p>}
+        {me && <p class={s.hint}>{meRole(me) === me.name ? t('device.youName', { name: me.name }) : t('device.you', { name: me.name, role: meRole(me) })}</p>}
       </section>
       <Sheet open={logout} onClose={() => setLogout(false)} title={t('device.logoutTitle')}>
         <p class={sheetStyles.text}>{t('device.logoutText')}</p>

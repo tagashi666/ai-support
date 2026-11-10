@@ -1,7 +1,10 @@
 /* Рабочее место на живых данных (этап 3а): строка с меню, фильтр, лента, поле ответа. Только токены этапа 1. */
 
 .titleRow { display: flex; align-items: center; justify-content: flex-end; gap: var(--s1); min-width: 0; }
-.titleRow > h1 { margin-right: auto; }
+.titleRow > h1 { margin-right: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titleRow > button { flex: none; }
+/* Узкий список (320–360): «Выбрать» — только значком, подпись в подсказке. */
+@container list (max-width: 22.5rem) { .selectText { display: none; } .selectBtn { padding-inline: var(--s2); } }
 
 /* Строка списка с «⋯»: меню видно при наведении и фокусе; на сенсоре — всегда, цель 44 px. */
 .rowWrap { position: relative; }

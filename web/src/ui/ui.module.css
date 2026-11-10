@@ -187,7 +187,7 @@
 }
 .bubbleLabel[data-voice="assistant"] { color: var(--ai-ink); }
 .bubble {
-  max-width: min(36rem, 82%);
+  max-width: min(36rem, 75%);
   padding: var(--s2) var(--s3);
   border-radius: var(--r-bubble);
   font-size: var(--fs-msg);
@@ -337,7 +337,7 @@
   max-width: min(26rem, calc(100vw - 2rem));
 }
 .toasts:empty { display: none; }
-@media (max-width: 1023px) {
+@media (max-width: 767px) {
   .toasts {
     /* Низ уже включает отступ safe-area и там, и там: высота поля ответа (--toast-lift, у .foot padding-bottom с env()) и
        нижние вкладки (--tabbar-h + safe-area). Второй раз safe-bottom не прибавляем (шаг 3, двойной учёт на iPhone). */

@@ -4,8 +4,7 @@
   justify-items: start;
   gap: var(--s3);
   max-width: 34rem;
-  margin: 0 auto;
-  padding: var(--s8) var(--s4);
+  padding: var(--s8) var(--page-x);
   flex: 1;
 }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }

@@ -6,12 +6,11 @@ import { PauseControls, pauseText } from '@/features/assistant/PauseControls';
 import { WrongSheet } from '@/features/assistant/WrongSheet';
 import { t, tn } from '@/i18n/ru';
 import { clock, fullDate, listTime } from '@/lib/format/format';
-import { awaySince, LAST_VISIT_KEY, MODE_DOES, MODE_LABEL, verdictLines } from '@/lib/assistant/model';
+import { awaySince, LAST_VISIT_KEY, MODE_DOES, MODE_LABEL } from '@/lib/assistant/model';
 import { aiMode, can, loadActivity, markedWrong, pause } from '@/lib/assistant/store';
 import { getJson, readToken } from '@/lib/live/api';
 import { liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, connection, liveCounts, liveItems, loading, syncedAt } from '@/lib/live/store';
-import { isDesktop } from '@/lib/media';
 import { href, navigate, type Route } from '@/lib/router';
 import { now } from '@/lib/store/state';
 import { problems, problemTarget, problemText } from '@/lib/system/problems';
@@ -32,12 +31,6 @@ const UPDATE: Route = { name: 'section', key: 'system', sub: 'update' };
 const systemRoute = (sub?: string): Route => (sub ? { name: 'section', key: 'system', sub } : { name: 'section', key: 'system' });
 
 const DAY_MS = 24 * 60 * 60_000;
-
-function greeting(at: number, name: string): string {
-  const hour = new Date(at).getHours();
-  const key = hour < 5 ? 'today.night' : hour < 12 ? 'today.morning' : hour < 18 ? 'today.day' : hour < 23 ? 'today.evening' : 'today.night';
-  return t(key, { name });
-}
 
 /** Время прошлого визита — на устройстве (6.1); при уходе со страницы обновляется. */
 function readLastVisit(): number | null {
@@ -64,14 +57,24 @@ function WaitingRow({ item }: { item: InboxItem }): JSX.Element {
   );
 }
 
-/**
- * «Сегодня» на живых данных (6.1): одна-две фразы и карточки — кому
- * ответить, что было без вас, что делает помощник, что требует внимания,
- * всё ли работает. compact — сводка справа от списка, пока диалог не выбран.
- */
 const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
 
-export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Element {
+/** Число с подписью: состояние — фактами, без прозы (R2 B). */
+function Metric({ label, value, tone }: { label: string; value: number | null; tone?: 'attention' }): JSX.Element {
+  return (
+    <div class={s.metric} data-tone={tone && value ? tone : undefined}>
+      <dt class={s.metricLabel}>{label}</dt>
+      <dd class={`${s.metricValue} num`}>{value ?? '—'}</dd>
+    </div>
+  );
+}
+
+/**
+ * «Сегодня» на живых данных (6.1, R2): заголовок с датой, ряд чисел и
+ * карточки — кому ответить, что было без вас, что делает помощник, что
+ * требует внимания, всё ли работает.
+ */
+export function LiveToday(): JSX.Element {
   const at = now.value;
   const boot = bootstrap.value;
   const counts = liveCounts.value;
@@ -85,7 +88,7 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
   const [health, setHealth] = useState<'ok' | 'error' | null>(null);
   const [wrongFor, setWrongFor] = useState<number | null>(null);
   const [tick, setTick] = useState(0);
-  const awayFrom = compact ? null : awaySince(visitAtLoad, Date.now());
+  const awayFrom = awaySince(visitAtLoad, Date.now());
 
   useEffect(() => {
     if (!stats) return;
@@ -102,13 +105,8 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
   }, []);
 
   const paused = pause.value;
-  const quiet = !liveItems.value.some((item) => at - item.activity_at < DAY_MS);
   const issues = problems.value;
   const firstIssue = issues[0] ?? null;
-  const lines = verdictLines({ waiting, ai: aiCount, paused: paused ? pauseText(paused.until, at) : null, quiet });
-  // Вердикт, вторая фраза (6.1): «Есть неполадка: сервер Франкфурт-2 не отвечает.»
-  if (firstIssue?.severity === 'error') lines.push(t('today.problemLine', { text: lowerFirst(problemText(firstIssue)) }));
-  const Heading = compact ? 'h2' : 'h1';
   // Пока не пришли bootstrap и счётчики, карточки не знают, будут ли они (J-6): место держат заглушки той же раскладки.
   const pending = loading.value === 'loading' && (!counts || !boot);
   const mode = aiMode.value;
@@ -118,8 +116,8 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
   const update = boot?.update?.available ? boot.update.latest : null;
 
   const waitingCard = waiting > 0 && (
-    <Card class={s.card} label={t('today.waitingCard')}>
-      <h2 class={s.cardTitle}>{t('today.waitingCard')} <span class={`${s.count} num`}>{waiting}</span></h2>
+    <Card class={`${s.card} ${s.wide}`} label={t('today.waitingCard')}>
+      <h2 class={s.cardTitle}>{t('today.waitingCard')}</h2>
       <div class={s.rows}>{waitingItems.slice(0, 5).map((item) => <WaitingRow key={item.id} item={item} />)}</div>
       <Button variant="link" size="sm" class={s.more} onClick={() => navigate({ name: 'chats', id: null })}>
         {t('today.allChats')} <Icon name="right" size={16} />
@@ -162,14 +160,8 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
       {stats && dayState === 'error' && (
         <p class={s.small} role="alert">{t('today.blockFailed')} <Button variant="link" size="sm" onClick={() => setTick(tick + 1)}>{t('live.retry')}</Button></p>
       )}
-      {stats && dayState !== 'error' && (
-        // Строка есть всегда, пока суточные цифры в пути: пустое место вместо внезапной строки (J-6).
-        <p class={s.small} data-pending={day ? 'false' : 'true'}>
-          {day ? t('today.dayStatsLive', { auto: day.totals.auto, drafts: day.totals.drafts, sent: day.totals.draftsSent, handoffs: day.totals.handoffs }) : '\u00a0'}
-        </p>
-      )}
-      {!compact && stats && dayState === 'loading' && <div class={s.lastSkeleton} aria-hidden="true" />}
-      {!compact && lastAi && (
+      {stats && dayState === 'loading' && <div class={s.lastSkeleton} aria-hidden="true" />}
+      {lastAi && (
         <>
           <p class={s.small}>{t('today.lastAction', { name: lastAi.name, time: clock(lastAi.at) })}</p>
           {lastAi.text && <blockquote class={s.quote}>{lastAi.text}</blockquote>}
@@ -226,31 +218,29 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
   );
 
   return (
-    <div class={s.screen} data-compact={compact ? 'true' : 'false'}>
+    <div class={s.screen}>
       <div class={s.inner}>
         <header class={s.head}>
-          <div class={s.headRow}>
-            <Heading class={s.greeting}>{greeting(at, boot?.me.name ?? '')}</Heading>
-            {(isDesktop.value || compact) && <span class={s.date}>{fullDate(at)}</span>}
-          </div>
-          {pending
-            ? <div class={s.verdict} aria-hidden="true"><div class={s.skeletonLine} /></div>
-            : <p class={s.verdict}>{lines.join(' ')}</p>}
+          <h1 class={s.title}>{t('nav.today')}</h1>
+          <span class={s.date}>{fullDate(at)}</span>
         </header>
-        {!compact && onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
-        {!compact && <RevertLine />}
+        {onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
+        <RevertLine />
+        {/* Числа держат место и до ответа сервера (J-6): «—», а не появление со сдвигом. */}
+        <dl class={s.metrics}>
+          <Metric label={t('today.metric.waiting')} value={pending ? null : waiting} tone="attention" />
+          <Metric label={t('today.metric.ai')} value={pending ? null : aiCount} />
+          {stats && <Metric label={t('today.metric.auto')} value={day ? day.totals.auto : null} />}
+          {stats && <Metric label={t('today.metric.drafts')} value={day ? day.totals.drafts : null} />}
+          {stats && <Metric label={t('today.metric.handoffs')} value={day ? day.totals.handoffs : null} />}
+        </dl>
         <div class={s.grid}>
-          <div class={s.col}>
-            {pending ? <div class={s.cardSkeleton} data-tall="true" aria-busy="true" aria-label={t('live.loading')} /> : waitingCard}
-            {!pending && awayCard}
-            {compact || pending ? null : attentionCard}
-          </div>
-          <div class={s.col}>
-            {pending ? <div class={s.cardSkeleton} aria-busy="true" aria-label={t('live.loading')} /> : assistantCard}
-            {compact && !pending && attentionCard}
-            {system}
-          </div>
+          {pending ? <div class={`${s.cardSkeleton} ${s.wide}`} data-tall="true" aria-busy="true" aria-label={t('live.loading')} /> : waitingCard}
+          {pending ? <div class={s.cardSkeleton} aria-busy="true" aria-label={t('live.loading')} /> : assistantCard}
+          {!pending && attentionCard}
+          {!pending && awayCard}
         </div>
+        {system}
       </div>
       <WrongSheet messageId={wrongFor} onClose={() => setWrongFor(null)} />
     </div>

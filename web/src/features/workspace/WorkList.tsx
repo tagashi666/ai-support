@@ -11,7 +11,7 @@ import { sectionLabel } from '@/lib/labels';
 import { getJson, readToken } from '@/lib/live/api';
 import { isUrgentCode, liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, liveCounts, liveItems, loadError, loading, startLive } from '@/lib/live/store';
-import { isDesktop, isSplit, reducedMotion } from '@/lib/media';
+import { isSplit, reducedMotion } from '@/lib/media';
 import { listOrder, paletteOpen, selectTick } from '@/lib/palette/run';
 import { navigate } from '@/lib/router';
 import { applyServer, pendingChanges, removeShown, type Placed } from '@/lib/store/order';
@@ -431,11 +431,12 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
       <header class={s.listHead}>
         <div class={w.titleRow}>
           <h1 class={s.title}>{t('chats.title')}</h1>
-          {!isDesktop.value && <Button variant="quiet" size="sm" icon="search" label={t('nav.search')} aria-haspopup="dialog" onClick={() => { paletteOpen.value = true; }} />}
+          {phone && <Button variant="quiet" size="sm" icon="search" label={t('nav.search')} aria-haspopup="dialog" onClick={() => { paletteOpen.value = true; }} />}
           {can('conv.resolve') && (
-            <Button variant="quiet" size="sm" icon="check" aria-pressed={selected !== null} label={phone ? t('bulk.select') : undefined}
+            <Button variant="quiet" size="sm" icon="check" class={w.selectBtn} aria-pressed={selected !== null} label={phone ? t('bulk.select') : undefined}
+              aria-label={t('bulk.select')} title={phone ? undefined : t('bulk.select')}
               onClick={() => { setSwiped(null); setSelected(selected === null ? new Set() : null); }}>
-              {phone ? undefined : t('bulk.select')}
+              {phone ? undefined : <span class={w.selectText}>{t('bulk.select')}</span>}
             </Button>
           )}
           <Button variant="quiet" size="sm" icon="filter" aria-haspopup="dialog" onClick={() => setSheet('filter')}>
@@ -540,7 +541,6 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
                   <Icon name="down" size={16} class={closed ? s.chevronClosed : s.chevron} />
                 </button>
               </h2>
-              {section === 'mine' && !closed && <p class={s.sectionHint}>{t('chats.mineHint')}</p>}
               {!closed && windowed(section, rows)}
             </section>
           );

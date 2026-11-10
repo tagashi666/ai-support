@@ -1,6 +1,5 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
-@media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
+.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 .inner > * { min-width: 0; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
@@ -60,15 +59,14 @@ fieldset.radios { margin: 0; padding: 0; border: 0; display: grid; gap: var(--s2
 .radioHint { grid-column: 2; color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 
 /* Роли */
-.roleGrid { display: grid; gap: var(--s4); grid-template-columns: 1fr; }
-@media (min-width: 768px) { .roleGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.roleGrid { display: grid; gap: var(--s4); grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); }
 .roleCard { display: grid; gap: var(--s3); align-content: start; padding: var(--s4); }
 .roleHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s1) var(--s3); }
 .roleTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; }
 .tag { display: inline-block; padding: 0 var(--s2); border-radius: var(--r-tag); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
 .tag[data-custom="true"] { background: var(--attention-bg); color: var(--text); }
 .groups { display: grid; gap: var(--s4); }
-@media (min-width: 768px) { .groups { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.groups { grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); }
 fieldset.group { margin: 0; padding: 0; border: 0; display: grid; gap: 0; min-width: 0; align-content: start; }
 .group legend { padding: 0 0 var(--s1); font-size: var(--fs-name); font-weight: 600; }
 .check { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s3); align-items: center; min-height: 44px; padding: var(--s1) 0; cursor: pointer; font-size: var(--fs-body); line-height: var(--lh-body); }
@@ -94,3 +92,6 @@ fieldset.group { margin: 0; padding: 0; border: 0; display: grid; gap: 0; min-wi
 .rawBody pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .rawBody dt { color: var(--text-2); }
 .rawBody dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Ширина блоков, а не раздела (R2 A4). */
+.muted, .hint { max-width: 72ch; }
