@@ -54,12 +54,34 @@ window.__perf = {
   },
 };
 window.__perf.init();
+window.__go = (path) => { history.pushState(null, '', path); dispatchEvent(new PopStateEvent('popstate')); };
+// Открыть диалог щелчком по строке (или адресом) и дождаться ленты с пузырями + два кадра.
+window.__open = async (target) => {
+  const row = document.querySelector('[data-scroller="chats"] [data-row-id="' + target + '"] button');
+  const t0 = performance.now();
+  if (row) row.click(); else window.__go('/next/chats/' + target);
+  const ready = () => location.pathname.endsWith('/' + target) && document.querySelectorAll('[role="log"] [data-voice]').length > 0
+    && document.querySelector('[role="log"]')?.getAttribute('aria-busy') !== 'true';
+  while (!ready()) await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  return Math.round(performance.now() - t0);
+};
+// Какие строки списка тронуты (DOM) за живые кадры.
+window.__watchRows = () => {
+  window.__touched = new Set();
+  new MutationObserver((list) => {
+    for (const m of list) {
+      const row = (m.target instanceof Element ? m.target : m.target.parentElement)?.closest('[data-row-id]');
+      if (row) window.__touched.add(row.getAttribute('data-row-id'));
+    }
+  }).observe(document.querySelector('[data-scroller="chats"]'), { subtree: true, childList: true, characterData: true, attributes: true });
+};
 `;
 
 async function frames(page: Page, step: string | null, ms: number): Promise<Frames> {
   return await page.evaluate(([body, time]) => {
     const fn = body ? new Function('i', body) as (i: number) => boolean : null;
-    return (window as unknown as { __perf: { run: (s: unknown, m: number) => Promise<Frames> } }).__perf.run(fn, time);
+    return (globalThis as unknown as { __perf: { run: (s: unknown, m: number) => Promise<Frames> } }).__perf.run(fn, time);
   }, [step, ms] as const);
 }
 
@@ -98,58 +120,38 @@ async function run(browser: Browser, name: string, width: number): Promise<void>
   out.listScroll = await frames(page, `const el = document.querySelector('[data-scroller="chats"]'); const top = el.scrollTop; el.scrollTop = top + 60; return el.scrollTop !== top || i < 3;`, 4000);
 
   // Открытие обычного и длинного диалога: щелчок → лента с пузырями и два кадра.
-  const open = async (id: number): Promise<number> => await page.evaluate(async (target) => {
-    const scroller = document.querySelector('[data-scroller="chats"]')!;
-    const row = scroller.querySelector<HTMLElement>(`[data-row-id="${target}"] button`);
-    const t0 = performance.now();
-    if (row) row.click();
-    else { history.pushState(null, '', `/next/chats/${target}`); dispatchEvent(new PopStateEvent('popstate')); }
-    const ready = (): boolean => location.pathname.endsWith(`/${target}`) && document.querySelectorAll('[role="log"] [data-voice]').length > 0
-      && document.querySelector('[role="log"]')?.getAttribute('aria-busy') !== 'true';
-    while (!ready()) await new Promise((r) => requestAnimationFrame(r));
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    return Math.round(performance.now() - t0);
-  }, id);
+  const open = async (id: number): Promise<number> => await page.evaluate(`window.__open(${id})`) as number;
   const short = inbox.items.find((item) => item.id !== longId)!.id;
-  await page.evaluate(() => { (window as unknown as { __perf: { long: number[] } }).__perf.long = []; });
+  await page.evaluate('window.__perf.long = []');
   out.openShort = await open(short);
   if (mobile) { await page.goBack(); await page.waitForSelector('[data-scroller="chats"] [data-row-id]'); }
-  await page.evaluate(() => { (window as unknown as { __perf: { long: number[] } }).__perf.long = []; });
-  out.openLong = await open(longId);
-  out.openLong_longtasks = await page.evaluate(() => (window as unknown as { __perf: { long: number[] } }).__perf.long.map(Math.round));
+  await page.evaluate('window.__perf.long = []');
+  out.openLong = await open(longId!);
+  out.openLong_longtasks = await page.evaluate('window.__perf.long.map(Math.round)');
   await page.waitForTimeout(600);
   out.bubbles = await page.locator('[role="log"] [data-voice]').count();
   out.feedScroll = await frames(page, `const el = document.querySelector('[role="log"]'); const top = el.scrollTop; el.scrollTop = top - 60; return el.scrollTop !== top || i < 3;`, 4000);
 
   // 20 живых кадров подряд (по 50 мс) в другие диалоги: кадры и сколько строк списка тронуто.
   if (mobile) { await page.goBack(); await page.waitForSelector('[data-scroller="chats"] [data-row-id]'); }
-  await page.evaluate(() => { document.querySelector('[data-scroller="chats"]')!.scrollTop = 0; });
+  await page.evaluate('document.querySelector(\'[data-scroller="chats"]\').scrollTop = 0');
   await page.waitForTimeout(500);
-  await page.evaluate(() => {
-    const w = window as unknown as { __touched: Set<string> };
-    w.__touched = new Set();
-    new MutationObserver((list) => {
-      for (const m of list) {
-        const row = (m.target instanceof Element ? m.target : m.target.parentElement)?.closest('[data-row-id]');
-        if (row) w.__touched.add(row.getAttribute('data-row-id')!);
-      }
-    }).observe(document.querySelector('[data-scroller="chats"]')!, { subtree: true, childList: true, characterData: true, attributes: true });
-  });
-  await page.evaluate(() => { (window as unknown as { __renders: Record<string, number> }).__renders = {}; });
+  await page.evaluate('window.__watchRows()');
+  await page.evaluate('window.__renders = {}');
   const burst = frames(page, null, 2500);
   // В верхние строки «Ждут вас» (самые давние нагрузочные: 459, 456, …) — их видно на экране.
   for (let i = 0; i < 20; i += 1) { panel.inboundExtra(459 - 3 * i, `Живой кадр ${i + 1}`); await new Promise((r) => setTimeout(r, 50)); }
   out.live20 = await burst;
-  out.live20_rowsTouched = await page.evaluate(() => (window as unknown as { __touched: Set<string> }).__touched.size);
+  out.live20_rowsTouched = await page.evaluate('window.__touched.size');
   // Отрисовки строк за 20 кадров — только в сборке VITE_PERF=1 (web/src/lib/perf.ts), иначе null.
-  out.live20_rowRenders = await page.evaluate(() => (window as unknown as { __renders?: Record<string, number> }).__renders?.row ?? null);
+  out.live20_rowRenders = await page.evaluate('window.__renders?.row ?? null');
 
   // Лист «Клиент» (на 1440 — боковой лист, на 390 — снизу) и тост «Решено → Вернуть».
-  await page.evaluate((id) => { history.pushState(null, '', `/next/chats/${id}`); dispatchEvent(new PopStateEvent('popstate')); }, longId);
+  await page.evaluate(`window.__go('/next/chats/${longId}')`);
   await page.waitForSelector('[role="log"] [data-voice]');
   await page.waitForTimeout(400);
   const sheet = frames(page, null, 700);
-  await page.evaluate((id) => { history.pushState(null, '', `/next/chats/${id}/client`); dispatchEvent(new PopStateEvent('popstate')); }, longId);
+  await page.evaluate(`window.__go('/next/chats/${longId}/client')`);
   out.sheetOpen = await sheet;
   await page.keyboard.press('Escape');
   await page.waitForTimeout(500);
