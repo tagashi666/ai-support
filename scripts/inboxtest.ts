@@ -546,7 +546,7 @@ console.log('\n[ Кадры по правам: frameFor и неполадки ]'
   const { createLiveHub, frameFor } = await import('../src/panel/live.js');
   const none = { key: 'op:x', can: (permission: string) => permission === 'conversation:read' };
   const all = { key: 'root', can: () => true };
-  const problem = { code: 'job_failed', severity: 'warn' as const, count: 1, subject: 'auto-learn', at: 1 };
+  const problem = { code: 'job_failed' as const, severity: 'warn' as const, count: 1, subject: 'auto-learn', at: 1 };
   const problemsFrame = { seq: 1, frame: { type: 'problems' as const, problems: [problem], at: 5 } };
   check('problems — с diagnostics:read список', JSON.stringify(frameFor(problemsFrame, 'e', all)) === JSON.stringify({ type: 'problems', seq: 1, epoch: 'e', problems: [problem], at: 5 }));
   check('problems без diagnostics:read — noop', JSON.stringify(frameFor(problemsFrame, 'e', none)) === JSON.stringify({ type: 'noop', seq: 1, epoch: 'e' }));
