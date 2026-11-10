@@ -206,7 +206,11 @@ test('«Журнал»: человеческие строки, фильтры «
   await page.goto('/next/team/log');
   const list = page.getByRole('list', { name: 'Журнал действий' });
   await expect(list).toBeVisible();
-  await expect(list.getByText(/изменил\(а\) режим помощника/).first()).toBeVisible();
+  // Журнал общий для всех тестов: строка могла уйти за первые 50 — догружаем «Показать ещё».
+  const mode = list.getByText(/изменил\(а\) режим помощника/).first();
+  const more = page.getByRole('button', { name: 'Показать ещё' });
+  for (let i = 0; i < 10 && !(await mode.isVisible()) && (await more.isVisible()); i += 1) await more.click();
+  await expect(mode).toBeVisible();
   await expectNoHorizontalScroll(page);
 
   await page.getByLabel('Кто').selectOption({ label: 'Мария' });
