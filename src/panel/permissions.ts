@@ -61,7 +61,7 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   if (/\/conversations\/\d+\/(?:read|presence)(?:\?|$)/.test(url)) return 'conversation:read';
   if (/\/conversations\/\d+\/customer\/refresh(?:\?|$)/.test(url)) return 'conversation:profile';
   if (/\/conversations\/\d+\/profile(?:\?|$)/.test(url) && method !== 'GET') return 'conversation:profile';
-  if (/\/conversations\/\d+\/(?:state|engage|release)(?:\?|$)/.test(url)) return 'conversation:status';
+  if (/\/conversations\/\d+\/(?:state|engage|release|intent)(?:\?|$)/.test(url)) return 'conversation:status';
   if (url.startsWith('/api/settings/services/')) return 'settings:services';
   if (url.startsWith('/api/settings/test-alert')) return 'settings:alerts';
   // 10.6 п.1: смотреть серверы может всякий, кто видит систему; обновить и переименовать — settings:nodes.

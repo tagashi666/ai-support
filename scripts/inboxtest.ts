@@ -454,7 +454,122 @@ console.log('\n[ WebSocket ?v=2 и GET /api/events ]');
   const seqs = v2Frames.filter((frame) => typeof frame.seq === 'number' && frame.type !== 'hello' && frame.type !== 'tick').map((frame) => frame.seq as number);
   check('seq без пропусков', seqs.every((value, index) => index === 0 || value === seqs[index - 1]! + 1), seqs);
   await fetch(`${B}/api/settings`, { method: 'POST', headers: { ...root, 'content-type': 'application/json' }, body: JSON.stringify({ aiMode: 'suggest' }) });
+
+  // --- Шаг 3: кадры по правам получателя (L-2…L-6, L-11) ---
+  const listen = async (headers: Record<string, string>): Promise<{ frames: Array<Record<string, unknown>>; close(): void }> => {
+    const { ticket: own } = await getJson<{ ticket: string }>('/api/ticket', headers);
+    const socket = new WS(`ws://127.0.0.1:8193/ws?v=2&token=${encodeURIComponent(own)}`);
+    const frames: Array<Record<string, unknown>> = [];
+    socket.on('message', (raw) => frames.push(JSON.parse(String(raw))));
+    await new Promise((r) => socket.once('open', r));
+    await wait(() => frames.length > 0);
+    return { frames, close: () => socket.close() };
+  };
+  const owner = await listen(root);
+  const mariaWs = await listen(as(mariaToken));
+  const send = (path: string, headers: Record<string, string>, body: unknown, method = 'POST') =>
+    fetch(`${B}${path}`, { method, headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const of = (frames: Array<Record<string, unknown>>, type: string) => frames.filter((frame) => frame.type === type);
+
+  // L-5 + L-4: права роли agent изменились — сокетам Ивана и Марии кадр me; владельцу — нет.
+  // roles/team: владелец получает invalidate, агент (без roles:manage и team:read) — noop.
+  const agentRights = (await getJson<BootstrapResponse>('/api/bootstrap', as(ivanToken))).me.permissions;
+  const roleSaved = await send('/api/roles/agent', root, { permissions: agentRights.filter((item) => item !== 'stats:read') }, 'PUT');
+  await wait(() => of(v2Frames, 'me').length > 0 && of(owner.frames, 'invalidate').length >= 2);
+  check('смена прав роли — кадр me её людям', roleSaved.status === 200 && of(v2Frames, 'me').length === 1 && of(mariaWs.frames, 'me').length === 1, [roleSaved.status, await roleSaved.clone().text()]);
+  check('у кого права не менялись — без кадра me', of(owner.frames, 'me').length === 0);
+  check('invalidate roles и team — тем, кто их читает', ['roles', 'team'].every((scope) => owner.frames.some((frame) => frame.type === 'invalidate' && frame.scope === scope)), owner.frames);
+  check('без права на раздел — noop без scope', !v2Frames.some((frame) => frame.type === 'invalidate' && (frame.scope === 'roles' || frame.scope === 'team'))
+    && of(v2Frames, 'noop').length >= 2 && of(v2Frames, 'noop').every((frame) => !('scope' in frame)), v2Frames.slice(-4));
+  await send('/api/roles/agent', root, { permissions: agentRights }, 'PUT');
+  await wait(() => of(v2Frames, 'me').length === 2);
+  check('права вернули — снова кадр me', of(v2Frames, 'me').length === 2);
+
+  // L-5: роль одного человека — кадр me только ему.
+  const mariaMe = of(mariaWs.frames, 'me').length;
+  const ivanMe = of(v2Frames, 'me').length;
+  const roleChanged = await send(`/api/operators/${maria.id}`, root, { role: 'viewer' });
+  await wait(() => of(mariaWs.frames, 'me').length > mariaMe);
+  check('роль человека сменилась — кадр me ему, не соседу', roleChanged.status === 200 && of(mariaWs.frames, 'me').length === mariaMe + 1 && of(v2Frames, 'me').length === ivanMe, [roleChanged.status, mariaWs.frames.slice(-3)]);
+  await send(`/api/operators/${maria.id}`, root, { role: 'agent' });
+
+  // L-4: шаблоны — templates:read есть у агента: кадр со scope, без данных.
+  const before = v2Frames.length;
+  const template = await send('/api/templates', root, { shortcut: 'live-test', title: 'Кадр', body: 'текст' });
+  await wait(() => v2Frames.slice(before).some((frame) => frame.type === 'invalidate'));
+  const templateFrame = v2Frames.slice(before).find((frame) => frame.type === 'invalidate');
+  check('invalidate templates — только scope, без содержимого', template.status === 200 && templateFrame?.scope === 'templates'
+    && Object.keys(templateFrame).sort().join(',') === 'epoch,scope,seq,type', templateFrame);
+
+  // L-6: любая настройка — кадр settings с её именем.
+  const hold = await send('/api/settings', root, { humanHoldMinutes: 31 });
+  await wait(() => owner.frames.some((frame) => frame.type === 'settings' && (frame.keys as string[] | undefined)?.includes('humanHoldMinutes')));
+  check('humanHoldMinutes — кадр settings с keys', hold.status === 200
+    && owner.frames.some((frame) => frame.type === 'settings' && (frame.keys as string[]).includes('humanHoldMinutes')));
+
+  // L-2: намерение «Решено» коллегам сразу; без conversation:status — 403.
+  const target = inbound('ws-intent', Date.now() - 5_000).conversation;
+  const intent = await send(`/api/conversations/${target.id}/intent`, as(ivanToken), { action: 'resolve' });
+  await wait(() => mariaWs.frames.some((frame) => frame.kind === 'intent'));
+  const intentFrame = mariaWs.frames.find((frame) => frame.kind === 'intent') as { conversation_id: number; intent: { action: string; by: { name: string } } } | undefined;
+  check('intent — коллеге кадр «Иван закрывает»', intent.status === 200 && intentFrame?.conversation_id === target.id
+    && intentFrame.intent.action === 'resolve' && intentFrame.intent.by.name === 'Иван', intentFrame);
+  await send(`/api/conversations/${target.id}/intent`, as(ivanToken), { action: null });
+  await wait(() => mariaWs.frames.filter((frame) => frame.kind === 'intent').length === 2);
+  check('отмена — кадр intent: null', (mariaWs.frames.filter((frame) => frame.kind === 'intent').at(-1) as { intent: unknown } | undefined)?.intent === null);
+  check('intent без conversation:status — 403', (await send(`/api/conversations/${target.id}/intent`, as(viewerToken), { action: 'resolve' })).status === 403);
+
+  // L-1 на сервере: клиент написал после `seen` — «Решено»/«Убрать» не применяются (409).
+  const lastAt = Date.now() - 5_000;
+  const conflict = await send(`/api/conversations/${target.id}/state`, as(ivanToken), { hidden: true, seen: lastAt - 60_000 });
+  const conflictBody = await conflict.json() as { code?: string };
+  check('seen старше сообщения клиента — 409 client_wrote', conflict.status === 409 && conflictBody.code === 'client_wrote', conflictBody);
+  check('диалог не скрыт', store.getConversation(target.id)?.hidden_at == null);
+  const agreed = await send(`/api/conversations/${target.id}/state`, as(ivanToken), { hidden: true, seen: lastAt + 1 });
+  check('seen не старше — действие проходит', agreed.status === 200);
+  await send(`/api/conversations/${target.id}/state`, as(ivanToken), { hidden: false });
+
+  // L-11: «ушёл» снимает присутствие сразу кадром presence.
+  await send(`/api/conversations/${target.id}/presence`, as(ivanToken), { state: 'viewing' });
+  await wait(() => mariaWs.frames.some((frame) => frame.kind === 'presence' && (frame.presence as unknown[]).length === 1));
+  await send(`/api/conversations/${target.id}/presence`, as(ivanToken), { state: 'left' });
+  await wait(() => (mariaWs.frames.filter((frame) => frame.kind === 'presence').at(-1)?.presence as unknown[] | undefined)?.length === 0);
+  check('presence left — кадр без ушедшего', (mariaWs.frames.filter((frame) => frame.kind === 'presence').at(-1)?.presence as unknown[] | undefined)?.length === 0);
+  const seqsAll = v2Frames.filter((frame) => typeof frame.seq === 'number' && frame.type !== 'hello' && frame.type !== 'tick').map((frame) => frame.seq as number);
+  check('seq без пропусков и с noop', seqsAll.every((value, index) => index === 0 || value === seqsAll[index - 1]! + 1), seqsAll);
+  owner.close(); mariaWs.close();
   v2.close(); classic.close();
+}
+
+console.log('\n[ Кадры по правам: frameFor и неполадки ]');
+{
+  const { createLiveHub, frameFor } = await import('../src/panel/live.js');
+  const none = { key: 'op:x', can: (permission: string) => permission === 'conversation:read' };
+  const all = { key: 'root', can: () => true };
+  const problem = { code: 'job_failed', severity: 'warn' as const, count: 1, subject: 'auto-learn', at: 1 };
+  const problemsFrame = { seq: 1, frame: { type: 'problems' as const, problems: [problem], at: 5 } };
+  check('problems — с diagnostics:read список', JSON.stringify(frameFor(problemsFrame, 'e', all)) === JSON.stringify({ type: 'problems', seq: 1, epoch: 'e', problems: [problem], at: 5 }));
+  check('problems без diagnostics:read — noop', JSON.stringify(frameFor(problemsFrame, 'e', none)) === JSON.stringify({ type: 'noop', seq: 1, epoch: 'e' }));
+  const settingsEntry = (keys: string[]) => ({ seq: 2, frame: { type: 'settings' as const, aiMode: 'suggest' as const, minConfidence: 0.7, keys } });
+  check('settings прочих ключей без settings:read — noop', frameFor(settingsEntry(['brand']), 'e', none).type === 'noop');
+  const mixed = frameFor(settingsEntry(['brand', 'aiMode']), 'e', none) as { keys?: string[] };
+  check('settings без settings:read — только общие ключи', mixed.keys?.join(',') === 'aiMode', mixed);
+  check('settings с settings:read — все ключи', (frameFor(settingsEntry(['brand', 'aiMode']), 'e', all) as { keys?: string[] }).keys?.length === 2);
+  check('invalidate ideas без knowledge:review — noop', frameFor({ seq: 3, frame: { type: 'invalidate', scope: 'ideas' } }, 'e', none).type === 'noop');
+
+  const sent: Array<{ seq: number; frame: { type: string } }> = [];
+  const hub = createLiveHub(db, (batch) => { sent.push(...batch); });
+  hub.watcher.stop();
+  hub.problems([]);
+  hub.problems([]);
+  hub.problems([problem]);
+  hub.problems([problem]);
+  hub.invalidate(['kb', 'ideas']);
+  hub.invalidate(['kb']);
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setImmediate(r));
+  check('неполадки: первый замер — точка отсчёта, кадр только при изменении', sent.filter((entry) => entry.frame.type === 'problems').length === 1, sent);
+  check('invalidate в одном шаге склеивается по scope', sent.filter((entry) => entry.frame.type === 'invalidate').length === 2, sent);
 }
 
 console.log('\n[ 500 диалогов ]');

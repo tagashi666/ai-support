@@ -34,7 +34,9 @@ import { register as registerCollab } from './routes/collab.js';
 import { OperatorDrafts } from '../core/drafts.js';
 import { register as registerAssistant } from './routes/assistant.js';
 import { projectMessages, projectSuggestion } from './thread.js';
-import { createLiveHub, frameFor } from './live.js';
+import { ATTENTION_STEP_MS, createLiveHub, frameFor } from './live.js';
+import { invalidatedBy } from './invalidate.js';
+import { systemProblems } from './problems.js';
 import { countsFor } from './inbox.js';
 import { apiError } from './errors.js';
 import { registerWebApp, uiChoice, uiCookie, webAppBuilt } from './webapp.js';
@@ -166,10 +168,15 @@ export async function startWeb(deps: WebDeps) {
     const actor = actors.get(request);
     if (!actor) return;
     const path = request.url.split('?')[0] ?? request.url;
+    // Кадры новой панели об изменённых разделах (L-4), правах (L-5) и неполадках (L-3).
+    const scopes = invalidatedBy(request.method, path);
+    if (scopes.length) live.invalidate(scopes);
+    if (scopes.includes('team') || scopes.includes('roles')) checkMe();
+    if (/^\/api\/(?:update|nodes|sources|settings)/.test(path)) checkProblems();
     // Присутствие, удержание и прочтение — фоновые heartbeat'ы панели, а не
     // действия оператора: раньше они забивали журнал почти целиком. Черновик
     // (этап 7) пишется на каждую паузу в наборе, а просьба передать пишет запись сама.
-    if (/^\/api\/conversations\/\d+\/(?:presence|engage|read|draft|handover-request)$/.test(path)) return;
+    if (/^\/api\/conversations\/\d+\/(?:presence|engage|read|draft|handover-request|intent)$/.test(path)) return;
     const parts = path.split('/').filter(Boolean);
     operations.audit(actor, `${request.method} ${path}`, parts[1] ?? 'api', parts[2],
       path.endsWith('/attachments') ? undefined : request.body, request.ip);
@@ -282,7 +289,11 @@ export async function startWeb(deps: WebDeps) {
     }
   };
 
-  const live = createLiveHub(store.db, (entry, epoch) => {
+  const live = createLiveHub(store.db, (batch, epoch) => {
+    // Последний кадр строки в пачке несёт счётчики: один подсчёт на получателя (L-13).
+    let lastRow = -1;
+    batch.forEach((entry, index) => { if (entry.frame.type === 'inbox_item' || entry.frame.type === 'inbox_remove') lastRow = index; });
+    const counts = new Map<string, ReturnType<typeof countsFor>>();
     for (const socket of sockets) {
       if (!socketsV2.has(socket)) continue;
       const actor = operations.actorByKey(socketActors.get(socket) ?? '');
@@ -291,10 +302,48 @@ export async function startWeb(deps: WebDeps) {
         continue;
       }
       if (socket.readyState !== socket.OPEN) continue;
-      const counts = entry.frame.type === 'settings' ? undefined : countsFor(live.watcher.projections(), actor.key);
-      socket.send(JSON.stringify(frameFor(entry, epoch, actor.key, counts)));
+      const viewer = { key: actor.key, can: (permission: Permission) => operations.can(actor, permission) };
+      batch.forEach((entry, index) => {
+        let own: ReturnType<typeof countsFor> | undefined;
+        if (index === lastRow) {
+          own = counts.get(actor.key) ?? countsFor(live.watcher.projections(), actor.key);
+          counts.set(actor.key, own);
+        }
+        socket.send(JSON.stringify(frameFor(entry, epoch, viewer, own)));
+      });
     }
   });
+  /**
+   * L-5: права, роль и имя получателя на момент подключения. Изменились (роль,
+   * права роли, переименование) — сокету кадр `me`, панель перечитывает bootstrap.
+   * Без conversation:read сокет закрывается, как и раньше.
+   */
+  const socketMe = new WeakMap<WebSocket, string>();
+  const meOf = (actor: Actor): string => `${actor.name}|${actor.role}|${operations.permissionsFor(actor).join(',')}`;
+  function checkMe(): void {
+    for (const socket of sockets) {
+      if (!socketsV2.has(socket) || socket.readyState !== socket.OPEN) continue;
+      const actor = operations.actorByKey(socketActors.get(socket) ?? '');
+      if (!actor || !operations.can(actor, 'conversation:read')) { socket.close(1008, 'Permission revoked'); continue; }
+      const now = meOf(actor);
+      if (socketMe.get(socket) === now) continue;
+      socketMe.set(socket, now);
+      socket.send(JSON.stringify({ type: 'me' }));
+    }
+  }
+  /** L-3: неполадки считаются из памяти и базы — дёшево проверять на шаге и после изменений. */
+  const checkProblems = (): void => { try { live.problems(systemProblems(ctx)); } catch (err) { log.debug('Неполадки не посчитаны', err); } };
+  /** Серверы: новый опрос панели (at) или ошибка — кадр invalidate nodes тем, кто их видит. */
+  let nodesSign = '';
+  const checkNodes = (): void => {
+    if (!deps.nodes) return;
+    const snap = deps.nodes.get();
+    const sign = `${snap.at}|${snap.error ?? ''}`;
+    if (nodesSign && sign !== nodesSign) live.invalidate(['nodes']);
+    nodesSign = sign;
+  };
+  const pulse = setInterval(() => { checkProblems(); checkNodes(); }, ATTENTION_STEP_MS);
+  pulse.unref();
   live.watcher.start();
 
   const expected = Buffer.from(config.panelToken);
@@ -479,6 +528,8 @@ export async function startWeb(deps: WebDeps) {
   registerThread(app, ctx);
   registerCollab(app, ctx);
   registerAssistant(app, ctx);
+  checkProblems();
+  checkNodes();
 
   // --- билет для медиа и WS -----------------------------------------
 
@@ -527,6 +578,7 @@ export async function startWeb(deps: WebDeps) {
     }
     socketOwners.set(socket, request.ip);
     socketActors.set(socket, grant.actor.key);
+    socketMe.set(socket, meOf(grant.actor));
     socketExpires.set(socket, grant.until);
     socketIps.set(request.ip, ipCount + 1);
     socket.once('close', () => removeSocket(socket));
@@ -553,6 +605,7 @@ export async function startWeb(deps: WebDeps) {
   socketHeartbeat.unref();
   app.addHook('onClose', async () => {
     clearInterval(socketHeartbeat);
+    clearInterval(pulse);
     live.watcher.stop();
     for (const socket of sockets) socket.close();
     sockets.clear();

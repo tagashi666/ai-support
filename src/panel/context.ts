@@ -88,6 +88,8 @@ export function createRouteContext(
         store.finishJob(jobId, report);
         onDone(report);
         broadcast({ type: 'job', kind, status: 'done', report }, permission);
+        // Новые идеи — кадр invalidate (L-4): счётчик в рейке и открытый раздел «Знания».
+        parts.live.invalidate(['ideas']);
       } catch (err) {
         const message = (err as Error).message;
         store.finishJob(jobId, undefined, message);

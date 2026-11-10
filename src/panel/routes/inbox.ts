@@ -7,6 +7,7 @@ import type { BootstrapResponse, EventsResponse, InboxResponse, InboxView } from
 import { SECTION_ORDER } from '../../shared/conversation-order.js';
 import type { Section } from '../../shared/attention.js';
 import type { RouteContext } from '../context.js';
+import type { Permission } from '../../core/operations.js';
 import { channelAvailability } from '../helpers.js';
 import { countsFor, listInbox, openProjections, type InboxQuery } from '../inbox.js';
 import { frameFor } from '../live.js';
@@ -68,12 +69,13 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     const { events } = live;
     const entries = events.since(since, String(request.query?.epoch ?? ''));
     if (!entries) return { reset: true, epoch: events.epoch, seq: events.seq };
-    const viewer = actorOf(request).key;
+    const actor = actorOf(request);
+    const viewer = { key: actor.key, can: (permission: Permission) => operations.can(actor, permission) };
     return {
       epoch: events.epoch,
       seq: events.seq,
       events: entries.map((entry) => frameFor(entry, events.epoch, viewer)),
-      counts: countsFor(live.watcher.projections(), viewer),
+      counts: countsFor(live.watcher.projections(), actor.key),
     };
   });
 

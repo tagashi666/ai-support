@@ -7,6 +7,7 @@ import { channelAvailability, decorate, livePendingSuggestion } from '../helpers
 import type { RouteContext } from '../context.js';
 import { apiError } from '../errors.js';
 import { AUTHOR_EVENT, presenceOf } from '../thread.js';
+import type { ThreadIntent } from '../../shared/api-types.js';
 
 /** Диалоги: список, папки, история, прочтение, присутствие, удержание, заметки и статус. */
 export function register(app: FastifyInstance, ctx: RouteContext): void {
@@ -22,6 +23,29 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     if (signature) lastPresence.set(id, signature); else lastPresence.delete(id);
     if (lastPresence.size > 2000) lastPresence.clear();
     pushV2({ type: 'thread', kind: 'presence', conversation_id: id, presence });
+  };
+  // L-11: запись старше 90 с — уже не «смотрит». Шаг пересылает состав, если он
+  // изменился по времени: «призрак» уходит не позже чем через 15 с после срока.
+  const presenceStep = setInterval(() => { for (const id of [...lastPresence.keys()]) pushPresence(id); }, 15_000);
+  presenceStep.unref();
+  app.addHook('onClose', async () => { clearInterval(presenceStep); for (const intent of intents.values()) clearTimeout(intent.timer); });
+
+  /**
+   * L-2: «Решено» и «Убрать» ждут окна отмены на устройстве автора, а коллеги
+   * видят намерение сразу кадром intent («Мария закрывает…»). Отмена — кадр с
+   * null; запись живёт не дольше INTENT_MS, даже если вкладка автора закрылась.
+   */
+  const INTENT_MS = 15_000;
+  const intents = new Map<number, { timer: NodeJS.Timeout }>();
+  const pushIntent = (id: number, intent: ThreadIntent | null): void => {
+    const known = intents.get(id);
+    if (known) clearTimeout(known.timer);
+    if (intent) {
+      const timer = setTimeout(() => pushIntent(id, null), INTENT_MS);
+      timer.unref();
+      intents.set(id, { timer });
+    } else if (!intents.delete(id)) return;
+    pushV2({ type: 'thread', kind: 'intent', conversation_id: id, intent });
   };
 
   // --- диалоги ---------------------------------------------------------
@@ -121,6 +145,16 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
   });
 
   /** Присутствие для совместной работы не означает, что оператор забрал ответ у AI. */
+  app.post<{ Params: { id: string }; Body: { action?: unknown } }>('/api/conversations/:id/intent', async (request, reply) => {
+    const id = Number(request.params.id);
+    if (!store.getConversation(id)) return reply.code(404).send(apiError('not_found', 'Диалог не найден'));
+    const action = request.body?.action;
+    if (action !== null && action !== 'resolve' && action !== 'hide') return reply.code(400).send(apiError('bad_request', 'Неизвестное действие'));
+    const actor = actorOf(request);
+    pushIntent(id, action ? { action, by: { id: actor.key, name: actor.name } } : null);
+    return { ok: true };
+  });
+
   app.post<{ Params: { id: string }; Body: { state?: string } }>('/api/conversations/:id/presence', async (request, reply) => {
     const id = Number(request.params.id);
     if (!store.getConversation(id)) return reply.code(404).send({ error: 'Диалог не найден' });
@@ -184,13 +218,15 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     },
   );
 
-  app.post<{ Params: { id: string }; Body: { status?: string; aiMode?: string; escalated?: boolean; handoff?: boolean; hidden?: boolean } }>(
+  app.post<{ Params: { id: string }; Body: { status?: string; aiMode?: string; escalated?: boolean; handoff?: boolean; hidden?: boolean; seen?: number } }>(
     '/api/conversations/:id/state',
     async (request, reply) => {
       const id = Number(request.params.id);
       const before = store.getConversation(id);
       if (!before) return reply.code(404).send(apiError('not_found', 'Диалог не найден'));
       const { status, aiMode, escalated, handoff, hidden } = request.body ?? {};
+      const intent = intents.get(id);
+      if (intent && (status || hidden !== undefined)) { clearTimeout(intent.timer); intents.delete(id); }
       if (hidden !== undefined && typeof hidden !== 'boolean') {
         return reply.code(400).send(apiError('bad_request', 'Некорректный флаг скрытия'));
       }
@@ -199,6 +235,14 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
       }
       if (aiMode !== undefined && !['inherit', 'off', 'shadow', 'suggest', 'auto'].includes(aiMode)) {
         return reply.code(400).send(apiError('bad_request', 'Неизвестный режим AI'));
+      }
+      // L-1: «Решено» или «Убрать» после окна отмены. `seen` — время последнего
+      // сообщения, которое видел оператор; клиент написал позже — не закрываем
+      // (вторая вкладка или устройство без клиентской проверки). Без `seen` — как раньше.
+      const seen = request.body?.seen;
+      if ((status === 'resolved' || hidden === true) && typeof seen === 'number' && Number.isFinite(seen)
+        && store.db.prepare(`SELECT 1 FROM message WHERE conversation_id = ? AND direction = 'in' AND created_at > ? LIMIT 1`).get(id, seen)) {
+        return reply.code(409).send(apiError('client_wrote', 'Клиент написал после того, как вы закрыли диалог'));
       }
       if (status) {
         try {

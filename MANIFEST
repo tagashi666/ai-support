@@ -143,6 +143,7 @@ src/panel/context.ts
 src/panel/errors.ts
 src/panel/helpers.ts
 src/panel/inbox.ts
+src/panel/invalidate.ts
 src/panel/kbfiles.ts
 src/panel/live.ts
 src/panel/permissions.ts

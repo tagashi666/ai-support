@@ -11,6 +11,8 @@ import type { AiMode, AttentionAi, AttentionState, Reason, Section } from './att
 /** Код ошибки в едином формате; поле `error` с текстом остаётся для классики. */
 export type ErrorCode =
   | 'window_closed'
+  /** L-1: клиент написал после того, что видел оператор, — «Решено»/«Убрать» не применены (409). */
+  | 'client_wrote'
   | 'locked_by_other'
   | 'no_sender'
   | 'permission'
@@ -148,13 +150,22 @@ export type LiveFrame =
    */
   | { type: 'settings'; seq: number; epoch: string; aiMode: AiMode; minConfidence: number;
       keys?: string[]; actor?: { id: string; name: string } | null; pause?: AssistantPauseView | null }
+  /** Раздел изменился (L-4): панель перечитывает его своим GET, если раздел открыт. Без данных. */
+  | { type: 'invalidate'; seq: number; epoch: string; scope: InvalidateScope }
+  /** Неполадки изменились (L-3) — только с diagnostics:read, как GET /api/system/problems. */
+  | { type: 'problems'; seq: number; epoch: string; problems: SystemProblem[]; at: number }
   /** Кадр, который этому получателю не положен по правам: держит seq без пропуска. */
   | { type: 'noop'; seq: number; epoch: string };
+
+/** Разделы, о смене которых сервер шлёт кадр invalidate. */
+export type InvalidateScope = 'kb' | 'templates' | 'ideas' | 'team' | 'roles' | 'nodes' | 'connections';
 
 /** Служебные кадры: seq не увеличивают, но несут текущий — по ним виден пропуск. */
 export type ControlFrame =
   | { type: 'hello'; seq: number; epoch: string }
-  | { type: 'tick'; at: number; seq: number; epoch: string };
+  | { type: 'tick'; at: number; seq: number; epoch: string }
+  /** Права, роль или имя получателя изменились (L-5): панель перечитывает bootstrap. Только этому сокету. */
+  | { type: 'me' };
 
 export type EventsResponse =
   | { reset?: false; epoch: string; seq: number; events: LiveFrame[]; counts: InboxCounts }
@@ -263,6 +274,8 @@ export interface ThreadResponse {
  * Кадр ленты для сокета новой панели. Без seq: это подсказка открытому
  * диалогу, а не изменение списка. После разрыва панель перечитывает диалог.
  */
+export interface ThreadIntent { action: 'resolve' | 'hide'; by: { id: string; name: string } }
+
 export type ThreadFrame =
   | { type: 'thread'; kind: 'message' | 'message_updated'; conversation_id: number; message: ThreadMessage }
   | { type: 'thread'; kind: 'message_deleted'; conversation_id: number; message_id: number }
@@ -274,6 +287,8 @@ export type ThreadFrame =
   /** Ваш черновик изменился на другом устройстве (10.6 п.5): только сокетам того же человека. */
   | { type: 'thread'; kind: 'draft'; conversation_id: number; draft: ServerDraft | null }
   /** «Иван просит передать диалог» (10.6 п.8): только сокетам того, кто ведёт. */
+  /** L-2: коллега нажал «Решено»/«Убрать», запрос уйдёт после окна отмены; null — отменил или срок вышел. */
+  | { type: 'thread'; kind: 'intent'; conversation_id: number; intent: ThreadIntent | null }
   | { type: 'thread'; kind: 'handover_request'; conversation_id: number; from: { id: string; name: string }; customer: string | null };
 
 /** Черновик на сервере (7.8): на человека и диалог. device — вкладка, которая записала. */

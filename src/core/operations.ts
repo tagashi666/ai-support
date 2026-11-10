@@ -275,6 +275,11 @@ export class Operations {
   }
 
   presence(conversationId: number, actor: Actor, stateRaw: unknown): void {
+    // «Ушёл» (L-11): панель закрыла диалог — запись снимается сразу, а не через 90 с.
+    if (stateRaw === 'left') {
+      this.db.prepare(`DELETE FROM operator_presence WHERE actor_key = ? AND conversation_id = ?`).run(actor.key, conversationId);
+      return;
+    }
     const state = stateRaw === 'typing' ? 'typing' : 'viewing';
     this.db.prepare(`
       INSERT INTO operator_presence (actor_key, conversation_id, state, seen_at)
