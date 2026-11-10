@@ -3,7 +3,7 @@
  * (10.4 п.1), «Вернуть как было», лента и «Это неверно». Права — из
  * bootstrap: без права кнопки не рисуются, сервер всё равно проверит.
  */
-import { computed, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import { t } from '@/i18n/ru';
 import { showToast, undoToast } from '@/lib/actions/toasts';
 import { ApiError, getJson, readToken, sendJson } from '@/lib/live/api';
@@ -34,6 +34,13 @@ export const changedBy = signal<{ name: string; at: number } | null>(null);
 /** Тик для пересчёта «пауза истекла» без кадра. */
 export const clockTick = signal(Date.now());
 if (typeof setInterval === 'function') setInterval(() => { clockTick.value = Date.now(); }, 30_000);
+// L-10: конец паузы — ровно в срок, а не на следующем тике раз в 30 с.
+let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+effect(() => {
+  const until = bootstrap.value?.assistant.pause?.until ?? null;
+  clearTimeout(pauseTimer);
+  if (until !== null && until > Date.now()) pauseTimer = setTimeout(() => { clockTick.value = Date.now(); }, Math.min(until - Date.now() + 50, 2 ** 31 - 1));
+});
 
 export const perms = computed(() => new Set(bootstrap.value?.me.permissions ?? []));
 export const can = (permission: string): boolean => perms.value.has(permission);

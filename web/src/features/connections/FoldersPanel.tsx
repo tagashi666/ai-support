@@ -6,6 +6,7 @@ import { folders, loadMeta, meta, metaError, metaState, removeFolder, saveFolder
 import { Button } from '@/ui/Button';
 import { Sheet, sheetStyles } from '@/ui/Sheet';
 import c from './connections.module.css';
+import { useInvalidate } from '@/lib/live/store';
 
 function FolderSheet({ folder, onClose }: { folder: Folder | null; onClose: () => void }): JSX.Element {
   const sources = meta.value?.sources ?? [];
@@ -77,6 +78,7 @@ function FolderSheet({ folder, onClose }: { folder: Folder | null; onClose: () =
 export function FoldersPanel(): JSX.Element {
   const [editing, setEditing] = useState<Folder | 'new' | null>(null);
   useEffect(() => { void loadMeta(); }, []);
+  useInvalidate('connections', () => void loadMeta());
   const state = metaState.value;
   if (state === 'idle' || state === 'loading') return <div class={c.skeleton} key="skeleton" aria-hidden="true" />;
   if (state === 'error') {

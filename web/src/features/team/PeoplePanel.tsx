@@ -4,7 +4,7 @@ import { tr } from '@/i18n/sections/team';
 import { can } from '@/lib/assistant/store';
 import { showToast } from '@/lib/actions/toasts';
 import { listTime } from '@/lib/format/format';
-import { bootstrap } from '@/lib/live/store';
+import { bootstrap, useInvalidate } from '@/lib/live/store';
 import { navigate } from '@/lib/router';
 import {
   createOperator, lastSeen, loadPeople, loadRoles, operators, peopleError, peopleState, rolesData, rotateKey, setActive, setRole,
@@ -200,6 +200,8 @@ export function PeoplePanel({ item }: { item?: string }): JSX.Element {
   const stats = can('operator_stats:read');
   const manage = can('operators:manage');
   useEffect(() => { void loadPeople(stats); if (can('roles:manage')) void loadRoles(); }, [stats]);
+  useInvalidate('team', () => void loadPeople(stats));
+  useInvalidate('roles', () => { if (can('roles:manage')) void loadRoles(); });
   const list = operators.value ?? [];
   const me = bootstrap.value?.me.id;
   const now = Date.now();

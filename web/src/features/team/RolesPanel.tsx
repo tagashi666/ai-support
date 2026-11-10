@@ -11,6 +11,7 @@ import { Card } from '@/ui/Card';
 import { Sheet, sheetStyles } from '@/ui/Sheet';
 import { BlockState } from './BlockState';
 import k from './team.module.css';
+import { useInvalidate } from '@/lib/live/store';
 
 interface Editing { role: Role; draft: string[]; step: 'edit' | 'diff'; reset: boolean }
 
@@ -101,6 +102,8 @@ function RoleSheet({ editing, onChange }: { editing: Editing | null; onChange: (
 export function RolesPanel(): JSX.Element {
   const [editing, setEditing] = useState<Editing | null>(null);
   useEffect(() => { void loadRoles(); void loadPeople(false); }, []);
+  useInvalidate('roles', () => void loadRoles());
+  useInvalidate('team', () => void loadPeople(false));
   const data = rolesData.value;
   return (
     <div class={k.panel}>

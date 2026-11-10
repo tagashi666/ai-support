@@ -1,22 +1,18 @@
 /**
  * Неполадки системы (этап 6): одно место для «Нужно внимание» на «Сегодня»,
  * точки у «Системы» в рейке и вердикта в «Системе → Здоровье». Начальное
- * значение — из bootstrap, дальше опрос раз в 60 с, пока открыт экран, который
- * их показывает (10.6 п.3: кадра nodes пока нет). Без diagnostics:read — пусто.
+ * значение — из bootstrap, дальше кадр problems с сервера (L-3) — на любом
+ * экране, без опроса. Без diagnostics:read — пусто.
  */
-import { computed, signal } from '@preact/signals';
-import { useEffect } from 'preact/hooks';
+import { computed } from '@preact/signals';
 import { t, tn } from '@/i18n/ru';
 import { getJson, readToken } from '@/lib/live/api';
-import { bootstrap } from '@/lib/live/store';
+import { bootstrap, problemsAt } from '@/lib/live/store';
 import type { ProblemsResponse, SystemProblem } from '@shared/api-types';
 
-const polled = signal<{ problems: SystemProblem[]; at: number } | null>(null);
-const POLL_MS = 60_000;
-
-/** Последний известный список: свежий опрос или bootstrap. */
-export const problems = computed<SystemProblem[]>(() => polled.value?.problems ?? bootstrap.value?.problems ?? []);
-export const problemsCheckedAt = computed(() => polled.value?.at ?? null);
+/** Последний известный список: bootstrap, дальше кадры problems (L-3) и «Проверить». */
+export const problems = computed<SystemProblem[]>(() => bootstrap.value?.problems ?? []);
+export const problemsCheckedAt = computed(() => problemsAt.value);
 export const canSeeProblems = computed(() => bootstrap.value?.problems !== null && bootstrap.value?.problems !== undefined);
 /** Цвет точки у «Системы»: красная — неполадка, синяя — новая версия (5.1). */
 export const systemDot = computed<'error' | 'warn' | 'update' | null>(() => {
@@ -30,19 +26,10 @@ export async function refreshProblems(): Promise<void> {
   if (!canSeeProblems.peek()) return;
   try {
     const res = await getJson<ProblemsResponse>('/api/system/problems', readToken() ?? '');
-    polled.value = { problems: res.problems, at: res.checkedAt };
+    const current = bootstrap.peek();
+    if (current) bootstrap.value = { ...current, problems: res.problems, counts: { ...current.counts, problems: res.problems.length } };
+    problemsAt.value = res.checkedAt;
   } catch { /* остаётся прежний список; ошибку покажет сам экран */ }
-}
-
-/** Опрос, пока экран открыт и вкладка видна. */
-export function useProblemsPolling(): void {
-  const allowed = canSeeProblems.value;
-  useEffect(() => {
-    if (!allowed) return undefined;
-    void refreshProblems();
-    const timer = window.setInterval(() => { if (document.visibilityState === 'visible') void refreshProblems(); }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [allowed]);
 }
 
 /** Одна фраза о неполадке: «Сервер Франкфурт-2 не отвечает». */

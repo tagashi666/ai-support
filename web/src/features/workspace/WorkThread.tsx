@@ -108,7 +108,10 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
     };
     beat();
     const timer = setInterval(beat, PRESENCE_MS);
-    return () => clearInterval(timer);
+    // L-11: ушли из диалога или закрыли вкладку — «смотрит» снимается сразу, а не через 90 с.
+    const leave = (): void => { void sendJson(`/api/conversations/${id}/presence`, readToken() ?? '', { state: 'left' }, { keepalive: true }).catch(() => undefined); };
+    addEventListener('pagehide', leave);
+    return () => { clearInterval(timer); removeEventListener('pagehide', leave); leave(); };
   }, [id]);
 
   const back = (): void => navigate({ name: 'chats', id: null });

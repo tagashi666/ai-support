@@ -10,6 +10,7 @@ import { Sheet, sheetStyles } from '@/ui/Sheet';
 import { ProfileSheet } from './ProfileSheet';
 import { Wizard } from './Wizard';
 import c from './connections.module.css';
+import { useInvalidate } from '@/lib/live/store';
 
 const BOTFATHER = '@BotFather';
 
@@ -38,6 +39,7 @@ export function ChannelsPanel(): JSX.Element {
   const [verdict, setVerdict] = useState<'yes' | 'no' | null>(null);
   const [checking, setChecking] = useState(false);
   useEffect(() => { void loadConnections(); }, []);
+  useInvalidate('connections', () => void loadConnections());
 
   if (state === 'loading' || state === 'idle') return <div class={c.skeleton} key="skeleton" aria-hidden="true" />;
   if (!data) {

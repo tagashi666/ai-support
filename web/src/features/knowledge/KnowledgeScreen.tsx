@@ -1,7 +1,7 @@
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { t, type Key } from '@/i18n/ru';
-import { bootstrap } from '@/lib/live/store';
+import { bootstrap, useInvalidate } from '@/lib/live/store';
 import { articleName } from '@/lib/knowledge/model';
 import { loadIdeas, loadKb, pendingIdeas, rights } from '@/lib/knowledge/store';
 import { navigate } from '@/lib/router';
@@ -35,6 +35,9 @@ function tabsFor(): Tab[] {
 export function KnowledgeScreen({ sub, item }: { sub?: string; item?: string }): JSX.Element {
   const ready = bootstrap.value !== null;
   useEffect(() => { if (ready) { void loadKb(); void loadIdeas(); } }, [ready]);
+  // L-4: чужая правка статьи или новая идея — открытый раздел перечитывает себя.
+  useInvalidate('kb', () => { if (ready) void loadKb(); });
+  useInvalidate('ideas', () => { if (ready) void loadIdeas(); });
   if (ready && (sub === 'new' || (sub === 'articles' && item))) {
     return <ArticleEditor key={item ?? 'new'} name={sub === 'new' || !item ? null : articleName(item)} />;
   }

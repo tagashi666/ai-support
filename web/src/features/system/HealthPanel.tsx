@@ -9,7 +9,7 @@ import { navigate } from '@/lib/router';
 import {
   buildChecks, countRows, overrideRows, updateHeadline, verdictOf, verdictTarget, type Check, type Diagnostics, type Tone,
 } from '@/lib/system/model';
-import { problems, useProblemsPolling } from '@/lib/system/problems';
+import { problems } from '@/lib/system/problems';
 import {
   checkedAt, connections, diag, health, loadHealth, nodes, notifications, rights, sendTestAlert, update,
 } from '@/lib/system/store';
@@ -130,7 +130,6 @@ function UpdateGlance(): JSX.Element | null {
 
 /** «Здоровье» (6.9): вердикт, проверки, обновление, «Для специалистов». */
 export function HealthPanel(): JSX.Element {
-  useProblemsPolling();
   const online = connection.value !== 'offline';
   const ready = bootstrap.value !== null;
   const [openId, setOpenId] = useState<string | null>(null);

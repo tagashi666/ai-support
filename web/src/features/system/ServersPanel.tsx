@@ -9,6 +9,7 @@ import { loadNodes, nodes, refreshNodes, rights, saveAlias } from '@/lib/system/
 import { Button } from '@/ui/Button';
 import { InlineField } from '@/ui/InlineField';
 import s from './system.module.css';
+import { useInvalidate } from '@/lib/live/store';
 
 function State({ node }: { node: NodeRow }): JSX.Element {
   const state = nodeState(node);
@@ -120,6 +121,8 @@ function Loaded({ snapshot }: { snapshot: NodesSnapshot }): JSX.Element {
 /** «Серверы» (бывшая «Инфраструктура», 6.9): таблица на компьютере, карточки на телефоне; три разных текста: выключено, ошибка, пусто. */
 export function ServersPanel(): JSX.Element {
   useEffect(() => { void loadNodes(); }, []);
+  // L-4: новый опрос панели или псевдоним от коллеги.
+  useInvalidate('nodes', () => void loadNodes());
   const state = nodes.value;
   if (state === undefined) return <div class={s.panel} aria-busy="true"><div class={s.skeleton} key="skeleton" aria-hidden="true" /></div>;
   if (state === null || state.kind === 'error') {

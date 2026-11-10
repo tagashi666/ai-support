@@ -14,7 +14,7 @@ import { bootstrap, connection, liveCounts, liveItems, loading, syncedAt } from 
 import { isDesktop } from '@/lib/media';
 import { href, navigate, type Route } from '@/lib/router';
 import { now } from '@/lib/store/state';
-import { problems, problemTarget, problemText, useProblemsPolling } from '@/lib/system/problems';
+import { problems, problemTarget, problemText } from '@/lib/system/problems';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
@@ -103,7 +103,6 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
 
   const paused = pause.value;
   const quiet = !liveItems.value.some((item) => at - item.activity_at < DAY_MS);
-  useProblemsPolling();
   const issues = problems.value;
   const firstIssue = issues[0] ?? null;
   const lines = verdictLines({ waiting, ai: aiCount, paused: paused ? pauseText(paused.until, at) : null, quiet });

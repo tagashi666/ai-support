@@ -50,6 +50,7 @@ export async function loadTeamNames(force = false): Promise<TeamNamesResponse['p
 interface CollabHooks {
   draft(id: number, frame: Extract<ThreadFrame, { kind: 'draft' }>): void;
   release(id: number): Promise<boolean>;
+  intent(id: number, frame: Extract<ThreadFrame, { kind: 'intent' }>): void;
 }
 let hooks: CollabHooks | null = null;
 export function setCollabHooks(next: CollabHooks): void { hooks = next; }
@@ -58,6 +59,7 @@ export function setCollabHooks(next: CollabHooks): void { hooks = next; }
 export function onCollabFrame(frame: ThreadFrame): void {
   if (frame.kind === 'presence') setPresence(frame.conversation_id, frame.presence);
   else if (frame.kind === 'draft') hooks?.draft(frame.conversation_id, frame);
+  else if (frame.kind === 'intent') hooks?.intent(frame.conversation_id, frame);
   else if (frame.kind === 'handover_request') {
     const id = frame.conversation_id;
     let toastId = 0;

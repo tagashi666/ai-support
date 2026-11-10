@@ -19,6 +19,8 @@ export interface LocalPatch {
    * новых кадров (чужая печать, присутствие), пока запрос не ушёл (L-1).
    */
   held?: boolean;
+  /** Намерение коллеги (кадр intent, L-2), а не своё действие: своё его не перекрывает. */
+  foreign?: boolean;
 }
 
 export const patches = signal<ReadonlyMap<number, LocalPatch>>(new Map());

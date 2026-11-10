@@ -6,7 +6,7 @@
  * применяются сразу: здесь задержка опаснее. Отправка ответа — ярус 1.
  */
 import { computed, effect, signal } from '@preact/signals';
-import type { InboxItem, ReplyResponse, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
+import type { InboxItem, ReplyResponse, ThreadFrame, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { dismissToast, showToast, undoToast, UNDO_MS } from '@/lib/actions/toasts';
 import { ApiError, getJson, newClientId, readToken, sendJson, uploadFile } from '@/lib/live/api';
@@ -128,15 +128,32 @@ effect(() => {
   }
 });
 
+/**
+ * L-2: коллеги видят «Решено»/«Убрать» сразу, хотя запрос ждёт окна отмены:
+ * сервер рассылает намерение кадром intent. Без права или связи — просто тише.
+ */
+const announce = (id: number, action: 'resolve' | 'hide' | null): void => {
+  void post(`/api/conversations/${id}/intent`, { action }, action === null).catch(() => undefined);
+};
+/** L-1 на сервере: время последнего сообщения, которое видел оператор, — клиент написал позже, и сервер ответит 409. */
+const seenOf = (id: number): Record<string, number> => {
+  const at = serverItem(id)?.last?.at;
+  return at ? { seen: at } : {};
+};
+const clientWroteToast = (id: number): void => { showToast({ text: t('toast.clientWrote', { name: nameOf(id) }) }); };
+
 /** Отложенное действие яруса 0 со следом вне панели; conflict — снять, если клиент напишет в окне отмены. */
 function deferredAction(id: number, key: string, change: Partial<InboxItem>, body: Record<string, unknown>, text: string, removed = false, conflict = false): void {
   patch(id, change, removed, true);
   const taskKey = `${key}:${id}`;
+  const intent = conflict ? (removed ? 'hide' : 'resolve') : null;
+  const sent = conflict ? { ...body, ...seenOf(id) } : body;
+  if (intent) announce(id, intent);
   const cancel = deferUndoable({
     key: taskKey,
-    commit: async (keepalive) => { await state(id, body, keepalive); },
-    revert: () => { guarded.delete(id); dropPatch(id); },
-    failed: failToast,
+    commit: async (keepalive) => { await state(id, sent, keepalive); },
+    revert: () => { guarded.delete(id); dropPatch(id); if (intent) announce(id, null); },
+    failed: (err) => { if (codeOf(err) === 'client_wrote') { clientWroteToast(id); void syncThread(id); } else failToast(err); },
     started: () => release(id),
     done: () => { void syncThread(id); },
   }, text);
@@ -291,7 +308,33 @@ async function handOver(id: number): Promise<boolean> {
     return true;
   } catch (err) { failToast(err); return false; }
 }
-setCollabHooks({ draft: (id, frame) => draftSync.frame(id, frame.draft), release: handOver });
+/**
+ * L-2: коллега нажал «Решено»/«Убрать» — строка у остальных меняется сразу.
+ * Заплатка живёт до кадра строки новее (настоящее «Решено» или новое сообщение
+ * клиента) или до отмены; своё действие над той же строкой не перекрывается.
+ */
+function colleagueIntent(id: number, frame: Extract<ThreadFrame, { kind: 'intent' }>): void {
+  const own = patches.peek().get(id);
+  if (own?.held && !own.foreign) return;
+  if (!frame.intent) { if (own?.foreign) { foreign.delete(id); dropPatch(id); } return; }
+  const resolve = frame.intent.action === 'resolve';
+  foreign.set(id, lastSign(serverItem(id)));
+  // held: прочие кадры строки (прочтение, присутствие) намерение не снимают — только отмена,
+  // настоящее «Решено/Убрать» или новое сообщение клиента (эффект ниже).
+  setPatch(id, { base: serverItem(id)?.updated_at ?? 0, patch: resolve ? { status: 'resolved', state: 'done', section: 'done' } : {}, removed: !resolve, held: true, foreign: true });
+}
+const foreign = new Map<number, string>();
+effect(() => {
+  inbox.value;
+  for (const [id, sign] of foreign) {
+    const item = serverItem(id);
+    if (item && item.state !== 'done' && !clientWrote(sign, item)) continue;
+    foreign.delete(id);
+    if (patches.peek().get(id)?.foreign) dropPatch(id);
+  }
+});
+
+setCollabHooks({ draft: (id, frame) => draftSync.frame(id, frame.draft), release: handOver, intent: colleagueIntent });
 
 export async function copyLink(id: number): Promise<void> {
   try {
@@ -502,8 +545,12 @@ export function bulk(ids: readonly number[], action: BulkAction): void {
     else if (action === 'important') patch(id, { flags: { ...(item?.flags ?? { not_found: false, handoff: false }), important: true } }, false, true);
     else patch(id, {}, true, true);
     // Клиент написал в окне отмены — эту строку из пакета не закрываем (L-1).
-    if (action !== 'important') guard(id, () => dropPatch(id));
+    if (action !== 'important') guard(id, () => { dropPatch(id); announce(id, null); });
   }
+  const seen = new Map(ids.map((id) => [id, seenOf(id)]));
+  // Намерение коллегам (L-2) — для разумного пакета: каждое — отдельный запрос.
+  const told = action !== 'important' && n <= 20;
+  if (told) for (const id of ids) announce(id, action === 'resolve' ? 'resolve' : 'hide');
   const key = `bulk:${action}:${ids.join(',')}`;
   const body = BULK_BODY[action]!;
   const label = action === 'resolve' ? 'bulk.resolved' : action === 'important' ? 'bulk.important' : 'bulk.hidden';
@@ -515,14 +562,14 @@ export function bulk(ids: readonly number[], action: BulkAction): void {
       const live = ids.filter((id) => patches.peek().get(id)?.held);
       for (const id of live) release(id);
       for (const id of live) {
-        try { await state(id, body, keepalive); } catch { failed.push(id); dropPatch(id); }
+        try { await state(id, action === 'important' ? body : { ...body, ...seen.get(id) }, keepalive); } catch { failed.push(id); dropPatch(id); }
       }
       for (const id of live) if (!failed.includes(id)) void syncThread(id);
       if (failed.length) {
         showToast({ text: t('bulk.partial', { done: live.length - failed.length, n: live.length, names: failed.map(nameOf).filter(Boolean).join(', ') }), kind: 'error', ttl: null });
       }
     },
-    revert: () => { for (const id of ids) { guarded.delete(id); dropPatch(id); } },
+    revert: () => { for (const id of ids) { guarded.delete(id); dropPatch(id); if (told) announce(id, null); } },
     failed: failToast,
   }, t(label, { n }));
 }

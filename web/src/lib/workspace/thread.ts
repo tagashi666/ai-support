@@ -131,8 +131,9 @@ export function applyThreadFrame(state: ThreadState, frame: ThreadFrame): Thread
       return { ...state, status: state.status === 'ready' ? 'gone' : state.status };
     case 'presence':
       return state.head ? { ...state, head: { ...state.head, presence: frame.presence } } : state;
-    // Черновик и просьба передать — не про ленту (lib/workspace/collab.ts).
+    // Черновик, просьба передать и намерение коллеги — не про ленту (lib/workspace/collab.ts).
     case 'draft':
+    case 'intent':
     case 'handover_request':
       return state;
   }

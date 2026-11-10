@@ -4,7 +4,8 @@
  * кадр отрисовки (7.2): пачка событий — одна перерисовка.
  */
 import { computed, signal } from '@preact/signals';
-import type { BootstrapResponse, EventsResponse, InboxCounts, InboxResponse, LiveFrame } from '@shared/api-types';
+import { useEffect, useRef } from 'preact/hooks';
+import type { BootstrapResponse, EventsResponse, InboxCounts, InboxResponse, InvalidateScope, LiveFrame } from '@shared/api-types';
 import { ApiError, clearToken, getJson, readToken, saveToken } from './api';
 import { LiveClient, type ConnectionState, type Position } from './client';
 import { applyFrames, emptyInbox, mergeSnapshot, ordered, type InboxState } from './inbox';
@@ -51,6 +52,31 @@ let client: LiveClient | null = null;
 /** Кадр settings (10.4 п.7): раздел «Помощник» перечитывает настройки и говорит, кто менял. */
 let onSettingsFrame: ((frame: Extract<LiveFrame, { type: 'settings' }>) => void) | null = null;
 export function listenSettings(listener: typeof onSettingsFrame): void { onSettingsFrame = listener; }
+/** Когда сервер в последний раз прислал неполадки (кадр problems, L-3). */
+export const problemsAt = signal<number | null>(null);
+
+/**
+ * L-4: открытый раздел подписан на свой scope и перечитывает себя по кадру
+ * invalidate (GET с проверкой прав). Закрытые разделы ничего не грузят.
+ */
+const watchers = new Map<InvalidateScope, Set<{ current: () => void }>>();
+export function useInvalidate(scope: InvalidateScope, reload: () => void): void {
+  const ref = useRef(reload);
+  ref.current = reload;
+  useEffect(() => {
+    const set = watchers.get(scope) ?? new Set();
+    watchers.set(scope, set);
+    set.add(ref);
+    return () => { set.delete(ref); };
+  }, [scope]);
+}
+function invalidate(scope: InvalidateScope): void {
+  const set = watchers.get(scope);
+  if (set?.size) for (const ref of set) ref.current();
+  // Счётчик идей в рейке виден всегда: раздел закрыт — свежий bootstrap.
+  else if (scope === 'ideas' && bootstrap.peek()?.counts.ideas != null) void loadBootstrap().catch(() => undefined);
+}
+
 let snapshotEpoch = '';
 let queue: { frames: LiveFrame[]; counts?: InboxCounts }[] = [];
 let scheduled = false;
@@ -62,9 +88,16 @@ function flush(): void {
   const batch = queue;
   queue = [];
   let state = inbox.peek();
+  const stale = new Set<InvalidateScope>();
   for (const { frames, counts } of batch) {
     state = applyFrames(state, frames, counts);
     for (const frame of frames) {
+      if (frame.type === 'invalidate') stale.add(frame.scope);
+      if (frame.type === 'problems') {
+        const current = bootstrap.peek();
+        if (current) bootstrap.value = { ...current, problems: frame.problems, counts: { ...current.counts, problems: frame.problems.length } };
+        problemsAt.value = frame.at;
+      }
       if (frame.type !== 'settings') continue;
       const current = bootstrap.peek();
       if (current) {
@@ -78,6 +111,7 @@ function flush(): void {
   }
   inbox.value = state;
   syncedAt.value = Date.now();
+  for (const scope of stale) invalidate(scope);
 }
 
 function enqueue(frames: LiveFrame[], counts?: InboxCounts): void {
@@ -85,8 +119,10 @@ function enqueue(frames: LiveFrame[], counts?: InboxCounts): void {
   queue.push({ frames, ...(counts ? { counts } : {}) });
   if (scheduled) return;
   scheduled = true;
+  // L-7: в скрытой вкладке rAF не идёт, а таймеры тормозятся до 1 с и реже —
+  // заголовок «(N)», звук и уведомление ждали бы. Там применяем в микрозадаче.
   if (typeof requestAnimationFrame === 'function' && document.visibilityState === 'visible') requestAnimationFrame(flush);
-  else setTimeout(flush, 16);
+  else queueMicrotask(flush);
 }
 
 function expired(err: unknown): boolean {

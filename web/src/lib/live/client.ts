@@ -43,7 +43,7 @@ export interface LiveClientDeps {
   onState(state: ConnectionState): void;
   /** Кадр ленты открытого диалога (без seq). */
   onThread?(frame: ThreadFrame): void;
-  /** Сервер закрыл сокет из-за прав (1008): панель перечитывает bootstrap. */
+  /** Сервер закрыл сокет из-за прав (1008) или прислал кадр me (L-5): панель перечитывает bootstrap. */
   onPermission?(): void;
   createSocket?(url: string): SocketLike;
   now?(): number;
@@ -166,6 +166,7 @@ export class LiveClient {
       let frame: LiveFrame | ControlFrame | ThreadFrame;
       try { frame = JSON.parse(String(event.data)) as LiveFrame | ControlFrame | ThreadFrame; } catch { return; }
       if (frame.type === 'thread') { this.deps.onThread?.(frame); return; }
+      if (frame.type === 'me') { this.deps.onPermission?.(); return; }
       this.handle(frame);
     };
   }
@@ -195,7 +196,7 @@ export class LiveClient {
     this.offlineTimer = this.pollTimer = null;
   }
 
-  private handle(frame: LiveFrame | ControlFrame): void {
+  private handle(frame: LiveFrame | Exclude<ControlFrame, { type: 'me' }>): void {
     if (frame.type === 'hello' || frame.type === 'tick') {
       // Служебный кадр несёт текущий номер: отстали или сервер перезапущен — догнать.
       if (frame.epoch !== this.epoch || frame.seq > this.seq) void this.catchUp();

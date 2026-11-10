@@ -219,6 +219,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
   const items = useMemo(() => filterItems(liveItems.value.map((item) => patched(item, map)).filter((item): item is InboxItem => item !== null),
     filter, bootstrap.value?.me.id ?? ''), [liveItems.value, map, filter]);
   const byId = useMemo(() => new Map(items.map((item) => [String(item.id), item])), [items]);
+  const kept = useRef(new Map<string, InboxItem>());
   const server = useMemo<Placed[]>(() => items.map((item) => ({ id: String(item.id), section: item.section })), [items]);
   const [shown, setShown] = useState<Placed[]>(server);
   const pinned = openId !== null ? String(openId) : null;
@@ -228,7 +229,19 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
     const item = byId.get(id);
     return item !== undefined && item.section === 'mine' && isUrgentCode(item.reason.code);
   });
-  const list = useFrozenList({ pendingKey: pending.join(','), apply: () => setShown(target), shown });
+  /**
+   * Накопленное с сервера применяется в покое; строки, которые сервер убрал из
+   * вида (чужое «Решено», «Убрать»), уходят той же анимацией, что и свои (M-1).
+   */
+  const applyServerNow = (): void => {
+    // «Ушла из вида» — и снята сервером, и переехала в секцию, которой в этом виде нет («Решённые»).
+    const inView = (place: Placed): boolean => VIEW_SECTIONS[view].includes(place.section);
+    const next = new Set(target.filter(inView).map((place) => place.id));
+    const gone = shown.filter((place) => inView(place) && !next.has(place.id) && !leaving.has(place.id) && place.id !== pinned).map((place) => place.id);
+    if (gone.length && !reducedMotion.value) leave(gone);
+    else setShown(target);
+  };
+  const list = useFrozenList({ pendingKey: pending.join(','), apply: applyServerNow, shown });
 
   /**
    * Своё «Решено/Убрать» (M-1): строка ещё dur('exit') на месте и уходит
@@ -246,7 +259,9 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
 
   // Первый снимок — сразу; свои действия (заплатки) и смена фильтра — сразу (7.1 п.5).
   useEffect(() => { if (shown.length === 0 && server.length > 0) setShown(server); }, [server]);
-  useEffect(() => { if (leaving.size === 0) list.applyNow(); }, [map, filter, leaving.size === 0]);
+  // Намерение коллеги (L-2) — тоже заплатка, но чужая: ждёт покоя, как кадр сервера.
+  const ownKey = useMemo(() => [...map].filter(([, local]) => !local.foreign).map(([id, local]) => `${id}:${local.held ? 1 : 0}:${local.removed ? 1 : 0}:${JSON.stringify(local.patch)}`).join('|'), [map]);
+  useEffect(() => { if (leaving.size === 0) list.applyNow(); }, [ownKey, filter, leaving.size === 0]);
   useEffect(() => { list.hold(sheet !== null || selected !== null || swiped !== null); }, [sheet, selected !== null, swiped]);
 
   // Поиск на сервере в текущем виде (/api/inbox?q=); строки дальше обновляются живыми кадрами.
@@ -280,12 +295,19 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
   const changeFilter = (next: ListFilter): void => { setFilter(next); saveFilter(next); };
 
   const counts = liveCounts.value;
+  // Строка, которую сервер (или намерение коллеги) убрал, видна до применения в покое —
+  // с последними данными и пометкой «переехала» — и уходит анимацией выхода (L-2, M-1).
+  for (const [id, item] of byId) kept.current.set(id, item);
   const sections = VIEW_SECTIONS[view].map((section) => ({
     section,
     rows: shown.filter((entry) => entry.section === section)
-      .map((entry) => byId.get(entry.id))
+      .map((entry) => byId.get(entry.id) ?? kept.current.get(entry.id))
       .filter((item): item is InboxItem => item !== undefined),
   }));
+  useEffect(() => {
+    const live = new Set(shown.map((entry) => entry.id));
+    for (const id of kept.current.keys()) if (!live.has(id) && !byId.has(id)) kept.current.delete(id);
+  }, [shown, byId]);
   const shownIn = new Map(shown.map((entry) => [entry.id, entry.section]));
   const searchRows = found ? found.ids
     .map((id) => byId.get(String(id)) ?? patched(found.items.get(id)!, map))
@@ -369,7 +391,7 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
   const phone = !isSplit.value;
   const renderRow = (item: InboxItem): JSX.Element => (
     <WorkRow key={item.id} item={item} current={String(item.id) === pinned} tabIndex={String(item.id) === focusId ? 0 : -1}
-      leaving={leaving.has(String(item.id))} moved={!searchRows && !leaving.has(String(item.id)) && (shownIn.get(String(item.id)) ?? item.section) !== item.section}
+      leaving={leaving.has(String(item.id))} moved={!searchRows && !leaving.has(String(item.id)) && (!byId.has(String(item.id)) || (shownIn.get(String(item.id)) ?? item.section) !== item.section)}
       onKeyDown={onRowKey} actions={{
         onMenu: () => setSheet({ row: item.id }),
         selected: selected === null ? null : selected.has(item.id),

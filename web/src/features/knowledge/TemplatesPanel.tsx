@@ -6,6 +6,7 @@ import { loadTemplates, removeTemplate, rights, saveTemplate, templates, templat
 import { Button } from '@/ui/Button';
 import { Sheet, sheetStyles } from '@/ui/Sheet';
 import k from './knowledge.module.css';
+import { useInvalidate } from '@/lib/live/store';
 
 const norm = (text: string): string => text.toLowerCase().replace(/ё/g, 'е');
 
@@ -63,6 +64,7 @@ export function TemplatesPanel(): JSX.Element {
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Template | 'new' | null>(null);
   useEffect(() => { void loadTemplates(); }, []);
+  useInvalidate('templates', () => void loadTemplates());
   const manage = rights.value.templatesManage;
   const q = norm(query.trim());
   const list = (templates.value ?? []).filter((row) => !q || norm(`${row.shortcut} ${row.title} ${row.body}`).includes(q));
