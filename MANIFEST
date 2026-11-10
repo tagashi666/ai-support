@@ -181,6 +181,7 @@ web/e2e/connections.e2e.ts
 web/e2e/core.e2e.ts
 web/e2e/feed.e2e.ts
 web/e2e/helpers.ts
+web/e2e/instant.e2e.ts
 web/e2e/knowledge.e2e.ts
 web/e2e/list.e2e.ts
 web/e2e/load.e2e.ts
