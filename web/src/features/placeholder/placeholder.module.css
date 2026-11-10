@@ -31,3 +31,8 @@
 .item > svg:first-child { color: var(--text-2); }
 .item > svg:last-child { color: var(--text-3); }
 .itemText { flex: 1; }
+
+/* Под «Системой» в «Ещё»: первая неполадка или новая версия (этап 6). */
+.itemNote { display: block; font-size: var(--fs-small); font-weight: 500; color: var(--attention); }
+.itemNote[data-tone="error"] { color: var(--danger); }
+.itemNote[data-tone="update"] { color: var(--accent-text); }

@@ -8,7 +8,9 @@ import { announcement } from '@/lib/store/state';
 import { Toaster } from '@/ui/Toaster';
 import { LiveBar } from '@/features/live/LiveBar';
 import { SignIn } from '@/features/live/SignIn';
-import { mode, session } from '@/lib/live/store';
+import { mode, newVersion, session } from '@/lib/live/store';
+import { Button } from '@/ui/Button';
+import { t } from '@/i18n/ru';
 import { Workspace } from '@/features/workspace/Workspace';
 import { DeviceScreen } from '@/features/device/DeviceScreen';
 import { AssistantScreen } from '@/features/assistant/AssistantScreen';
@@ -19,6 +21,8 @@ import { Palette } from '@/features/palette/Palette';
 import { DemoBar } from './DemoBar';
 import { lazyScreen } from './lazy';
 import { useGlobalKeys } from './useGlobalKeys';
+import { useWaitSound } from './useWaitSound';
+import { startScreen } from '@/lib/device';
 import { Rail, TabBar } from './Nav';
 import s from './shell.module.css';
 
@@ -41,7 +45,9 @@ const TeamScreen = lazyScreen(() => import('@/features/team/TeamScreen').then((m
  */
 function resolveHome(current: Route, desktop: boolean): Route {
   if (current.name !== 'home') return current;
-  return desktop ? { name: 'chats', id: null } : { name: 'today' };
+  // «Это устройство → Начинать с» (6.12) сильнее умолчания по ширине.
+  const start = startScreen.value ?? (desktop ? 'chats' : 'today');
+  return start === 'chats' ? { name: 'chats', id: null } : { name: 'today' };
 }
 
 function sectionScreen(current: Extract<Route, { name: 'section' }>, live: boolean): JSX.Element {
@@ -57,6 +63,7 @@ function sectionScreen(current: Extract<Route, { name: 'section' }>, live: boole
 
 export function App(): JSX.Element {
   useGlobalKeys();
+  useWaitSound();
   const desktop = isDesktop.value;
   const live = mode.value === 'live';
   const current = resolveHome(route.value, desktop);
@@ -79,7 +86,15 @@ export function App(): JSX.Element {
       {live ? (inThread ? <span /> : <LiveBar />) : <DemoBar />}
       <div class={s.body}>
         {desktop && <Rail current={current} />}
-        <main class={s.main}>{live && !inThread && session.value !== 'expired' && <PauseStrip />}{screen}</main>
+        <main class={s.main}>
+          {live && newVersion.value && (
+            <div class={s.updateStrip} role="status">
+              <span>{t('shell.newVersion', { version: newVersion.value })}</span>
+              <Button size="sm" variant="primary" onClick={() => location.reload()}>{t('shell.reload')}</Button>
+            </div>
+          )}
+          {live && !inThread && session.value !== 'expired' && <PauseStrip />}{screen}
+        </main>
       </div>
       {!desktop && !inThread ? <TabBar current={current} /> : <span />}
       {live && session.value !== 'expired' && <><Palette /><KeysHelp /></>}

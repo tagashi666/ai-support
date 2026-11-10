@@ -4,6 +4,7 @@
  * действий и клавишами (7.4: «команды палитры и подсказки клавиш совпадают
  * с реестром»).
  */
+import type { SectionKey } from '@/lib/router';
 import type { Key } from '@/i18n/ru';
 import type { ActionId } from '@/lib/workspace/registry';
 
@@ -50,7 +51,7 @@ export const COMMANDS: readonly CommandDef[] = [
   { id: 'theme.auto', label: 'palette.themeAuto', group: 'actions', words: ['системная', 'тема'] },
   { id: 'keys', label: 'palette.keys', group: 'actions', keys: '?', words: ['горячие клавиши', 'сочетания'] },
   { id: 'classic', label: 'palette.classic', group: 'actions', words: ['старая панель', 'классика'] },
-  // Настройки: разделы, которых в новой панели ещё нет, открываются в классике (#v=<раздел>).
+  // Настройки: старые слова классики находят раздел новой панели (с этапа 6 — все разделы здесь).
   { id: 'set.assistant', label: 'palette.setAssistant', group: 'settings', words: ['предложка', 'тень', 'режим', 'ai', 'ии', 'ai-студия', 'промпт', 'модель'] },
   { id: 'set.lab', label: 'palette.setLab', group: 'settings', words: ['ai-студия', 'студия', 'проверка'] },
   { id: 'set.knowledge', label: 'palette.setKnowledge', group: 'settings', words: ['база знаний', 'kb', 'майнинг', 'идеи'] },
@@ -67,16 +68,13 @@ export const LETTERS: Readonly<Record<string, string>> = {
   KeyE: 'thread.resolve', KeyN: 'thread.note', KeyR: 'thread.reply', KeyT: 'thread.take', KeyI: 'thread.client', KeyX: 'list.select',
 };
 
-/** Раздел классики для команды настроек (#v=<раздел>). */
-export const CLASSIC_VIEW: Record<string, string> = {
-  'set.sla': 'queue', 'set.reports': 'stats',
-  'set.nodes': 'nodes', 'set.team': 'team', 'set.system': 'diagnostics', 'set.connections': 'settings',
-};
-
-/** Разделы, которые уже есть в новой панели: «Помощник» (этап 4) и «Знания» (этап 5). */
-export const NEXT_VIEW: Record<string, { key: 'assistant' | 'knowledge'; sub?: string }> = {
+/** Раздел новой панели для команды перехода и настроек (этапы 4–6). */
+export const NEXT_VIEW: Record<string, { key: SectionKey; sub?: string }> = {
   'go.assistant': { key: 'assistant' }, 'set.assistant': { key: 'assistant' }, 'set.lab': { key: 'assistant', sub: 'try' },
   'go.knowledge': { key: 'knowledge' }, 'set.knowledge': { key: 'knowledge' },
+  'set.sla': { key: 'reports', sub: 'sla' }, 'set.reports': { key: 'reports' },
+  'set.nodes': { key: 'system', sub: 'servers' }, 'set.team': { key: 'team' }, 'set.system': { key: 'system' },
+  'set.connections': { key: 'connections' },
 };
 
 const norm = (text: string): string => text.toLowerCase().replace(/ё/g, 'е').trim();

@@ -8,6 +8,7 @@ import { pausedUntil, waitingYou } from '@/lib/store/state';
 import { Avatar } from '@/ui/Avatar';
 import { Icon, type IconName } from '@/ui/Icon';
 import { roleLabel } from '@/lib/workspace/labels';
+import { systemDot } from '@/lib/system/problems';
 import s from './shell.module.css';
 
 type Target = 'today' | 'chats' | 'more' | SectionKey;
@@ -51,6 +52,8 @@ function NavLink({ item, current, class: cls, iconSize }: { item: Item; current:
   const waiting = live ? liveMine.value : waitingYou.value.length;
   const ideas = live ? bootstrap.value?.counts.ideas ?? 0 : 7;
   const paused = !live && pausedUntil.value !== null;
+  // «Система»: красная точка — неполадка, янтарная — есть что проверить, синяя — новая версия (5.1).
+  const dot = live && item.target === 'system' ? systemDot.value : null;
   return (
     <a
       class={cls}
@@ -67,8 +70,10 @@ function NavLink({ item, current, class: cls, iconSize }: { item: Item; current:
         {item.target === 'chats' && waiting > 0 && <span class={s.badge}>{waiting}</span>}
         {item.target === 'knowledge' && ideas > 0 && <span class={s.badge} data-tone="quiet">{ideas}</span>}
         {item.target === 'assistant' && paused && <span class={s.dot} />}
+        {dot && <span class={s.dot} data-tone={dot} />}
       </span>
       <span>{t(item.label)}</span>
+      {dot && <span class="visually-hidden">{t(dot === 'update' ? 'nav.systemUpdate' : dot === 'error' ? 'nav.systemError' : 'nav.systemWarn')}</span>}
     </a>
   );
 }

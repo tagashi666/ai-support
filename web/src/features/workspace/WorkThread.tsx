@@ -255,7 +255,6 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
           {!head.hidden && can('conv.hide') && <Option label={t('thread.hide')} hint={t('list.hideHint')} onSelect={() => { close(); hide(id); back(); }} />}
           {head.hidden && can('conv.unhide') && <Option label={t('thread.unhide')} onSelect={() => { close(); unhide(id); }} />}
           <Option label={t('thread.copyLink')} onSelect={() => { close(); void copyLink(id); }} />
-          <a class={w.menuLink} href={`/?ui=classic#c${id}`}>{t('thread.openInClassic')}</a>
         </div>
       </Sheet>
 

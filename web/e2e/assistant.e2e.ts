@@ -40,10 +40,20 @@ test('«Сегодня»: вердикт, «Ждут вас», помощник 
   const card = page.getByRole('region', { name: 'Ждут вас' });
   await expect(card.getByRole('button').first()).toBeVisible();
   await expect(page.getByRole('region', { name: 'Помощник' }).getByText('Подсказывает', { exact: true })).toBeVisible();
-  await expect(page.getByText(/всё работает/)).toBeVisible();
+  // В синтетике сервер «Франкфурт-2» не отвечает (этап 6): строка «Система» называет неполадку.
+  await expect(page.getByText(/Система:.*сервер Франкфурт-2 не отвечает/)).toBeVisible();
   await expectNoHorizontalScroll(page);
   await card.getByRole('button').first().click();
   await expect(page).toHaveURL(/\/next\/chats\/\d+$/);
+});
+
+test('«Сегодня»: неполадка в вердикте и в «Нужно внимание», «Подробнее» → «Система → Серверы»', async ({ page }) => {
+  await page.goto('/next/today');
+  await expect(page.getByText(/Есть неполадка: сервер Франкфурт-2 не отвечает\./)).toBeVisible();
+  const card = page.getByRole('region', { name: 'Нужно внимание' });
+  await expect(card.getByText('Сервер Франкфурт-2 не отвечает')).toBeVisible();
+  await card.getByRole('link', { name: 'Подробнее' }).click();
+  await expect(page).toHaveURL(/\/next\/system\/servers$/);
 });
 
 test('к осторожному — сразу и «Вернуть как было»; к смелому — через лист', async ({ page, request }) => {

@@ -3,6 +3,7 @@ import { t, type Key } from '@/i18n/ru';
 import { navigate, type SectionKey } from '@/lib/router';
 import { Button } from '@/ui/Button';
 import { Icon, type IconName } from '@/ui/Icon';
+import { problems, problemText, systemDot } from '@/lib/system/problems';
 import s from './placeholder.module.css';
 
 const NAMES: Record<SectionKey, Key> = {
@@ -44,7 +45,13 @@ export function MoreScreen(): JSX.Element {
           <li key={item.key}>
             <button type="button" class={s.item} onClick={() => navigate({ name: 'section', key: item.key })}>
               <Icon name={item.icon} />
-              <span class={s.itemText}>{t(NAMES[item.key])}</span>
+              <span class={s.itemText}>{t(NAMES[item.key])}
+                {item.key === 'system' && systemDot.value && (
+                  <span class={s.itemNote} data-tone={systemDot.value}>
+                    {problems.value[0] ? problemText(problems.value[0]) : t('nav.systemUpdate').replace(/[()]/g, '')}
+                  </span>
+                )}
+              </span>
               <Icon name="right" size={18} />
             </button>
           </li>

@@ -10,7 +10,7 @@ import { modLabel } from '@/lib/keys';
 import { navigate } from '@/lib/router';
 import { articleRoute } from '@/lib/knowledge/model';
 import { now } from '@/lib/store/state';
-import { CLASSIC_VIEW, COMMANDS, commandsOnly, matchCommand, readRecent, searchable, type Group } from '@/lib/palette/commands';
+import { COMMANDS, commandsOnly, matchCommand, readRecent, searchable, type Group } from '@/lib/palette/commands';
 import { commandAllowed, openThreadId, paletteOpen, runCommand } from '@/lib/palette/run';
 import { permissions } from '@/lib/workspace/actions';
 import s from './palette.module.css';
@@ -122,7 +122,7 @@ export function Palette(): JSX.Element {
       }
     }
     for (const def of commands.filter((entry) => entry.group === 'settings').slice(0, q ? LIMIT : 0)) {
-      list.push({ key: def.id, group: 'settings', label: t(def.label), ...(CLASSIC_VIEW[def.id] ? { hint: t('palette.inClassic') } : {}), run: () => runCommand(def.id) });
+      list.push({ key: def.id, group: 'settings', label: t(def.label), run: () => runCommand(def.id) });
     }
     return list;
   }, [query, result, inThread, perms, letterKeys.value]);

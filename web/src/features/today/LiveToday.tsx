@@ -14,6 +14,7 @@ import { bootstrap, connection, liveCounts, liveItems, loading, syncedAt } from 
 import { isDesktop } from '@/lib/media';
 import { href, navigate, type Route } from '@/lib/router';
 import { now } from '@/lib/store/state';
+import { problems, problemTarget, problemText, useProblemsPolling } from '@/lib/system/problems';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
 import { Card } from '@/ui/Card';
@@ -22,6 +23,8 @@ import { Row } from '@/ui/Row';
 import s from './today.module.css';
 
 const IDEAS: Route = { name: 'section', key: 'knowledge', sub: 'ideas' };
+const UPDATE: Route = { name: 'section', key: 'system', sub: 'update' };
+const systemRoute = (sub?: string): Route => (sub ? { name: 'section', key: 'system', sub } : { name: 'section', key: 'system' });
 
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -61,6 +64,8 @@ function WaitingRow({ item }: { item: InboxItem }): JSX.Element {
  * ответить, что было без вас, что делает помощник, что требует внимания,
  * всё ли работает. compact — сводка справа от списка, пока диалог не выбран.
  */
+const lowerFirst = (text: string): string => text.charAt(0).toLowerCase() + text.slice(1);
+
 export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Element {
   const at = now.value;
   const boot = bootstrap.value;
@@ -93,7 +98,12 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
 
   const paused = pause.value;
   const quiet = !liveItems.value.some((item) => at - item.activity_at < DAY_MS);
+  useProblemsPolling();
+  const issues = problems.value;
+  const firstIssue = issues[0] ?? null;
   const lines = verdictLines({ waiting, ai: aiCount, paused: paused ? pauseText(paused.until, at) : null, quiet });
+  // Вердикт, вторая фраза (6.1): «Есть неполадка: сервер Франкфурт-2 не отвечает.»
+  if (firstIssue?.severity === 'error') lines.push(t('today.problemLine', { text: lowerFirst(problemText(firstIssue)) }));
   const Heading = compact ? 'h2' : 'h1';
   const mode = aiMode.value;
   const lastAi: ActivityItem | undefined = day?.items.find((item) => item.kind === 'auto') ?? day?.items[0];
@@ -164,11 +174,15 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
     </Card>
   );
 
+  // Неполадки первыми (6.1, этап 6), затем идеи и новая версия — всё ведёт в новую панель.
   const attention = [
-    // «Разобрать» — в «Идеи из диалогов» новой панели (этап 5); «Что нового» — пока в классике (этап 6).
+    ...issues.map((issue) => {
+      const route = systemRoute(problemTarget(issue));
+      return { key: `problem-${issue.code}`, text: problemText(issue), action: t('problem.more'), href: href(route), route };
+    }),
     ideas ? { key: 'ideas', text: t('today.ideasLive', { n: ideas }), action: t('today.ideasAction'), href: href(IDEAS), route: IDEAS } : null,
-    update ? { key: 'update', text: t('today.versionLive', { version: update }), action: t('today.versionAction'), href: '/?ui=classic#v=diagnostics' } : null,
-  ].filter((item): item is { key: string; text: string; action: string; href: string; route?: Route } => item !== null);
+    update ? { key: 'update', text: t('today.versionLive', { version: update }), action: t('today.versionAction'), href: href(UPDATE), route: UPDATE } : null,
+  ].filter((item): item is { key: string; text: string; action: string; href: string; route: Route } => item !== null);
   const attentionCard = attention.length > 0 && (
     <Card class={s.card} label={t('today.attention')}>
       <h2 class={s.cardTitle}>{t('today.attention')} <span class={`${s.cardMeta} num`}>{attention.length}</span></h2>
@@ -184,12 +198,20 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
     </Card>
   );
 
-  const systemOk = health !== 'error' && linked;
+  const systemOk = health !== 'error' && linked && firstIssue === null;
   const system = (
     <p class={s.system}>
       <span class={systemOk ? s.okDot : s.warnDot} aria-hidden="true" />
       <span><strong>{t('today.system')}:</strong> {systemOk ? t('today.systemOk')
-        : linked ? t('today.systemCheck') : t('today.systemOffline', { time: syncedAt.value ? clock(syncedAt.value) : '—' })}</span>
+        : !linked ? t('today.systemOffline', { time: syncedAt.value ? clock(syncedAt.value) : '—' })
+          : firstIssue ? lowerFirst(problemText(firstIssue)) : t('today.systemCheck')}
+      {linked && firstIssue && can('diagnostics:read') && (
+        <> · <a class={s.link} href={href(systemRoute(problemTarget(firstIssue)))} onClick={(event) => {
+          if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+          event.preventDefault();
+          navigate(systemRoute(problemTarget(firstIssue)));
+        }}>{t('problem.more')}</a></>
+      )}</span>
     </p>
   );
 

@@ -23,6 +23,11 @@ export const ru = {
   'nav.device': 'Это устройство',
   'nav.classic': 'Вернуться к классической',
   'nav.main': 'Разделы',
+  'shell.newVersion': 'Вышла новая версия панели {version}',
+  'shell.reload': 'Обновить страницу',
+  'nav.systemError': '(есть неполадка)',
+  'nav.systemWarn': '(есть что проверить)',
+  'nav.systemUpdate': '(вышла новая версия)',
   'nav.role.owner': 'Владелец',
   'nav.back': 'Назад',
 
@@ -501,7 +506,6 @@ export const ru = {
   'palette.hiddenMark': 'убран из списка',
   'palette.openClient': 'открыть диалог и карточку',
   'palette.noConversation': 'диалогов нет',
-  'palette.inClassic': 'в классической панели',
   'palette.short': 'Ещё одну букву — поиск начинается с двух.',
   'palette.error': 'Поиск недоступен.',
   'palette.offline': 'Нет связи — работают только команды и недавнее.',
@@ -714,7 +718,6 @@ export const ru = {
   'thread.loadFailed': 'Не удалось загрузить переписку',
   'thread.notInBase': 'Клиента нет в базе подписчиков. Подробности — в панели «Клиент».',
   'thread.importantHint': 'Вам придёт уведомление в Telegram',
-  'thread.openInClassic': 'Открыть в классической',
   'who.handedLive': 'Передано вам: просит человека',
   'who.humanHold': 'Пауза до {time} · вы ответили',
   'who.notConfigured': 'Помощник не настроен',
@@ -1296,6 +1299,7 @@ export const ru = {
   'problem.jobFailed': 'Фоновая задача завершилась с ошибкой',
   'problem.other': 'Есть что проверить',
   'problem.more': 'Подробнее',
+  'today.problemLine': 'Есть неполадка: {text}.',
 
   // Мелкое поле (6.12): изменено → сохраняется → сохранено ✓ → ошибка у поля
   'field.saving': 'Сохраняется…',

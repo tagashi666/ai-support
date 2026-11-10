@@ -8,7 +8,7 @@ import { setTheme } from '@/lib/store/state';
 import { drafts, draftTick, giveBack, hide, itemOf, meKey, permissions, resolve, setImportant, take } from '@/lib/workspace/actions';
 import { availability } from '@/lib/workspace/registry';
 import { canPause, pause, pauseFor, resumeAssistant } from '@/lib/assistant/store';
-import { CLASSIC_VIEW, COMMANDS, NEXT_VIEW, type CommandDef } from './commands';
+import { COMMANDS, NEXT_VIEW, type CommandDef } from './commands';
 export { LETTERS } from './commands';
 
 export const paletteOpen = signal(false);
@@ -55,7 +55,6 @@ function focusComposer(mode: 'reply' | 'note', id: number): void {
 export function runCommand(id: string): void {
   const thread = openThreadId();
   const item = thread !== null ? itemOf(thread) : undefined;
-  const classic = CLASSIC_VIEW[id];
   const next = NEXT_VIEW[id];
   switch (id) {
     case 'thread.resolve':
@@ -88,7 +87,6 @@ export function runCommand(id: string): void {
     case 'classic': location.assign(`/?ui=classic${thread !== null ? `#c${thread}` : ''}`); return;
     default:
       if (next) navigate({ name: 'section', key: next.key, ...(next.sub ? { sub: next.sub } : {}) });
-      else if (classic) location.assign(`/?ui=classic#v=${classic}`);
   }
 }
 

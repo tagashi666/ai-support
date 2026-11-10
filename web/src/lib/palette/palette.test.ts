@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { codeLabel } from '@/lib/keys';
 import { ACTIONS } from '@/lib/workspace/registry';
-import { CLASSIC_VIEW, COMMANDS, commandsOnly, LETTERS, matchCommand, NEXT_VIEW, searchable } from './commands';
+import { COMMANDS, commandsOnly, LETTERS, matchCommand, NEXT_VIEW, searchable } from './commands';
 
 describe('палитра', () => {
   it('команды ссылаются на существующие действия реестра', () => {
@@ -20,8 +20,8 @@ describe('палитра', () => {
     }
   });
 
-  it('у команд настроек есть раздел, где они открываются', () => {
-    for (const def of COMMANDS.filter((entry) => entry.group === 'settings')) expect(CLASSIC_VIEW[def.id] ?? NEXT_VIEW[def.id], def.id).toBeTruthy();
+  it('у команд настроек есть раздел новой панели (этап 6: в классику не ведут)', () => {
+    for (const def of COMMANDS.filter((entry) => entry.group === 'settings')) expect(NEXT_VIEW[def.id], def.id).toBeTruthy();
   });
 
   it('находит по старым словам классики', () => {
