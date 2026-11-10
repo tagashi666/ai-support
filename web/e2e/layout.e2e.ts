@@ -40,7 +40,9 @@ test('2560: каждый раздел начинается у навигации
   }
 });
 
-test('подписи навигации и аккаунта не выходят за свои строки: 1024, 1440, 2560 (A1, A2)', async ({ page }) => {
+test('подписи навигации и аккаунта не выходят за свои строки: 1024, 1440, 2560 (A1, A2)', async ({ page }, info) => {
+  // Три ширины с перезагрузкой: Firefox и WebKit в контейнере CI заметно медленнее Chromium.
+  test.slow(info.project.name !== 'desktop');
   for (const [width, height] of [[1024, 768], [1440, 900], [2560, 1440]] as const) {
     await page.setViewportSize({ width, height });
     await page.goto('/next/today');
