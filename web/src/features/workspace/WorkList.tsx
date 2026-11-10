@@ -16,6 +16,7 @@ import { listOrder, paletteOpen, selectTick } from '@/lib/palette/run';
 import { navigate } from '@/lib/router';
 import { applyServer, pendingChanges, removeShown, type Placed } from '@/lib/store/order';
 import { now } from '@/lib/store/state';
+import { countRender, memoize } from '@/lib/perf';
 import { bulk, drafts, hide, markRead, permissions, resolve, setImportant, type BulkAction } from '@/lib/workspace/actions';
 import { gestures } from '@/lib/device';
 import { lockOf, offsetOf, PANEL_PX, settle, type SwipeLock } from '@/lib/hooks/swipe';
@@ -27,6 +28,7 @@ import { viewLabel } from '@/lib/workspace/labels';
 import { availability } from '@/lib/workspace/registry';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
+import { Collapse } from '@/ui/Collapse';
 import { Icon } from '@/ui/Icon';
 import { Row } from '@/ui/Row';
 import { Option, Sheet, sheetStyles } from '@/ui/Sheet';
@@ -34,7 +36,7 @@ import { Tabs } from '@/ui/Tabs';
 import s from '@/features/chats/chats.module.css';
 import { FilterSheet } from './FilterSheet';
 import w from './workspace.module.css';
-import { DUR, EASE, dur } from '@/ui/motion';
+import { DUR, EASE, dur, usePresence } from '@/ui/motion';
 
 type View = 'waiting' | 'open' | 'done';
 const VIEW_SECTIONS: Record<View, readonly Section[]> = {
@@ -75,13 +77,28 @@ const LONG_PRESS_MS = 500;
  * всегда (цель 44 px). На телефоне свайп влево открывает «Решено · Важно ·
  * Убрать · ⋯» (7.5), долгое нажатие — режим выбора. У каждого жеста есть кнопка.
  */
-function WorkRow({ item, current, tabIndex, onKeyDown, actions, leaving = false, moved = false }: {
+interface WorkRowProps {
   item: InboxItem; current: boolean; tabIndex: number; onKeyDown: (event: KeyboardEvent) => void; actions: RowActions;
   /** Своё «Решено/Убрать»: строка ещё на месте и уходит (M-1). */
   leaving?: boolean;
   /** Сервер уже унёс строку в другую секцию, а список заморожен: приглушить на месте (L-12). */
   moved?: boolean;
-}): JSX.Element {
+}
+
+/**
+ * Строка перерисовывается, только когда изменились её данные (R2 D): живой кадр в другой
+ * диалог не трогает остальные строки. Обработчики в actions — обёртки над актуальными
+ * (WorkList держит их в ref), поэтому их новые экземпляры не повод перерисовывать.
+ */
+const sameRow = (a: WorkRowProps, b: WorkRowProps): boolean =>
+  a.item === b.item && a.current === b.current && a.tabIndex === b.tabIndex && a.leaving === b.leaving && a.moved === b.moved
+  && a.onKeyDown === b.onKeyDown && a.actions.selected === b.actions.selected && a.actions.swiped === b.actions.swiped
+  && a.actions.swipeEnabled === b.actions.swipeEnabled && !a.actions.onImportant === !b.actions.onImportant && !a.actions.onHide === !b.actions.onHide;
+
+const WorkRowMemo = memoize(WorkRow, sameRow);
+
+function WorkRow({ item, current, tabIndex, onKeyDown, actions, leaving = false, moved = false }: WorkRowProps): JSX.Element {
+  countRender('row');
   const at = now.value;
   const reason = liveReasonView(item, at);
   const own = drafts.get(item.id);
@@ -97,6 +114,8 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions, leaving = false,
     if (!el) return;
     el.style.transition = animate && !reducedMotion.value ? `transform ${DUR.move}ms ${EASE.out}` : 'none';
     el.style.transform = px ? `translateX(${px}px)` : '';
+    // Слой — только пока строка сдвинута (R2 D: will-change на время движения, не на сотнях строк).
+    el.style.willChange = px ? 'transform' : '';
   };
   useEffect(() => { setOffset(actions.swiped ? -PANEL_PX : 0, true); }, [actions.swiped]);
 
@@ -362,6 +381,15 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
     );
   };
 
+  // Плашка «N обновлений» и панель выбора уходят с выходом (R2 C): пока гаснут — с прежним текстом.
+  const pillOn = pending.length > 0 && !searchRows;
+  const pill = usePresence(pillOn);
+  const pillLast = useRef({ n: 0, urgent: false });
+  if (pillOn) pillLast.current = { n: pending.length, urgent: pendingUrgent };
+  const pillCount = pillLast.current.n;
+  const pillUrgent = pillLast.current.urgent;
+  const bulkBar = usePresence(selected !== null);
+
   const rowItem = sheet && typeof sheet === 'object' && 'row' in sheet ? itemFor(sheet.row) : undefined;
   function itemFor(id: number): InboxItem | undefined { return byId.get(String(id)) ?? found?.items.get(id); }
   const close = (): void => setSheet(null);
@@ -389,18 +417,22 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
     setSelected(next);
   };
   const phone = !isSplit.value;
+  // Обработчики строк — из ref: строка (memo) может не перерисоваться, а звать надо актуальные.
+  const handlers = useRef({ onRowKey, selected, toggle, resolveRow });
+  handlers.current = { onRowKey, selected, toggle, resolveRow };
+  const rowKey = useMemo(() => (event: KeyboardEvent): void => handlers.current.onRowKey(event), []);
   const renderRow = (item: InboxItem): JSX.Element => (
-    <WorkRow key={item.id} item={item} current={String(item.id) === pinned} tabIndex={String(item.id) === focusId ? 0 : -1}
+    <WorkRowMemo key={item.id} item={item} current={String(item.id) === pinned} tabIndex={String(item.id) === focusId ? 0 : -1}
       leaving={leaving.has(String(item.id))} moved={!searchRows && !leaving.has(String(item.id)) && (!byId.has(String(item.id)) || (shownIn.get(String(item.id)) ?? item.section) !== item.section)}
-      onKeyDown={onRowKey} actions={{
+      onKeyDown={rowKey} actions={{
         onMenu: () => setSheet({ row: item.id }),
         selected: selected === null ? null : selected.has(item.id),
-        onSelect: () => toggle(item.id),
-        onLongPress: () => { setSwiped(null); setSelected(new Set([...(selected ?? []), item.id])); },
+        onSelect: () => handlers.current.toggle(item.id),
+        onLongPress: () => { setSwiped(null); setSelected(new Set([...(handlers.current.selected ?? []), item.id])); },
         swiped: swiped === item.id,
         onSwipe: (open) => setSwiped(open ? item.id : null),
         swipeEnabled: phone && gestures.value && can('conv.resolve') && item.state !== 'done',
-        onResolve: () => resolveRow(item),
+        onResolve: () => handlers.current.resolveRow(item),
         onImportant: can('conv.important') ? () => setImportant(item.id, !item.flags.important) : null,
         onHide: can('conv.hide') ? () => { leave([String(item.id)]); hide(item.id); } : null,
       }} />
@@ -541,26 +573,27 @@ export function WorkList({ openId, tutorialOpen = false }: { openId: number | nu
                   <Icon name="down" size={16} class={closed ? s.chevronClosed : s.chevron} />
                 </button>
               </h2>
-              {!closed && windowed(section, rows)}
+              <Collapse open={!closed}>{windowed(section, rows)}</Collapse>
             </section>
           );
         })}
       </div>
-      {pending.length > 0 && !searchRows && (
-        <button type="button" class={s.pill} data-tone={pendingUrgent ? 'attention' : undefined} title={t('chats.updatesLabel')}
+      {pill.mounted && (
+        <button type="button" class={s.pill} data-tone={pillUrgent ? 'attention' : undefined} title={t('chats.updatesLabel')}
+          data-state={pill.closing ? 'closing' : undefined} inert={pill.closing || undefined}
           onClick={() => { list.applyNow(); list.scroller.current?.scrollTo({ top: 0, behavior: reducedMotion.value ? 'auto' : 'smooth' }); }}>
-          <Icon name={pendingUrgent ? 'urgent' : 'arrowDown'} size={16} />
-          <span class="num">{t('chats.updates', { n: pending.length, updates: tn('plural.updates', pending.length) })}</span>
+          <Icon name={pillUrgent ? 'urgent' : 'arrowDown'} size={16} />
+          <span class="num">{t('chats.updates', { n: pillCount, updates: tn('plural.updates', pillCount) })}</span>
         </button>
       )}
 
-      {selected !== null && (
-        <div class={w.bulkBar} role="toolbar" aria-label={t('bulk.toolbar')}>
-          <span class="num" aria-live="polite">{t('bulk.count', { n: selected.size })}</span>
-          <Button variant="primary" size="sm" icon="check" disabled={!selected.size} onClick={() => runBulk('resolve')}>{t('thread.resolve')}</Button>
-          <Button variant="secondary" size="sm" disabled={!selected.size} onClick={() => runBulk('read')}>{t('bulk.read')}</Button>
-          {can('conv.important') && <Button variant="secondary" size="sm" disabled={!selected.size} onClick={() => runBulk('important')}>{t('swipe.important')}</Button>}
-          {can('conv.hide') && <Button variant="secondary" size="sm" disabled={!selected.size} onClick={() => runBulk('hide')}>{t('swipe.hide')}</Button>}
+      {bulkBar.mounted && (
+        <div class={w.bulkBar} role="toolbar" aria-label={t('bulk.toolbar')} data-state={bulkBar.closing ? 'closing' : undefined} inert={bulkBar.closing || undefined}>
+          <span class="num" aria-live="polite">{t('bulk.count', { n: selected?.size ?? 0 })}</span>
+          <Button variant="primary" size="sm" icon="check" disabled={!selected?.size} onClick={() => runBulk('resolve')}>{t('thread.resolve')}</Button>
+          <Button variant="secondary" size="sm" disabled={!selected?.size} onClick={() => runBulk('read')}>{t('bulk.read')}</Button>
+          {can('conv.important') && <Button variant="secondary" size="sm" disabled={!selected?.size} onClick={() => runBulk('important')}>{t('swipe.important')}</Button>}
+          {can('conv.hide') && <Button variant="secondary" size="sm" disabled={!selected?.size} onClick={() => runBulk('hide')}>{t('swipe.hide')}</Button>}
           <Button variant="quiet" size="sm" onClick={() => setSelected(null)}>{t('bulk.cancel')}</Button>
         </div>
       )}
