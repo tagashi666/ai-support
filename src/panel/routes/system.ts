@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { settingOverrides } from '../../core/settings.js';
+import { panelDefault, settingOverrides } from '../../core/settings.js';
+import { webAppBuilt } from '../webapp.js';
 import { config, version } from '../../config.js';
 import { runtime } from '../../core/settings.js';
 import type { ConnectionsResponse, ProblemsResponse } from '../../shared/api-types.js';
@@ -40,6 +41,9 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     level: runtime.notifyLevel,
     lastError: notifier?.state().lastError ?? null,
   }));
+
+  // «Система → Панель» (раздел 12): какая панель открывается на `/` и откуда это решение.
+  app.get('/api/system/panel', async () => ({ ...panelDefault(), built: webAppBuilt() }));
 
   // «Подключения» (6.11): то же, что в /api/settings, но без запроса в Telegram и без секретов.
   app.get('/api/connections', async (): Promise<ConnectionsResponse> => ({

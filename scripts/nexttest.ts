@@ -13,6 +13,7 @@ process.env.PANEL_TOKEN = 'next-0123456789abcdef';
 process.env.AI_MODE = 'off';
 process.env.LOG_LEVEL = 'error';
 process.env.PANEL_PORT = '8191';
+process.env.PANEL_UI = ''; // умолчание установки — из кода, а не из локального .env
 const dir = mkdtempSync(join(tmpdir(), 'next-'));
 process.env.DB_PATH = join(dir, 'd.db');
 process.env.KB_DIR = join(dir, 'kb');
@@ -82,8 +83,48 @@ console.log('\n[ новая панель: /next ]');
     check(`нет файла ${missing} — 404, а не оболочка и не чужой файл`, res.status === 404 && !text.includes('"name"'), res.status);
   }
 
-  const classic = await fetch(`${B}/`);
-  check('классика на / не изменилась', classic.status === 200 && (await classic.text()).includes('/app.js?v='));
+  console.log('\n[ панель по умолчанию: / (раздел 12, этап 8) ]');
+  const { config } = await import('../src/config.js');
+  const { applySettings, panelDefault } = await import('../src/core/settings.js');
+  const headers = { authorization: `Bearer ${process.env.PANEL_TOKEN}`, 'content-type': 'application/json' };
+  const root = (cookie?: string, path = '/') => fetch(`${B}${path}`, { redirect: 'manual', headers: cookie ? { cookie } : {} });
+  const isClassic = async (res: Response): Promise<boolean> => res.status === 200 && (await res.text()).includes('/app.js?v=');
+
+  const plain = await root();
+  check('без выбора — новая панель: 302 на /next/', plain.status === 302 && plain.headers.get('location') === '/next/', plain.status);
+  check('…и cookie не ставится: выбор остаётся за человеком', !plain.headers.get('set-cookie'));
+  const index = await root(undefined, '/index.html');
+  check('/index.html — так же, как /', index.status === 302 && index.headers.get('location') === '/next/');
+  check('cookie ui=classic — классика', await isClassic(await root('ui=classic')));
+  const asked = await root('ui=next', '/?ui=classic');
+  check('?ui=classic сильнее cookie и умолчания', /ui=classic/.test(asked.headers.get('set-cookie') ?? '') && await isClassic(asked));
+  const panel = await (await fetch(`${B}/api/system/panel`, { headers })).json() as { choice: string; source: string; built: boolean };
+  check('/api/system/panel: next по умолчанию, сборка есть', panel.choice === 'next' && panel.source === 'default' && panel.built, panel);
+  check('/api/system/panel без ключа — 401', (await fetch(`${B}/api/system/panel`)).status === 401);
+
+  const toClassic = await fetch(`${B}/api/settings`, { method: 'POST', headers, body: JSON.stringify({ uiDefault: 'classic' }) });
+  await toClassic.arrayBuffer();
+  check('«Система → Панель»: классика для всей установки', toClassic.status === 200 && panelDefault().source === 'panel', toClassic.status);
+  check('…/ без выбора — классика', await isClassic(await root()));
+  const chosen = await root('ui=next');
+  check('…а выбравший новую на своём устройстве уходит в неё', chosen.status === 302 && chosen.headers.get('location') === '/next/');
+  const bad = await fetch(`${B}/api/settings`, { method: 'POST', headers, body: JSON.stringify({ uiDefault: 'beta' }) });
+  await bad.arrayBuffer();
+  check('неизвестное значение uiDefault — 400', bad.status === 400, bad.status);
+
+  (config as { panelUi: string }).panelUi = 'next';
+  check('PANEL_UI=next сильнее настройки classic', (await root()).status === 302 && panelDefault().source === 'env');
+  (config as { panelUi: string }).panelUi = 'classic';
+  applySettings(store, { uiDefault: 'next' });
+  check('PANEL_UI=classic сильнее настройки next', await isClassic(await root()));
+  const locked = await fetch(`${B}/api/settings`, { method: 'POST', headers, body: JSON.stringify({ uiDefault: 'next' }) });
+  await locked.arrayBuffer();
+  check('при PANEL_UI настройку из панели не поменять — 409', locked.status === 409, locked.status);
+  (config as { panelUi: string }).panelUi = '';
+
+  process.env.PANEL_WEB_DIR = join(dir, 'empty');
+  check('без сборки новой панели / — классика при любом умолчании', await isClassic(await root()) && await isClassic(await root('ui=next')));
+  process.env.PANEL_WEB_DIR = join(dir, 'dist');
   const api = await fetch(`${B}/api/settings`);
   await api.arrayBuffer();
   check('данные по-прежнему только с ключом входа', api.status === 401, api.status);

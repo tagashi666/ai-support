@@ -38,6 +38,7 @@ import { createLiveHub, frameFor } from './live.js';
 import { countsFor } from './inbox.js';
 import { apiError } from './errors.js';
 import { registerWebApp, uiChoice, uiCookie, webAppBuilt } from './webapp.js';
+import { panelDefault } from '../core/settings.js';
 import { DENY_BY_DEFAULT, permissionFor, registeredApiRoutes, routeSample } from './permissions.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -208,11 +209,12 @@ export async function startWeb(deps: WebDeps) {
   });
 
   const sendPanel = (request: FastifyRequest, reply: FastifyReply) => {
-    // Выбор интерфейса на устройстве (раздел 12): `?ui=next` или сохранённый
-    // выбор отправляют в новую панель; `?ui=classic` остаётся здесь.
+    // Выбор интерфейса (раздел 12): `?ui=` в адресе → cookie `ui` на устройстве →
+    // умолчание установки (`PANEL_UI` или «Система → Панель», с 3.0 — новая).
+    // `?ui=classic` и сохранённая классика остаются здесь; без сборки — тоже.
     const { asked, saved } = uiChoice(request.query, request.headers.cookie);
     if (asked) reply.header('set-cookie', uiCookie(asked, request.protocol === 'https'));
-    if ((asked ?? saved) === 'next' && webAppBuilt()) {
+    if ((asked ?? saved ?? panelDefault().choice) === 'next' && webAppBuilt()) {
       return reply.code(302).header('cache-control', 'no-store').redirect('/next/');
     }
     reply.header('etag', PANEL_HTML_ETAG).header('cache-control', 'no-cache');

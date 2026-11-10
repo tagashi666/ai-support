@@ -132,7 +132,7 @@ try {
 
   console.log('Карта прав');
   for (const [method, url, expected] of [
-    ['GET', '/api/system/problems', 'diagnostics:read'], ['GET', '/api/system/notifications', 'settings:read'],
+    ['GET', '/api/system/problems', 'diagnostics:read'], ['GET', '/api/system/notifications', 'settings:read'], ['GET', '/api/system/panel', 'settings:read'],
     ['GET', '/api/connections', 'settings:read'], ['GET', '/api/team/names', 'conversation:read'],
     ['GET', '/api/nodes', 'settings:read'], ['POST', '/api/nodes/refresh', 'settings:nodes'], ['POST', '/api/nodes/alias', 'settings:nodes'],
   ] as const) check(`${method} ${url} → ${expected}`, permissionFor(method, url) === expected, permissionFor(method, url));

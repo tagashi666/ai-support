@@ -15,6 +15,7 @@ process.env.AI_MODE = 'suggest';
 process.env.AI_API_KEY = 'test-key-not-used';
 process.env.LOG_LEVEL = 'error';
 process.env.PANEL_PORT = '8196';
+process.env.PANEL_UI = ''; // умолчание установки — из кода, а не из локального .env
 const dir = mkdtempSync(join(tmpdir(), 'thread-'));
 process.env.DB_PATH = join(dir, 't.db');
 process.env.MEDIA_DIR = join(dir, 'media');
@@ -209,7 +210,9 @@ try {
   const classic = await fetch(`${B}/?ui=classic`, { redirect: 'manual', headers: { cookie: 'ui=next' } });
   check('?ui=classic — классика и cookie ui=classic', classic.status === 200 && /ui=classic/.test(classic.headers.get('set-cookie') ?? ''));
   const plain = await fetch(`${B}/`, { redirect: 'manual' });
-  check('без выбора — классика как раньше', plain.status === 200);
+  check('без выбора — новая панель по умолчанию (этап 8)', plain.status === 302 && plain.headers.get('location') === '/next/');
+  const chosenClassic = await fetch(`${B}/`, { redirect: 'manual', headers: { cookie: 'ui=classic' } });
+  check('сохранённая классика остаётся классикой', chosenClassic.status === 200);
   const back2 = await fetch(`${B}/next/chats?ui=classic`, { redirect: 'manual' });
   check('из новой панели ?ui=classic — в классику', back2.status === 302 && back2.headers.get('location') === '/?ui=classic');
 } finally {

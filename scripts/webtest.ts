@@ -6,6 +6,8 @@ process.env.BOT_TOKEN = '123:FAKE';
 process.env.PANEL_TOKEN = 'test-token-0123456789abcdef';
 process.env.AI_MODE = 'off';
 process.env.PANEL_PORT = '8099';
+// Классика на / и после сборки новой панели (с 3.0 по умолчанию открывается новая).
+process.env.PANEL_UI = 'classic';
 process.env.LOG_LEVEL = 'error';
 const dir = mkdtempSync(join(tmpdir(), 'web-'));
 process.env.DB_PATH = join(dir, 'w.db');

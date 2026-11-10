@@ -158,6 +158,10 @@ export const config = {
   panelUrl: optional('PANEL_URL'),
   // all — каждое сообщение и каждое действие AI, important — только то,
   // что требует вмешательства, minimal — передачи человеку и просрочки.
+  // Какая панель открывается на `/` у тех, кто сам не выбирал (план, раздел 12):
+  // next — новая (по умолчанию с 3.0), classic — классика для всей установки.
+  // Пусто — решает настройка «Система → Панель»; заданная переменная сильнее неё.
+  panelUi: (['classic', 'next'].includes(optional('PANEL_UI')) ? optional('PANEL_UI') : '') as '' | 'classic' | 'next',
   notifyLevel: (['all', 'important', 'minimal'].includes(optional('NOTIFY_LEVEL'))
     ? optional('NOTIFY_LEVEL')
     : 'all') as 'all' | 'important' | 'minimal',

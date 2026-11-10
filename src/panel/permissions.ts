@@ -69,7 +69,7 @@ export const permissionFor = (method: string, url: string): Permission | undefin
   if (url.startsWith('/api/nodes')) return 'settings:nodes';
   // Этап 6 (6.9, 6.11): неполадки — diagnostics:read; уведомления и подключения — чтение настроек.
   if (/^\/api\/system\/problems(?:\?|$)/.test(url)) return 'diagnostics:read';
-  if (/^\/api\/system\/notifications(?:\?|$)/.test(url)) return 'settings:read';
+  if (/^\/api\/system\/(?:notifications|panel)(?:\?|$)/.test(url)) return 'settings:read';
   if (/^\/api\/connections(?:\?|$)/.test(url)) return 'settings:read';
   if ((method === 'GET' || method === 'HEAD') && /^\/api\/team\/names(?:\?|$)/.test(url)) return 'conversation:read';
   // Присутствие во всех диалогах (10.6 п.6): мини-аватары «смотрит» в списке.

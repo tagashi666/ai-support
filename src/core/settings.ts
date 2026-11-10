@@ -36,6 +36,8 @@ export interface Runtime {
   bedolagaInterfaceMode: 'auto' | 'full' | 'lite';
   /** Ссылки, которые AI вставляет в ответ меткой [[link:key]]. */
   customerLinks: CustomerLink[];
+  /** Панель на `/` для всей установки (раздел 12); `PANEL_UI` в .env сильнее, см. panelDefault. */
+  uiDefault: 'classic' | 'next';
 }
 
 export const runtime: Runtime = {
@@ -59,6 +61,7 @@ export const runtime: Runtime = {
   bedolagaInterfaceKb: false,
   bedolagaInterfaceMode: 'auto',
   customerLinks: [],
+  uiDefault: 'next',
 };
 
 export interface ResolvedService {
@@ -171,6 +174,7 @@ const FIELDS: Record<keyof Runtime, Validator> = {
   },
   bedolagaInterfaceMode: (value) => (['auto', 'full', 'lite'] as const).find((mode) => mode === value),
   customerLinks: normalizeLinks,
+  uiDefault: (value) => (['classic', 'next'] as const).find((choice) => choice === value),
 };
 
 // Значения из .env до наложения настроек панели — чтобы показывать, что
@@ -252,4 +256,14 @@ export function applySettings(
 
   for (const setting of pending) log.info(`Настройка ${setting.key} → ${Array.isArray(setting.value) ? `${setting.value.length} шт.` : String(setting.value)}`);
   return { ok: true };
+}
+
+/**
+ * Панель на `/` для тех, кто на своём устройстве не выбирал (раздел 12):
+ * переменная `PANEL_UI` (аварийный рычаг администратора) сильнее настройки
+ * «Система → Панель», а та — умолчания `next`.
+ */
+export function panelDefault(): { choice: 'classic' | 'next'; source: 'env' | 'panel' | 'default' } {
+  if (config.panelUi) return { choice: config.panelUi, source: 'env' };
+  return { choice: runtime.uiDefault, source: runtime.uiDefault === ENV_DEFAULTS.uiDefault ? 'default' : 'panel' };
 }

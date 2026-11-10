@@ -9,6 +9,8 @@ process.env.BOT_TOKEN = '1:FakeForSecurityTests';
 process.env.PANEL_TOKEN = 'security-0123456789ab';
 process.env.AI_MODE = 'off';
 process.env.LOG_LEVEL = 'error';
+// Классика на / и после сборки новой панели (с 3.0 по умолчанию открывается новая).
+process.env.PANEL_UI = 'classic';
 process.env.PANEL_PORT = '8189';
 process.env.AI_ALLOWED_DOMAINS = 'example.com';
 const dir = mkdtempSync(join(tmpdir(), 'sec-'));

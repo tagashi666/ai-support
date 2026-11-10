@@ -39,6 +39,7 @@ export const PERMISSION_CATALOG = [
   { id: 'settings:alerts', group: 'Система', label: 'Проверять системные уведомления' },
   { id: 'settings:update', group: 'Система', label: 'Устанавливать обновления и откаты' },
   { id: 'settings:ai_tools', group: 'Система', label: 'Проверять модели и ключи AI' },
+  { id: 'setting:uiDefault', group: 'Система', label: 'Выбирать панель по умолчанию' },
   ...Object.entries({
     aiMode: 'Режим AI по умолчанию', requireKb: 'Ответы только по базе знаний',
     autoLearn: 'Обучение на закрытых диалогах',

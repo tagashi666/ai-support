@@ -25,6 +25,8 @@ export interface DevPanelOptions {
   token: string;
   /** Ещё столько выдуманных диалогов — нагрузочный e2e (план, 11.6: 500 диалогов). */
   extra?: number;
+  /** PANEL_UI установки — e2e «классика для всех» (раздел 12, этап 8). */
+  panelUi?: 'classic' | 'next';
 }
 
 export interface DevPanel {
@@ -125,6 +127,7 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
   process.env.LOG_LEVEL = 'error';
   process.env.PANEL_PORT = String(options.port);
   process.env.PANEL_HOST = '127.0.0.1';
+  if (options.panelUi) process.env.PANEL_UI = options.panelUi;
   process.env.DB_PATH = join(dir, 'd.db');
   process.env.MEDIA_DIR = join(dir, 'media');
   process.env.KB_DIR = join(dir, 'kb');

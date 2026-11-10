@@ -60,6 +60,9 @@ export function register(app: FastifyInstance, ctx: RouteContext): void {
     if (forbidden.length) {
       return reply.code(403).send({ error: `Нет права изменять настройки: ${forbidden.join(', ')}` });
     }
+    if (values['uiDefault'] !== undefined && config.panelUi) {
+      return reply.code(409).send({ error: 'Панель по умолчанию задана переменной PANEL_UI на сервере' });
+    }
     if (values['aiMode'] !== undefined && values['aiMode'] !== 'off' && !config.ai.apiKeys.length) {
       return reply.code(400).send({ error: 'Сначала задайте AI_API_KEY на сервере' });
     }
