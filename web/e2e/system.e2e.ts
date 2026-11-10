@@ -29,22 +29,23 @@ test.beforeEach(async ({ page }) => { await signIn(page); });
 
 test('вердикт с неполадкой «Франкфурт-2»; «Подробнее» ведёт в «Серверы»', async ({ page }) => {
   await page.goto('/next/system');
-  await expect(page.getByRole('heading', { name: 'Система', level: 1 })).toBeVisible();
-  await expect(page.getByText(/Есть что проверить: \d+/)).toBeVisible();
-  await expect(page.getByText(/Сервер Франкфурт-2 не отвечает/).first()).toBeVisible();
-  await expect(page.getByText(/проверено в \d\d:\d\d/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Проверить сейчас' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Система', level: 1 }), 'вердикт, шаг 1').toBeVisible();
+  // Сервер не отвечает — неполадка (как на «Сегодня»): «Есть неисправность»; при одних предупреждениях — «Есть что проверить: N».
+  await expect(page.getByRole('status').filter({ hasText: /Есть неисправность|Есть что проверить: \d+/ }), 'вердикт, шаг 2').toBeVisible();
+  await expect(page.getByText(/Сервер Франкфурт-2 не отвечает/).first(), 'вердикт, шаг 3').toBeVisible();
+  await expect(page.getByText(/проверено в \d\d:\d\d/), 'вердикт, шаг 4').toBeVisible();
+  await expect(page.getByRole('button', { name: 'Проверить сейчас' }), 'вердикт, шаг 5').toBeVisible();
   // «Что проверено»: красное и янтарное сверху — «Серверы» выше «Приложения».
   const names = await page.locator('button[aria-expanded]').filter({ hasText: /Приложение|Серверы/ }).allInnerTexts();
   expect(names[0]).toContain('Серверы');
   await expectNoHorizontalScroll(page);
 
   await page.getByRole('button', { name: 'Приложение' }).click();
-  await expect(page.getByText('Время работы')).toBeVisible();
+  await expect(page.getByText('Время работы'), 'вердикт, шаг 6').toBeVisible();
   await page.getByRole('button', { name: 'Подробнее' }).click();
   await expect(page).toHaveURL(/\/next\/system\/servers$/);
-  await expect(page.getByText('Франкфурт-2').first()).toBeVisible();
-  await expect(page.getByText(/отвечают, 1 выключен|отвечает, 1 выключен/)).toBeVisible();
+  await expect(page.getByText('Франкфурт-2').first(), 'вердикт, шаг 7').toBeVisible();
+  await expect(page.getByText(/отвечают, 1 выключен|отвечает, 1 выключен/), 'вердикт, шаг 8').toBeVisible();
 });
 
 test('«Для специалистов» раскрывается: настройки поверх файла, курсоры, счётчики', async ({ page }) => {

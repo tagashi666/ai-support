@@ -223,7 +223,7 @@ export function PeoplePanel({ item }: { item?: string }): JSX.Element {
             const seen = lastSeen.value[`op:${person.id}`];
             return (
               <li key={person.id}>
-                <button type="button" class={k.person} aria-label={tr('team.people.open', { name: person.name })} onClick={() => openPerson(person.id)}>
+                <button type="button" class={k.person} onClick={() => openPerson(person.id)}>
                   <Avatar name={person.name} />
                   <span class={k.personBody}>
                     <span class={k.personHead}>

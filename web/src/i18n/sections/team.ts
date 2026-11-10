@@ -35,7 +35,6 @@ export const dict = {
   'team.people.add': 'Добавить человека',
   'team.people.alone': 'Вы пока один.',
   'team.people.invite': 'Позвать коллегу',
-  'team.people.open': 'Открыть: {name}',
   'team.people.notFound': 'Такого человека нет в списке.',
 
   'team.card.title': '{name} · {role}',

@@ -39,9 +39,9 @@ test('«Люди»: владелец, Мария, Пётр и Софья с от
   const list = page.getByRole('list', { name: 'Люди' });
   await expect(list).toBeVisible();
   await expect(list.getByText('это вы')).toBeVisible();
-  await expect(list.getByRole('button', { name: 'Открыть: Мария' })).toContainText('доступ открыт');
-  await expect(list.getByRole('button', { name: 'Открыть: Пётр' })).toContainText('Руководитель');
-  const sophia = list.getByRole('button', { name: 'Открыть: Софья' });
+  await expect(list.getByRole('button', { name: /Мария/ })).toContainText('доступ открыт');
+  await expect(list.getByRole('button', { name: /Пётр/ })).toContainText('Руководитель');
+  const sophia = list.getByRole('button', { name: /Софья/ });
   await expect(sophia).toContainText('Наблюдатель');
   await expect(sophia).toContainText('доступ отключён');
   await expect(page.getByRole('tab', { name: 'Роли' })).toBeVisible();
@@ -91,7 +91,7 @@ test('добавить человека: ключ виден один раз; н
   expect(await page.content(), 'ключа нет в странице').not.toContain(first);
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain(first);
 
-  const row = page.getByRole('button', { name: `Открыть: ${name}` });
+  const row = page.getByRole('button', { name: new RegExp(name) });
   await expect(row).toContainText('Оператор');
   await expect(row).toContainText('доступ открыт');
 
