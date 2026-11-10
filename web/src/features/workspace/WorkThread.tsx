@@ -193,7 +193,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
 
   return (
     <div class={s.thread}>
-      <header class={s.head}>
+      <header class={s.head} key={id}>
         <div class={`${s.headTop} ${w.headTop}`}>
           {!isSplit.value && <Button variant="quiet" icon="back" label={t('nav.back')} class={s.back} onClick={back} />}
           <span class={s.headAvatar}><Avatar name={name} size="s" channel={channel} /></span>

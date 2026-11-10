@@ -1,4 +1,6 @@
 import type { JSX } from 'preact';
+import { Collapse } from '@/ui/Collapse';
+import { Segmented } from '@/ui/Segmented';
 import { useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import {
@@ -17,21 +19,6 @@ import { Sheet, sheetStyles } from '@/ui/Sheet';
 import s from './device.module.css';
 
 /** Сегменты с одним выбором (radiogroup): стрелки и Tab как у обычных радио. */
-function Segments<V extends string | number>({ label, value, items, onChange }: {
-  label: string; value: V; items: ReadonlyArray<{ value: V; label: string }>; onChange: (value: V) => void;
-}): JSX.Element {
-  return (
-    <div class={s.segments} role="radiogroup" aria-label={label}>
-      {items.map((item) => (
-        <label key={String(item.value)} class={s.segment} data-checked={item.value === value ? 'true' : 'false'}>
-          <input type="radio" name={label} checked={item.value === value} onChange={() => onChange(item.value)} />
-          <span>{item.label}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
 function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (value: boolean) => void }): JSX.Element {
   return (
     <label class={s.toggle}>
@@ -63,17 +50,17 @@ export function DeviceScreen(): JSX.Element {
         <h2 class={s.head} id="dev-look">{t('device.look')}</h2>
         <div class={s.row}>
           <span class={s.rowLabel}>{t('device.theme')}</span>
-          <Segments<Theme> label={t('device.theme')} value={theme.value} onChange={setTheme}
+          <Segmented<Theme> label={t('device.theme')} value={theme.value} onChange={setTheme}
             items={[{ value: 'auto', label: t('device.themeAuto') }, { value: 'light', label: t('device.themeLight') }, { value: 'dark', label: t('device.themeDark') }]} />
         </div>
         <div class={s.row}>
           <span class={s.rowLabel}>{t('device.textSize')}</span>
-          <Segments<TextSize> label={t('device.textSize')} value={textSize.value} onChange={setTextSize}
+          <Segmented<TextSize> label={t('device.textSize')} value={textSize.value} onChange={setTextSize}
             items={[{ value: 100, label: '100%' }, { value: 112, label: '112%' }, { value: 125, label: '125%' }]} />
         </div>
         <div class={s.row}>
           <span class={s.rowLabel}>{t('device.density')}</span>
-          <Segments<Density> label={t('device.density')} value={density.value} onChange={setDensity}
+          <Segmented<Density> label={t('device.density')} value={density.value} onChange={setDensity}
             items={[{ value: 'comfortable', label: t('device.densityComfortable') }, { value: 'compact', label: t('device.densityCompact') }]} />
         </div>
         <p class={s.hint}>{t('device.densityHint')}</p>
@@ -82,23 +69,23 @@ export function DeviceScreen(): JSX.Element {
         <h2 class={s.head} id="dev-work">{t('device.work')}</h2>
         <div class={s.row}>
           <span class={s.rowLabel}>{t('device.start')}</span>
-          <Segments<'auto' | 'today' | 'chats'> label={t('device.start')} value={startScreen.value ?? 'auto'}
+          <Segmented<'auto' | 'today' | 'chats'> label={t('device.start')} value={startScreen.value ?? 'auto'}
             onChange={(value) => setStartScreen(value === 'auto' ? null : value)}
             items={[{ value: 'auto', label: t('device.startAuto') }, { value: 'today', label: t('device.startToday') }, { value: 'chats', label: t('device.startChats') }]} />
         </div>
         <p class={s.hint}>{t('device.startHint')}</p>
         <div class={s.row}>
           <span class={s.rowLabel}>{t('device.undo')}</span>
-          <Segments<UndoSeconds> label={t('device.undo')} value={undoSeconds.value} onChange={(value) => setUndo(value)}
+          <Segmented<UndoSeconds> label={t('device.undo')} value={undoSeconds.value} onChange={(value) => setUndo(value)}
             items={[{ value: 0, label: t('device.undoNone') }, { value: 5, label: t('device.seconds', { n: 5 }) }, { value: 10, label: t('device.seconds', { n: 10 }) }]} />
         </div>
-        {undoSeconds.value > 0 && (
+        <Collapse open={undoSeconds.value > 0}>
           <div class={s.row}>
             <span class={s.rowLabel}>{t('device.undoFor')}</span>
-            <Segments<UndoScope> label={t('device.undoFor')} value={undoScope.value} onChange={(value) => setUndo(undoSeconds.peek(), value)}
+            <Segmented<UndoScope> label={t('device.undoFor')} value={undoScope.value} onChange={(value) => setUndo(undoSeconds.peek(), value)}
               items={[{ value: 'drafts', label: t('device.undoDrafts') }, { value: 'all', label: t('device.undoAll') }]} />
           </div>
-        )}
+        </Collapse>
         <Toggle label={t('device.enterSends', { enter: 'Enter' })} hint={t('device.enterSendsHint', { enter: 'Enter', shift: 'Shift', mod: isMac ? '⌘' : 'Ctrl' })}
           checked={enterSends.value} onChange={setEnterSends} />
         <Toggle label={t('device.sound')} hint={t('device.soundHint')} checked={waitSound.value} onChange={(on) => { setWaitSound(on); if (on) playWaitSound(); }} />

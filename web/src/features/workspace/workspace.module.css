@@ -171,7 +171,7 @@
 
 /* Свайп влево по строке (7.5) и режим выбора (6.2) */
 .rowWrap { overflow: hidden; touch-action: pan-y; }
-.rowFront { position: relative; background: var(--surface); z-index: 1; will-change: transform; }
+.rowFront { position: relative; background: var(--surface); z-index: 1; }
 .swipePanel { position: absolute; inset: 0 0 0 auto; width: 216px; display: flex; z-index: 0; }
 .swipeBtn { flex: 1; min-height: 44px; border: 0; background: var(--surface-sunken); color: var(--text); font: inherit; font-size: var(--fs-small); font-weight: 600; cursor: pointer; }
 .swipeBtn[data-tone="ok"] { background: var(--ok); color: var(--bg); }
@@ -190,6 +190,7 @@
 .bulkBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-top: 1px solid var(--border); background: var(--surface); position: sticky; bottom: 0; z-index: 2; }
 /* Панель выбора въезжает снизу, а не появляется скачком (M-10). */
 .bulkBar { animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out); }
+.bulkBar[data-state="closing"] { animation: var(--kf-sink-out) var(--dur-exit) var(--ease-exit) forwards; }
 .bulkBar > span { margin-right: auto; font-size: var(--fs-body); font-weight: 600; }
 .viewerActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
 .why { display: grid; gap: var(--s2); font-size: var(--fs-body); line-height: var(--lh-body); }
@@ -203,3 +204,9 @@
 .rowPresence { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%;
   display: grid; place-items: center; font-size: var(--fs-small); font-weight: 600; line-height: 1;
   background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--surface); }
+
+/* Движение (R2 C): появляющиеся строки поля ответа — прозрачностью; выбор строк и шаблоны — переходом цвета. */
+.tools, .quoteLine, .templateSearch, .templateList { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.check { transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
+.template { transition: background-color var(--dur-press) var(--ease-out); }
+.fileCard { transition: color var(--dur-fast) var(--ease-out); }

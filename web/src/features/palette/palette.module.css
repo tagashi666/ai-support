@@ -14,6 +14,7 @@
 .palette::backdrop { background: var(--scrim); }
 .palette[open]::backdrop { animation: var(--kf-fade-in, ui-fade-in) var(--dur-fast, 160ms) var(--ease-out, ease-out); }
 /* Выход — переходом после close(), как у листа (ui.module.css). */
+.palette[open][data-state="closing"] { animation: var(--kf-pop-out) var(--dur-exit) var(--ease-exit) forwards; }
 @supports (overlay: auto) {
   .palette, .palette::backdrop {
     transition: opacity var(--dur-exit, 160ms) var(--ease-exit, ease-in), transform var(--dur-exit, 160ms) var(--ease-exit, ease-in),
@@ -50,3 +51,4 @@
 .keyRow { display: flex; justify-content: space-between; gap: var(--s3); font-size: var(--fs-body); padding: var(--s1) 0; border-bottom: 1px solid var(--border); }
 .keyRow dd { margin: 0; white-space: nowrap; }
 .keyHead { margin-top: var(--s2); font-size: var(--fs-small); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-2); }
+.option { transition: background-color var(--dur-press) var(--ease-out), box-shadow var(--dur-press) var(--ease-out); }

@@ -4,7 +4,7 @@
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s3); margin: 0; }
 .tile { display: grid; gap: var(--s1); padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--border); }
 .tile dt { color: var(--text-2); }
-.tile dd { margin: 0; font-size: var(--fs-title); font-weight: 600; }
+.tile dd { margin: 0; font-size: var(--fs-title); font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile[data-tone="attention"] dd { color: var(--attention); }
 .hint { color: var(--text-2); max-width: 46ch; }
 .code { color: var(--text-3); font-size: var(--fs-small); }

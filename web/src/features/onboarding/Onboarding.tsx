@@ -1,4 +1,6 @@
 import type { JSX } from 'preact';
+import { Collapse } from '@/ui/Collapse';
+import { dur, usePresence } from '@/ui/motion';
 import { useEffect, useState } from 'preact/hooks';
 import { tr } from '@/i18n/sections/onboarding';
 import { isMac } from '@/lib/keys';
@@ -111,7 +113,7 @@ function Hints(): JSX.Element {
           <span id="onb-hint" class={`${s.counter} num`}>{tr('onb.hint.counter', { n: index + 1, total: HINTS.length })}</span>
           <Button variant="quiet" size="sm" icon="close" label={tr('onb.hint.close')} onClick={finish} />
         </div>
-        <p class={s.hintText}>{tr(HINTS[index]!, { keys: isMac ? '⌘K' : 'Ctrl+K' })}</p>
+        <p class={s.hintText} key={index}>{tr(HINTS[index]!, { keys: isMac ? '⌘K' : 'Ctrl+K' })}</p>
         <div class={s.hintActions}>
           <Button variant="primary" size="sm" onClick={() => (last ? finish() : setIndex(index + 1))}>{tr(last ? 'onb.hint.done' : 'onb.hint.next')}</Button>
         </div>
@@ -129,12 +131,16 @@ function Hints(): JSX.Element {
 export function TodayOnboarding({ dialogs }: { dialogs: number }): JSX.Element | null {
   const boot = bootstrap.value;
   const state = onboarding.value;
+  const owner = Boolean(boot && setsUp(boot.me));
+  // «Скрыть» сворачивает блок (R2 C), а не убирает его скачком.
+  const welcome = Boolean(boot) && owner && !state.welcomeDone
+    && isEmptySystem(factsFrom(boot!, { articles: null, people: null, colleagueSkipped: false, tutorial: false }), dialogs);
+  const shown = Boolean(boot) && (owner ? !state.checklistHidden : !state.hintsDone);
+  const { mounted } = usePresence(shown, dur('move'));
   if (!boot) return null;
-  if (setsUp(boot.me)) {
-    const facts = factsFrom(boot, { articles: null, people: null, colleagueSkipped: false, tutorial: false });
-    if (!state.welcomeDone && isEmptySystem(facts, dialogs)) return <Welcome />;
-    return state.checklistHidden ? null : <Checklist />;
-  }
-  return state.hintsDone ? null : <Hints />;
+  if (welcome) return <Welcome />;
+  if (!mounted) return null;
+  if (owner) return <Collapse open={shown}><Checklist /></Collapse>;
+  return <Collapse open={shown}><Hints /></Collapse>;
 }
 

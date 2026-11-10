@@ -3,11 +3,11 @@
 .welcomeTitle { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; color: var(--text); }
 .welcomeActions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 
-.list { display: grid; gap: var(--s3); margin-bottom: var(--s4); }
+.list { display: grid; gap: var(--s3); margin-bottom: var(--s4); max-width: 52rem; }
 .listTitle { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
 .steps { display: grid; gap: var(--s1); list-style: none; padding: 0; margin: 0; }
 .step { display: flex; align-items: center; gap: var(--s2); min-height: 44px; flex-wrap: wrap; }
-.mark { width: 1.25rem; flex: none; text-align: center; color: var(--text-3); }
+.mark { width: 1.25rem; flex: none; text-align: center; color: var(--text-3); transition: color var(--dur-fast) var(--ease-out); }
 .step[data-state="done"] .mark, .step[data-state="skipped"] .mark { color: var(--ok); }
 .stepText { flex: 1 1 14rem; min-width: 0; }
 .step[data-state="done"] .stepText { color: var(--text-2); }
@@ -21,7 +21,7 @@
   background: var(--accent-soft); color: var(--text); max-width: 36rem; }
 .hintHead { display: flex; align-items: center; justify-content: space-between; }
 .counter { color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
-.hintText { font-size: var(--fs-card); line-height: var(--lh-card); }
+.hintText { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); font-size: var(--fs-card); line-height: var(--lh-card); }
 .hintActions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 .role { color: var(--text-2); margin-bottom: var(--s4); max-width: 36rem; }
 
@@ -32,6 +32,7 @@
 .tasks { display: grid; gap: var(--s1); }
 .tasksTitle { font-size: var(--fs-small); font-weight: 600; color: var(--text-2); }
 .taskList { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); }
+.taskList li { transition: color var(--dur-fast) var(--ease-out); }
 .taskList li[data-done="true"] { color: var(--ok); }
 .tutFeed { display: grid; gap: var(--s2); }
 .tutNote { padding: var(--s3) var(--pad-card); border-radius: var(--r-card); background: var(--note-bg); color: var(--note-text); }
@@ -42,6 +43,7 @@
 .tutComposer > :last-child { justify-self: end; }
 .tutModes { display: flex; gap: var(--s1); }
 .tutModes button { min-height: 32px; padding: 0 var(--s3); border: 0; border-radius: var(--r-pill); background: transparent; color: var(--text-2); font: inherit; cursor: pointer; }
-.tutModes button[aria-selected="true"] { background: var(--selected); color: var(--text); font-weight: 600; }
+.tutModes { --ind-bg: var(--selected); --shadow-ind: none; --r-ind: var(--r-pill); }
+.tutModes button[aria-selected="true"] { color: var(--text); }
 @media (pointer: coarse) { .tutModes button { min-height: 44px; } }
 .tutFoot { display: flex; flex-wrap: wrap; gap: var(--s2); justify-content: space-between; }

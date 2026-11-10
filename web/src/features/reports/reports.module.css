@@ -14,17 +14,13 @@
 .empty { padding: var(--s6) 0; }
 
 /* Период */
-.filters { justify-self: start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
-.filter { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s3); font-size: var(--fs-body); cursor: pointer; }
-.filter + .filter { border-left: 1px solid var(--border); }
-.filter input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-.filter[data-checked="true"] { background: var(--selected); color: var(--accent-text); font-weight: 600; }
-.filter:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .select { min-height: 44px; padding: 0 var(--s3); border: 1px solid var(--control-border); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-body); }
 
 /* Меню «⋯» */
 .menuWrap { position: relative; }
 .menu { position: absolute; right: 0; top: calc(100% + var(--s1)); z-index: 5; min-width: 14rem; padding: var(--s1); border: 1px solid var(--border); border-radius: var(--r-control); background: var(--surface); box-shadow: var(--shadow-pop); }
+.menu { transform-origin: top right; animation: var(--kf-pop-in) var(--dur-fast) var(--ease-out); }
+.menu[data-state="closing"] { animation: var(--kf-pop-out) var(--dur-exit) var(--ease-exit) forwards; }
 .menuItem { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0 var(--s3); border: 0; border-radius: var(--r-tag); background: none; color: var(--danger); font: inherit; font-size: var(--fs-body); text-align: left; cursor: pointer; }
 .menuItem:hover { background: var(--surface-hover); }
 
@@ -48,8 +44,10 @@
 .charts { display: grid; gap: var(--s4); }
 @media (min-width: 1024px) { .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .bars { display: flex; align-items: flex-end; gap: 2px; height: 5rem; }
-.bar { flex: 1 1 0; min-width: 2px; background: var(--accent); border-radius: 2px 2px 0 0; }
-.bar[data-zero="true"] { background: var(--border); height: 2px !important; }
+/* Высота столбца — transform: scaleY от низа (R2 C): смена периода едет переходом, без анимации height. */
+.bar { flex: 1 1 0; min-width: 2px; height: 100%; background: var(--accent); border-radius: 2px 2px 0 0; transform-origin: 50% 100%;
+  transition: transform var(--dur-move) var(--ease-move); }
+.bar[data-zero="true"] { background: var(--border); height: 2px; }
 .axis { display: flex; justify-content: space-between; color: var(--text-2); font-size: var(--fs-small); }
 .attention { display: flex; flex-wrap: wrap; gap: 0 var(--s4); }
 .facts { display: grid; gap: var(--s1); margin: 0; padding: 0; list-style: none; font-size: var(--fs-body); line-height: var(--lh-body); }
@@ -95,3 +93,9 @@
 
 /* Ширина блоков, а не раздела (R2 A4). */
 .muted, .hint { max-width: 72ch; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.inner > *, .panel > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

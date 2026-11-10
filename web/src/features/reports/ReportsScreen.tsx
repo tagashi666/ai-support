@@ -1,4 +1,6 @@
 import type { JSX } from 'preact';
+import { usePresence } from '@/ui/motion';
+import { Segmented } from '@/ui/Segmented';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { tr } from '@/i18n/sections/reports';
@@ -41,11 +43,12 @@ function MoreMenu({ onReset }: { onReset: () => void }): JSX.Element {
     document.addEventListener('keydown', esc);
     return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc); };
   }, [open]);
+  const menu = usePresence(open);
   return (
     <div class={r.menuWrap} ref={box}>
       <Button variant="quiet" icon="more" label={tr('reports.more')} aria-haspopup="menu" aria-expanded={open ? 'true' : 'false'} onClick={() => setOpen(!open)} />
-      {open && (
-        <div class={r.menu} role="menu" aria-label={tr('reports.more')}>
+      {menu.mounted && (
+        <div class={r.menu} role="menu" aria-label={tr('reports.more')} data-state={menu.closing ? 'closing' : undefined} inert={menu.closing || undefined}>
           <button type="button" role="menuitem" class={r.menuItem} onClick={() => { setOpen(false); onReset(); }}>{tr('reports.reset.menu')}</button>
         </div>
       )}
@@ -98,14 +101,8 @@ export function ReportsScreen({ sub }: { sub?: string; item?: string }): JSX.Ele
                 items={tabs.map((value) => ({ value, label: tr(TAB_LABEL[value]) }))} />
             </div>
             <div class={r.toolbar}>
-              <div class={r.filters} role="radiogroup" aria-label={tr('reports.period')}>
-                {PERIODS.map((value) => (
-                  <label key={value} class={r.filter} data-checked={days === value ? 'true' : 'false'}>
-                    <input type="radio" name="reports-period" checked={days === value} onChange={() => setPeriod(value)} />
-                    {tr('reports.periodDays', { n: value })}
-                  </label>
-                ))}
-              </div>
+              <Segmented label={tr('reports.period')} name="reports-period" value={days} onChange={setPeriod}
+                items={PERIODS.map((value) => ({ value, label: tr('reports.periodDays', { n: value }) }))} />
               {since !== undefined && tab !== 'sla' && (
                 <span class={r.since}>{tr('reports.since', { date: dayMonth(since) })}</span>
               )}

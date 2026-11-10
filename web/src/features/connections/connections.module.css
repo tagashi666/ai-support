@@ -55,7 +55,7 @@
 .runMark { flex: none; width: 22px; height: 22px; border-radius: var(--r-pill); border: 2px solid var(--control-border); display: grid; place-items: center; font-size: var(--fs-small); }
 .runItem[data-state="done"] { color: var(--text); }
 .runItem[data-state="done"] .runMark { background: var(--ok); border-color: var(--ok); color: var(--surface); }
-.runItem[data-state="current"] { color: var(--text); font-weight: 600; }
+.runItem[data-state="current"] { color: var(--text); }
 .runItem[data-state="current"] .runMark { border-color: var(--accent); }
 .failBox { display: grid; gap: var(--s3); padding: var(--s3); border: 1px solid var(--danger); border-radius: var(--r-control); }
 .okBox { font-size: var(--fs-card); font-weight: 600; color: var(--ok); }
@@ -83,3 +83,12 @@
 
 /* Ширина блоков, а не раздела (R2 A4). */
 .muted, .hint { max-width: 72ch; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.inner > *, .panel > *, .grid > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+/* Мастер (R2 C): шаг сменяет шаг прозрачностью; отметки выполнения и выбор — переходом цвета. */
+.form, .failBox, .okBox { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.pickItem, .runItem, .runMark, .state .dot { transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }

@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { Segmented } from '@/ui/Segmented';
 import { useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { tr } from '@/i18n/sections/reports';
@@ -77,14 +78,8 @@ export function SlaPanel(): JSX.Element {
           {rows.data && <span class={r.hint}>{tr('reports.now.counts', { all: rows.data.conversations.length, late: overdueCount(rows.data.conversations) })}</span>}
         </div>
         <div class={r.bar2}>
-          <div class={r.filters} role="radiogroup" aria-label={tr('reports.now.filter')}>
-            {MODES.map((mode) => (
-              <label key={mode.value} class={r.filter} data-checked={filter.mode === mode.value ? 'true' : 'false'}>
-                <input type="radio" name="queue-mode" checked={filter.mode === mode.value} onChange={() => setFilter({ ...filter, mode: mode.value })} />
-                {tr(mode.label)}
-              </label>
-            ))}
-          </div>
+          <Segmented label={tr('reports.now.filter')} name="queue-mode" value={filter.mode} onChange={(mode) => setFilter({ ...filter, mode })}
+            items={MODES.map((mode) => ({ value: mode.value, label: tr(mode.label) }))} />
           <label class={r.bar2}>
             <span class={r.hint}>{tr('reports.now.priority')}</span>
             <select class={r.select} value={filter.priority}

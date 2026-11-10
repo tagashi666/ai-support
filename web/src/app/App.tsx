@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { useRef } from 'preact/hooks';
 import { signal } from '@preact/signals';
 import { MoreScreen, Placeholder } from '@/features/placeholder/Placeholder';
 import { isDesktop, isSplit } from '@/lib/media';
@@ -73,6 +74,12 @@ export function App(): JSX.Element {
   const desktop = isDesktop.value;
   const live = mode.value === 'live';
   const current = resolveHome(route.value, desktop);
+  // Вход раздела (R2 C) — только при переходе между разделами, не при первой загрузке:
+  // загрузка и так проявляет содержимое, а сдвиг на старте мешал бы (и e2e — «нестабильный» элемент).
+  const sectionKey = current.name === 'section' ? current.key : current.name;
+  const firstSection = useRef(sectionKey);
+  const moved = useRef(false);
+  if (sectionKey !== firstSection.current) moved.current = true;
   // Внутри открытого диалога на телефоне нижняя панель скрыта — высота уходит ленте (5.1).
   const inThread = current.name === 'chats' && current.id !== null && !isSplit.value;
   let screen: JSX.Element;
@@ -88,7 +95,7 @@ export function App(): JSX.Element {
     }
   }
   return (
-    <div class={s.app} data-thread={inThread ? 'true' : 'false'} data-mode={live ? 'live' : 'demo'}>
+    <div class={s.app} data-moved={moved.current ? 'true' : undefined} data-thread={inThread ? 'true' : 'false'} data-mode={live ? 'live' : 'demo'}>
       {live ? <span /> : <DemoBar />}
       <div class={s.body}>
         <Rail current={current} />

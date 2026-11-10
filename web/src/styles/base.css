@@ -67,6 +67,8 @@ svg { flex: none; }
   --kf-sheet-left-in: ui-sheet-left-in;
   --kf-sheet-right-out: ui-sheet-right-out;
   --kf-leave-left: ui-leave-left;
+  --kf-enter: ui-enter;
+  --kf-pulse: ui-pulse;
 }
 @keyframes ui-fade-in { from { opacity: 0; } }
 @keyframes ui-fade-out { to { opacity: 0; } }
@@ -78,7 +80,122 @@ svg { flex: none; }
 @keyframes ui-sheet-down-out { to { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); } }
 @keyframes ui-sheet-left-in { from { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); } }
 @keyframes ui-leave-left { to { opacity: 0; transform: translateX(calc(-2 * var(--shift))); } }
+@keyframes ui-enter { from { opacity: 0; transform: translateY(var(--shift-section)); } }
+@keyframes ui-pulse { 50% { opacity: 0.55; } }
 @keyframes ui-sheet-right-out { to { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); } }
+
+/*
+ * Общие переходы (R2 C). Длительности и кривые — только токены.
+ *
+ * .ui-swap — зона смены состояний: каждый НОВЫЙ прямой потомок (заглушка → содержимое,
+ * вкладка → вкладка, ошибка, пустое состояние) входит прозрачностью. Уже стоящие на
+ * месте потомки при перерисовке не мигают: CSS-анимация играет только при вставке.
+ */
+.ui-swap > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.ui-enter { animation: var(--kf-enter) var(--dur-fast) var(--ease-out); }
+[role="alert"]:not(dialog), [role="status"]:not(.visually-hidden, dialog) { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+/* Заглушки дышат прозрачностью (без сдвигов); при «уменьшить движение» — стоят. */
+.ui-skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .ui-skeleton { animation: none; } }
+
+/*
+ * Раскрытие без JS-измерений: сетка 0fr → 1fr (ui/Collapse.tsx). Внутри — overflow: clip,
+ * содержимое ещё и проявляется прозрачностью. Закрытое — inert (Collapse ставит сам).
+ */
+.ui-collapse {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--dur-move) var(--ease-move);
+}
+.ui-collapse[data-open="true"] { grid-template-rows: 1fr; }
+.ui-collapse > * {
+  min-height: 0;
+  overflow: clip;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.ui-collapse[data-open="true"] > * { opacity: 1; }
+
+/*
+ * <details> везде: где есть ::details-content и interpolate-size (Chromium 131+) — высота
+ * auto плавно; где нет (WebKit, Firefox) — содержимое проявляется прозрачностью.
+ */
+details[open] > :not(summary) { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+@supports (interpolate-size: allow-keywords) and selector(::details-content) {
+  details { interpolate-size: allow-keywords; }
+  details::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition: block-size var(--dur-move) var(--ease-move), content-visibility var(--dur-move) allow-discrete;
+  }
+  details[open]::details-content { block-size: auto; }
+}
+
+/* Наведение и выбор у всех нажимаемых — переходом цвета (нулевая специфичность: свои transition модулей главнее). */
+:where(a, button, summary, label, [role="option"], [role="menuitem"], [role="tab"]) {
+  transition: background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out),
+    border-color var(--dur-press) var(--ease-out);
+}
+
+/* Тень закрытого окна (ui/layer.ts, браузеры без overlay): на месте, поверх страницы, не ловит щелчков. */
+dialog[data-state="closing"] { position: fixed; inset: 0; z-index: 50; pointer-events: none; }
+.ui-scrim-out { position: fixed; inset: 0; z-index: 49; background: var(--scrim); pointer-events: none;
+  animation: var(--kf-fade-out) var(--dur-exit) var(--ease-exit) forwards; }
+
+/*
+ * Переключатель (checkbox role="switch"): дорожка и бегунок рисуются сами, бегунок едет
+ * transform-ом, цвет дорожки — переходом. Остаётся настоящим checkbox (клавиатура, формы).
+ */
+input[type="checkbox"][role="switch"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  width: 2.5rem;
+  height: 1.5rem;
+  margin: 0;
+  border-radius: var(--r-pill);
+  background: var(--control-border);
+  cursor: pointer;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+input[type="checkbox"][role="switch"]::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: calc(1.5rem - 6px);
+  height: calc(1.5rem - 6px);
+  border-radius: 50%;
+  background: var(--on-accent);
+  box-shadow: var(--shadow-1);
+  transition: transform var(--dur-move) var(--ease-move);
+}
+input[type="checkbox"][role="switch"]:checked { background: var(--accent); }
+input[type="checkbox"][role="switch"]:checked::before { transform: translateX(1rem); }
+input[type="checkbox"][role="switch"]:disabled { opacity: 0.55; cursor: not-allowed; }
+input[type="checkbox"][role="switch"]:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/*
+ * Скользящий индикатор сегментов и вкладок (ui/motion.ts useSlide): один элемент под
+ * выбранным пунктом, едет transform-ом. Пункты — над ним. Цвет, тень и радиус — переменными
+ * владельца (--ind-bg, --shadow-ind, --r-ind), умолчания — в :root.
+ */
+:root { --ind-bg: var(--surface-raised); --shadow-ind: var(--shadow-1); --r-ind: var(--r-sm); }
+.ui-slide { position: relative; isolation: isolate; }
+.ui-slide-ind {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: -1;
+  border-radius: var(--r-ind);
+  background: var(--ind-bg);
+  box-shadow: var(--shadow-ind);
+  transform-origin: 0 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.ui-slide-ind[data-ready="true"] { opacity: 1; }
 
 /*
  * «Уменьшить движение» (система): токены в tokens.css убирают сдвиги и масштаб,

@@ -32,7 +32,7 @@ function Bars({ values, label }: { values: number[]; label: string }): JSX.Eleme
   return (
     <div class={r.bars} role="img" aria-label={label}>
       {heights.map((height, index) => (
-        <span key={index} class={r.bar} data-zero={height === 0 ? 'true' : 'false'} style={{ height: `${height}%` }} />
+        <span key={index} class={r.bar} data-zero={height === 0 ? 'true' : 'false'} style={height === 0 ? undefined : { transform: `scaleY(${height / 100})` }} />
       ))}
     </div>
   );

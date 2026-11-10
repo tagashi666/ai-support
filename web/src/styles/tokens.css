@@ -151,6 +151,7 @@
   --ease-exit: cubic-bezier(.4, 0, 1, 1);
   --ease-move: cubic-bezier(.3, 0, .2, 1);
   --shift: 8px;
+  --shift-section: 4px;
   --shift-sheet: 100%;
   --pop-scale: 0.98;
   --press-scale: 0.97;
@@ -289,6 +290,7 @@
 @media (prefers-reduced-motion: reduce) {
   :root {
     --shift: 0px;
+    --shift-section: 0px;
     --shift-sheet: 0%;
     --pop-scale: 1;
     --press-scale: 1;

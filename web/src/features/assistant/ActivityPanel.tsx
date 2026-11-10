@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { Segmented } from '@/ui/Segmented';
 import { useEffect, useState } from 'preact/hooks';
 import type { ActivityItem, ActivityResponse } from '@shared/api-types';
 import { t, type Key } from '@/i18n/ru';
@@ -85,14 +86,8 @@ export function ActivityPanel(): JSX.Element {
           <Tabs<Period> label={t('activity.period')} value={period} onChange={setPeriod}
             items={[{ value: 'today', label: t('activity.today') }, { value: 'week', label: t('activity.week') }, { value: 'month', label: t('activity.month') }]} />
         </div>
-        <div class={a.filters} role="radiogroup" aria-label={t('activity.show')}>
-          {(['all', 'auto', 'handoff'] as const).map((value) => (
-            <label key={value} class={a.filter} data-checked={filter === value ? 'true' : 'false'}>
-              <input type="radio" name="activity-filter" checked={filter === value} onChange={() => setFilter(value)} />
-              {t(value === 'all' ? 'activity.all' : value === 'auto' ? 'activity.onlyAuto' : 'activity.onlyHandoff')}
-            </label>
-          ))}
-        </div>
+        <Segmented label={t('activity.show')} name="activity-filter" value={filter} onChange={setFilter}
+          items={(['all', 'auto', 'handoff'] as const).map((value) => ({ value, label: t(value === 'all' ? 'activity.all' : value === 'auto' ? 'activity.onlyAuto' : 'activity.onlyHandoff') }))} />
       </div>
       {state === 'loading' && !data && <div class={a.skeleton} key="skeleton" aria-hidden="true" />}
       {state === 'error' && (

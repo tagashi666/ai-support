@@ -4,7 +4,7 @@
  * берут токены напрямую; здесь — то, что двигается из кода: выход по таймеру,
  * FLIP соседей, свайп.
  */
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { reducedMotion } from '@/lib/media';
 
 export const DUR = { press: 100, fast: 160, move: 220, sheet: 280, exit: 160 } as const;
@@ -79,3 +79,53 @@ export function flip(parent: Element | null, before: Map<Element, number>, ms: n
 
 /** Прокрутка из кода: плавно, если человек не просил уменьшить движение (M-6). */
 export const smooth = (): ScrollBehavior => (reducedMotion.peek() ? 'auto' : 'smooth');
+
+/**
+ * Скользящий индикатор (R2 C): `ind` стоит под выбранным пунктом `host`
+ * (selector — [aria-selected="true"] или [aria-checked="true"] и т. п.). При смене
+ * выбора — FLIP: ширина и место ставятся сразу, движение играет transform
+ * (translate + scaleX от старой ширины к новой), без анимации layout-свойств.
+ * Первое положение и изменения размеров (ResizeObserver) — без анимации.
+ */
+export function useSlide(host: { current: HTMLElement | null }, ind: { current: HTMLElement | null }, selector: string, key: unknown): void {
+  const last = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
+  const place = (animate: boolean): void => {
+    const box = host.current;
+    const el = ind.current;
+    const target = box?.querySelector<HTMLElement>(selector);
+    if (!box || !el) return;
+    if (!target) { el.dataset.ready = 'false'; last.current = null; return; }
+    const next = { x: target.offsetLeft, y: target.offsetTop, w: target.offsetWidth, h: target.offsetHeight };
+    const prev = last.current;
+    last.current = next;
+    el.style.width = `${next.w}px`;
+    el.style.height = `${next.h}px`;
+    el.style.transform = `translate(${next.x}px, ${next.y}px)`;
+    el.dataset.ready = 'true';
+    const ms = dur('move');
+    if (!animate || !prev || !ms || (prev.x === next.x && prev.y === next.y && prev.w === next.w) || !el.animate) return;
+    el.animate([
+      { transform: `translate(${prev.x}px, ${prev.y}px) scale(${prev.w / next.w}, ${prev.h / next.h})` },
+      { transform: `translate(${next.x}px, ${next.y}px)` },
+    ], { duration: ms, easing: EASE.move });
+  };
+  // Контейнер может появиться позже (условная отрисовка) — следим за ним на каждой отрисовке.
+  const seen = useRef<HTMLElement | null>(null);
+  const observer = useRef<ResizeObserver | null>(null);
+  useLayoutEffect(() => {
+    const box = host.current;
+    if (box === seen.current) return;
+    observer.current?.disconnect();
+    seen.current = box;
+    last.current = null;
+    if (box && typeof ResizeObserver !== 'undefined') {
+      observer.current = new ResizeObserver(() => place(false));
+      observer.current.observe(box);
+      for (const child of box.children) observer.current.observe(child);
+    }
+    place(false);
+  });
+  useLayoutEffect(() => { place(true); }, [key]);
+  useEffect(() => () => observer.current?.disconnect(), []);
+}
+

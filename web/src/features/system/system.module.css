@@ -41,7 +41,7 @@
 .checkTitle { flex: none; width: 9.5rem; font-weight: 600; }
 .checkSummary { flex: 1; min-width: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .chev { flex: none; color: var(--text-2); transition: transform var(--dur-fast) var(--ease-out); }
-.checkBtn[aria-expanded="true"] .chev { transform: rotate(90deg); }
+.checkBtn[aria-expanded="true"] .chev, .disclosureBtn[aria-expanded="true"] .chev { transform: rotate(90deg); }
 @media (max-width: 767px) {
   .checkBtn { align-items: flex-start; flex-wrap: wrap; row-gap: 0; }
   .checkTitle { width: auto; flex: 1 1 8rem; }
@@ -99,3 +99,9 @@
 
 /* Ширина блоков, а не раздела (R2 A4). */
 .muted, .hint { max-width: 72ch; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.inner > *, .panel > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

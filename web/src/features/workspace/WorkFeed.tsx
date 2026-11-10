@@ -412,7 +412,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
         </div>
       </div>
       {unseen > 0 && (
-        <Button variant="secondary" size="sm" icon="arrowDown" class={s.newBelow}
+        <Button variant="secondary" size="sm" icon="arrowDown" class={`${s.newBelow} num`}
           onClick={() => { glide(); setUnseen(0); markRead(id); }}>
           {t('feed.newBelow', { n: unseen })}
         </Button>

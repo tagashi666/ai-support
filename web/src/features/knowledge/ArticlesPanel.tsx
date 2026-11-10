@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { Segmented } from '@/ui/Segmented';
 import { useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { listTime } from '@/lib/format/format';
@@ -34,14 +35,8 @@ export function ArticlesPanel(): JSX.Element {
         {r.manage && <Button variant="primary" icon="plus" onClick={() => navigate({ name: 'section', key: 'knowledge', sub: 'new' })}>{t('kb.new')}</Button>}
       </div>
       {r.review && (
-        <div class={k.filters} role="radiogroup" aria-label={t('kb.filter.label')}>
-          {FILTERS.map((item) => (
-            <label key={item.value} class={k.filter} data-checked={filter === item.value ? 'true' : 'false'}>
-              <input type="radio" name="kb-filter" checked={filter === item.value} onChange={() => setFilter(item.value)} />
-              {t(item.label)}
-            </label>
-          ))}
-        </div>
+        <Segmented label={t('kb.filter.label')} name="kb-filter" value={filter} onChange={setFilter}
+          items={FILTERS.map((item) => ({ value: item.value, label: t(item.label) }))} />
       )}
       {kbState.value === 'loading' && !kb.value && <div class={k.skeleton} key="skeleton" aria-hidden="true" />}
       {kbState.value === 'error' && (

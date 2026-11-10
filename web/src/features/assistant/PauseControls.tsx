@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
-import { useState } from 'preact/hooks';
+import { usePresence } from '@/ui/motion';
+import { useRef, useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { clock, dayMonth, sameDay } from '@/lib/format/format';
 import type { PausePreset } from '@/lib/assistant/model';
@@ -64,11 +65,18 @@ export function PauseControls({ menu = false }: { menu?: boolean }): JSX.Element
 
 /** Строка состояния всех экранов во время паузы: «Помощник на паузе до 15:00 · Возобновить» (6.7). */
 export function PauseStrip({ hidden = [], onHide }: { hidden?: readonly string[]; onHide?: (key: string) => void } = {}): JSX.Element | null {
-  const current = pause.value;
+  const live = pause.value;
+  const liveKey = live ? `p:${live.until}` : '';
+  const shown = Boolean(live) && !hidden.includes(liveKey);
+  // Уходит так же, как пришла (R2 C): пока гаснет — с прежним временем.
+  const { mounted, closing } = usePresence(shown);
+  const last = useRef(live);
+  if (shown) last.current = live;
+  const current = last.current;
   const key = current ? `p:${current.until}` : '';
-  if (!current || hidden.includes(key)) return null;
+  if (!mounted || !current) return null;
   return (
-    <div class={a.strip} role="status">
+    <div class={a.strip} role="status" data-state={closing ? 'closing' : undefined} inert={closing || undefined}>
       <Icon name="pause" size={16} />
       <span class={a.stripText}>{t('pause.strip', { until: pauseText(current.until) })}</span>
       {canPause.value && !offline.value && (

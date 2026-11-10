@@ -15,18 +15,13 @@
 /* Поиск и фильтр списка */
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .search { flex: 1 1 16rem; min-width: 0; max-width: 36rem; }
-.filters { justify-self: start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
-.filter { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s3); font-size: var(--fs-body); cursor: pointer; }
-.filter + .filter { border-left: 1px solid var(--border); }
-.filter input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-.filter[data-checked="true"] { background: var(--selected); color: var(--accent-text); font-weight: 600; }
-.filter:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 /* Строки статей, идей и шаблонов */
 .list { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border); }
 .item {
   display: grid; gap: 2px; width: 100%; min-height: 44px; padding: var(--s3) var(--s2); text-align: left; color: var(--text);
   border-bottom: 1px solid var(--border); background: none; font: inherit; cursor: pointer; text-decoration: none;
+  transition: background-color var(--dur-press) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .item:hover { background: var(--surface-hover); }
 .item[aria-current="true"] { background: var(--selected); box-shadow: inset 3px 0 0 var(--accent); }
@@ -98,3 +93,9 @@
 .muted, .hint, .notice, .empty { max-width: 72ch; }
 .field, .check, .toggle, .radios { max-width: 44rem; }
 .field:has(.editorText), .diff, .diffLine { max-width: 80ch; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.inner > *, .panel > *, .ideas > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

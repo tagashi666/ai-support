@@ -56,7 +56,7 @@
   color: var(--note-text);
   animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out);
 }
-.note[data-still] { animation-name: var(--kf-fade-in); }
+.note[data-still] { animation: none; }
 .noteHead { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; }
 .noteText { font-size: var(--fs-msg); line-height: var(--lh-msg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .inlineUndo {
@@ -72,7 +72,7 @@
 }
 .inlineUndo::after, .inlineNow::after { content: ""; position: absolute; inset: -12px -6px; }
 .inlineNow { position: relative; display: inline-grid; place-items: center; border: 0; padding: 0; background: transparent; color: inherit; opacity: 0.8; }
-.newBelow { position: absolute; left: 50%; bottom: var(--s3); transform: translateX(-50%); box-shadow: var(--shadow-pop); }
+.newBelow { position: absolute; left: 50%; bottom: var(--s3); transform: translateX(-50%); box-shadow: var(--shadow-pop); animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
 
 /* ---------- Низ: черновик, карточки, поле ---------- */
 .foot {
@@ -162,8 +162,14 @@
 }
 @media (pointer: coarse) { .mode { min-height: var(--target); } }
 .mode:hover:not(:disabled) { color: var(--text); }
-.mode[aria-selected="true"] { background: var(--surface-sunken); color: var(--text); }
-.composer[data-mode="note"] .mode[aria-selected="true"] { background: var(--note-bg); color: var(--note-text); }
+.mode[aria-selected="true"] { color: var(--text); }
+.composer[data-mode="note"] .mode[aria-selected="true"] { color: var(--note-text); }
+/* Фон выбранного — скользящий индикатор (ui-slide, рабочая панель); у прототипа — фон кнопки. */
+.modes { --ind-bg: var(--surface-sunken); --shadow-ind: none; --r-ind: var(--r-sm); }
+.composer[data-mode="note"] .modes { --ind-bg: var(--note-bg); }
+.modes:not(.ui-slide) .mode[aria-selected="true"] { background: var(--surface-sunken); }
+.composer[data-mode="note"] .modes:not(.ui-slide) .mode[aria-selected="true"] { background: var(--note-bg); }
+.modes .ui-slide-ind { transition: background-color var(--dur-fast) var(--ease-out); }
 .mode:disabled { cursor: not-allowed; opacity: 0.6; }
 .inputRow { display: flex; align-items: flex-end; gap: var(--s2); }
 .input {
@@ -217,3 +223,7 @@
   .draftNote { grid-column: 1 / -1; }
 }
 @media (min-width: 768px) { .more { display: none; } }
+
+/* Открытие диалога (R2 C): шапка и лента — новые элементы (key по диалогу) и входят
+   прозрачностью; лента не сдвигается — только opacity. Заглушка → содержимое так же. */
+.head, .feedWrap { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }

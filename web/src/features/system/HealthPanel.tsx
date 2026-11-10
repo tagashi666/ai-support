@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { Collapse } from '@/ui/Collapse';
 import { useEffect, useState } from 'preact/hooks';
 import { t } from '@/i18n/ru';
 import { tr } from '@/i18n/sections/system';
@@ -46,7 +47,7 @@ function CheckRow({ check, open, onToggle }: { check: Check; open: boolean; onTo
         <span class={s.checkSummary}>{check.summary}</span>
         <Icon name="right" size={18} class={s.chev} />
       </button>
-      {open && (
+      <Collapse open={open}>
         <div class={s.checkBody}>
           {check.details.length > 0 && (
             <dl class={s.kv}>
@@ -60,7 +61,7 @@ function CheckRow({ check, open, onToggle }: { check: Check; open: boolean; onTo
             {check.test && <Button variant="secondary" size="sm" disabled={testing} onClick={() => void runTest()}>{tr('system.notify.test')}</Button>}
           </div>
         </div>
-      )}
+      </Collapse>
     </li>
   );
 }
@@ -75,7 +76,7 @@ function Specialists({ d }: { d: Diagnostics }): JSX.Element {
       <button type="button" class={s.disclosureBtn} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Icon name="right" size={18} class={s.chev} />{tr('system.pro.title')}
       </button>
-      {open && (
+      <Collapse open={open}>
         <div class={s.disclosureBody}>
           <section aria-label={tr('system.pro.overrides')}>
             <h3 class={s.subhead}>{tr('system.pro.overrides')}</h3>
@@ -109,7 +110,7 @@ function Specialists({ d }: { d: Diagnostics }): JSX.Element {
             </dl>
           </section>
         </div>
-      )}
+      </Collapse>
     </div>
   );
 }

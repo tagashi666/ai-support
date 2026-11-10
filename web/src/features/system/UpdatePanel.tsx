@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { Collapse } from '@/ui/Collapse';
 import { useEffect, useState } from 'preact/hooks';
 import { tr } from '@/i18n/sections/system';
 import {
@@ -20,7 +21,7 @@ function Disclosure({ label, children }: { label: string; children: JSX.Element 
       <button type="button" class={s.disclosureBtn} aria-expanded={open} onClick={() => setOpen(!open)}>
         <Icon name="right" size={18} class={s.chev} />{label}
       </button>
-      {open && <div class={s.disclosureBody}>{children}</div>}
+      <Collapse open={open}><div class={s.disclosureBody}>{children}</div></Collapse>
     </div>
   );
 }
@@ -49,7 +50,7 @@ function Progress({ info }: { info: UpdateInfo }): JSX.Element | null {
           </li>
         ))}
       </ol>
-      <p class={s.muted} role="status">{result ? result.text : statusWords(p.status)}{typeof p.percent === 'number' && !result ? ` · ${p.percent}%` : ''}</p>
+      <p class={`${s.muted} num`} role="status">{result ? result.text : statusWords(p.status)}{typeof p.percent === 'number' && !result ? ` · ${p.percent}%` : ''}</p>
       {result && (
         <div class={s.result} data-tone={result.tone}>
           {p.detail && <p>{p.detail}</p>}

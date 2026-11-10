@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { useRef } from 'preact/hooks';
+import { useEffect, useRef } from 'preact/hooks';
 import { ME } from '@/demo/seed';
 import { t, type Key } from '@/i18n/ru';
 import { paletteOpen } from '@/lib/palette/run';
@@ -9,6 +9,7 @@ import { pausedUntil, setTheme, theme, waitingYou, type Theme } from '@/lib/stor
 import { modLabel } from '@/lib/keys';
 import { Avatar } from '@/ui/Avatar';
 import { Icon, type IconName } from '@/ui/Icon';
+import { dur, useSlide } from '@/ui/motion';
 import { meRole } from '@/lib/workspace/labels';
 import { systemDot } from '@/lib/system/problems';
 import s from './shell.module.css';
@@ -102,6 +103,24 @@ function Account({ current }: { current: Route }): JSX.Element {
   const { name, role } = account();
   const live = mode.value === 'live';
   const close = (): void => { menu.current?.hidePopover(); };
+  const seg = useRef<HTMLSpanElement>(null);
+  const segInd = useRef<HTMLSpanElement>(null);
+  useSlide(seg, segInd, '[aria-checked="true"]', theme.value);
+  // Выход меню (R2 C): popover прячется сразу, а «тень» на месте играет выход (data-state=closing,
+  // shell.module.css) — одинаково во всех браузерах, без overlay/allow-discrete.
+  useEffect(() => {
+    const el = menu.current;
+    if (!el) return undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onBefore = (event: Event): void => {
+      clearTimeout(timer);
+      if ((event as ToggleEvent).newState === 'open') { delete el.dataset.state; return; }
+      el.dataset.state = 'closing';
+      timer = setTimeout(() => { delete el.dataset.state; }, dur('exit'));
+    };
+    el.addEventListener('beforetoggle', onBefore);
+    return () => { clearTimeout(timer); el.removeEventListener('beforetoggle', onBefore); };
+  }, []);
   const place = (): void => {
     const box = button.current?.getBoundingClientRect();
     const el = menu.current;
@@ -163,7 +182,8 @@ function Account({ current }: { current: Route }): JSX.Element {
       >
         <div class={s.menuGroup} role="group" aria-label={t('device.theme')}>
           <span class={s.menuLabel} aria-hidden="true">{t('device.theme')}</span>
-          <span class={s.menuSeg}>
+          <span class={`${s.menuSeg} ui-slide`} ref={seg}>
+            <span class="ui-slide-ind" ref={segInd} aria-hidden="true" />
             {THEMES.map((item) => (
               <button key={item.value} type="button" role="menuitemradio" class={s.menuSegItem}
                 aria-checked={theme.value === item.value ? 'true' : 'false'} onClick={() => setTheme(item.value)}>

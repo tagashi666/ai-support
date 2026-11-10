@@ -3,6 +3,7 @@ import { isSendKey } from '@/lib/device';
 import { isMod, layerOpen, modLabel, tabArrows } from '@/lib/keys';
 import type { JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useSlide } from '@/ui/motion';
 import type { InboxItem, ThreadHead } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { clock, duration } from '@/lib/format/format';
@@ -52,6 +53,9 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
   const canTemplates = availability('conv.template', perms) === 'show';
   const noteOnly = colleague !== null || !canReply;
   const mode: 'reply' | 'note' = noteOnly ? 'note' : draft.mode;
+  const modesRef = useRef<HTMLDivElement>(null);
+  const modesInd = useRef<HTMLSpanElement>(null);
+  useSlide(modesRef, modesInd, '[aria-selected="true"]', mode);
   const closed = head.window.applies && !head.window.open;
   const offline = connection.value === 'offline';
   const suggestion = threads.value.get(id)?.suggestion ?? null;
@@ -231,7 +235,8 @@ export function WorkComposer({ id, head, colleague }: { id: number; item: InboxI
         </div>
       )}
       <div class={w.composerBar}>
-        <div class={s.modes} role="tablist" aria-label={t('composer.modes')} onKeyDown={tabArrows}>
+        <div class={`${s.modes} ui-slide`} role="tablist" aria-label={t('composer.modes')} onKeyDown={tabArrows} ref={modesRef}>
+          <span class="ui-slide-ind" ref={modesInd} aria-hidden="true" />
           <button type="button" role="tab" class={s.mode} aria-selected={mode === 'reply'} disabled={noteOnly}
             tabIndex={mode === 'reply' ? 0 : -1} onClick={() => update({ mode: 'reply' })}>
             {noteOnly ? t('composer.replyBusy') : t('composer.reply')}

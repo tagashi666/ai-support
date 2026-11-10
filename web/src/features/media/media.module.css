@@ -9,8 +9,10 @@
 /* Телефон: на весь экран, панель инструментов ниже выреза (W-5). */
 @media (max-width: 767px) { .editor { width: 100%; height: 100%; border-radius: 0; padding-top: var(--safe-top); padding-bottom: var(--safe-bottom); animation-name: var(--kf-fade-in); } }
 .editorTools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s1); padding: var(--s2) var(--s3); border-bottom: 1px solid var(--border); }
-.tool { min-height: 40px; padding: 0 var(--s3); border: 1px solid var(--border); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-body); cursor: pointer; }
-.tool[aria-pressed="true"] { background: var(--selected); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+.tool { min-height: 40px; padding: 0 var(--s3); border: 1px solid var(--border); border-radius: var(--r-control); background: var(--surface); color: var(--text); font: inherit; font-size: var(--fs-body); font-weight: 500; cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+.tool:hover:not([aria-pressed="true"]) { background: var(--surface-hover); }
+.tool[aria-pressed="true"] { background: var(--selected); border-color: var(--accent); color: var(--accent-text); }
 @media (pointer: coarse) { .tool { min-height: 44px; } }
 .textInput { min-height: 40px; padding: 0 var(--s2); border: 1px solid var(--control-border); border-radius: var(--r-control); font: inherit; background: var(--surface); color: var(--text); }
 .inline { display: inline-flex; align-items: center; }

@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
+import { useSlide } from '@/ui/motion';
 import { tr } from '@/i18n/sections/onboarding';
 import { showToast, undoToast } from '@/lib/actions/toasts';
 import { clock } from '@/lib/format/format';
@@ -23,6 +24,9 @@ const TASKS = ['onb.tut.task1', 'onb.tut.task2', 'onb.tut.task3', 'onb.tut.task4
 export function TutorialThread(): JSX.Element {
   const [state, setState] = useState<TutorialState>(() => initialTutorial(Date.now()));
   const [mode, setMode] = useState<'reply' | 'note'>('reply');
+  const modes = useRef<HTMLDivElement>(null);
+  const modesInd = useRef<HTMLSpanElement>(null);
+  useSlide(modes, modesInd, '[aria-selected="true"]', mode);
   const [text, setText] = useState('');
   const area = useRef<HTMLTextAreaElement>(null);
   const done = new Set(onboarding.value.tutorialTasks ?? []);
@@ -109,7 +113,8 @@ export function TutorialThread(): JSX.Element {
       )}
       {!state.resolved && (
         <div class={s.tutComposer}>
-          <div class={s.tutModes} role="tablist" aria-label={tr('onb.tut.modes')} onKeyDown={tabArrows}>
+          <div class={`${s.tutModes} ui-slide`} role="tablist" aria-label={tr('onb.tut.modes')} onKeyDown={tabArrows} ref={modes}>
+            <span class="ui-slide-ind" ref={modesInd} aria-hidden="true" />
             <button type="button" role="tab" aria-selected={mode === 'reply'} tabIndex={mode === 'reply' ? 0 : -1} onClick={() => setMode('reply')}>{tr('onb.tut.reply')}</button>
             <button type="button" role="tab" aria-selected={mode === 'note'} tabIndex={mode === 'note' ? 0 : -1} onClick={() => setMode('note')}>{tr('onb.tut.note')}</button>
           </div>

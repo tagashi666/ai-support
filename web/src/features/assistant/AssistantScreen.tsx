@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { usePresence } from '@/ui/motion';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { t, type Key } from '@/i18n/ru';
 import { clock } from '@/lib/format/format';
 import { MODE_LABEL, SETTING_LABEL, valueWords } from '@/lib/assistant/model';
@@ -73,12 +74,18 @@ export function RevertLine(): JSX.Element | null {
 
 /** Полоса «Изменено: 2 · было → станет · Отменить · Сохранить» (6.7, правило 1). */
 function ChangeBar(): JSX.Element | null {
-  if (!dirty.value.length) return null;
+  // Полоса входит снизу и уходит (R2 C); пока уходит — с прежним текстом.
+  const n = dirty.value.length;
+  const { mounted, closing } = usePresence(n > 0);
+  const last = useRef({ n, lines: dirtyLines.value });
+  if (n) last.current = { n, lines: dirtyLines.value };
+  if (!mounted) return null;
   return (
-    <div class={a.changeBar} role="region" aria-label={t('assistant.changed', { n: dirty.value.length })}>
+    <div class={a.changeBar} role="region" aria-label={t('assistant.changed', { n: last.current.n })}
+      data-state={closing ? 'closing' : undefined} inert={closing || undefined}>
       <div class={a.changeText}>
-        <strong>{t('assistant.changed', { n: dirty.value.length })}</strong>
-        <span>{dirtyLines.value.join(' · ')}</span>
+        <strong class="num">{t('assistant.changed', { n: last.current.n })}</strong>
+        <span>{last.current.lines.join(' · ')}</span>
         {saveError.value && <span class={a.error} role="alert">{saveError.value}</span>}
       </div>
       <div class={a.actions}>

@@ -52,6 +52,7 @@ fieldset.radios { margin: 0; padding: 0; border: 0; display: grid; gap: var(--s2
   position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 var(--s3); align-items: start; min-height: 44px;
   padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-control); background: var(--surface); cursor: pointer;
 }
+.radio { transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
 .radio:has(input:checked) { border-color: var(--accent); background: var(--selected); }
 .radio:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .radio input { width: 20px; height: 20px; margin: 2px 0 0; accent-color: var(--accent); }
@@ -95,3 +96,9 @@ fieldset.group { margin: 0; padding: 0; border: 0; display: grid; gap: 0; min-wi
 
 /* Ширина блоков, а не раздела (R2 A4). */
 .muted, .hint { max-width: 72ch; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.inner > *, .panel > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

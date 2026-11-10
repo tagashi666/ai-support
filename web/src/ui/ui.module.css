@@ -198,7 +198,8 @@
 }
 @media (max-width: 767px) { .bubble { max-width: 86%; } }
 /* Уже бывшее на экране при открытии и ранние (M-8): только проявляются, въезжают снизу лишь новые. */
-[data-still] .bubble { animation-name: var(--kf-fade-in); }
+/* Уже бывшие при открытии (data-still) не анимируются по одному: лента входит целиком (thread .feedWrap). */
+[data-still] .bubble { animation: none; }
 .bubble[data-voice="client"] { background: var(--bubble-in); color: var(--text); border-bottom-left-radius: var(--r-bubble-tail); }
 .bubble[data-voice="you"] { background: var(--accent); color: var(--on-accent); border-bottom-right-radius: var(--r-bubble-tail); }
 .bubble[data-voice="colleague"] { background: var(--bubble-colleague); color: var(--text); border-bottom-right-radius: var(--r-bubble-tail); }
@@ -281,6 +282,14 @@
   .sheet[open] { animation-name: var(--kf-sheet-up-in); }
   .sheet:not([open]) { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); }
 }
+/* Выход «тенью» (layer.ts) — WebKit, Firefox: те же движения, что переход с overlay в Chromium. */
+.sheet[open][data-state="closing"] { animation: var(--kf-pop-out) var(--dur-exit) var(--ease-exit) forwards; }
+@media (min-width: 768px) {
+  .sheet[data-side="right"][open][data-state="closing"] { animation-name: var(--kf-sheet-right-out); }
+}
+@media (max-width: 767px) {
+  .sheet[open][data-state="closing"] { animation-name: var(--kf-sheet-down-out); }
+}
 .sheetHead {
   position: sticky;
   top: 0;
@@ -293,6 +302,8 @@
 }
 .sheetTitle { flex: 1; min-width: 0; font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; overflow-wrap: anywhere; }
 .sheetBody { padding: 0 var(--pad-card) var(--pad-card); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); overflow-wrap: anywhere; }
+/* Шаги внутри листа сменяют друг друга прозрачностью (R2 C). */
+.sheetBody > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
 .sheetText { color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 .sheetActions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--s2); padding-top: var(--s2); }
 @media (max-width: 767px) { .sheetActions > * { flex: 1; } }
@@ -422,12 +433,45 @@
   transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
+.tabs { --r-ind: var(--r-sm); }
 @media (max-width: 767px), (pointer: coarse) { .tab { min-height: var(--target); } }
 .tab:hover { color: var(--text); }
-.tab[aria-selected="true"] { background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow-1); }
+.tab[aria-selected="true"] { color: var(--text); }
+/* Фон выбранной — скользящий индикатор (.ui-slide-ind, base.css); без него — как раньше. */
+.tabs:not(.ui-slide) .tab[aria-selected="true"] { background: var(--surface-raised); box-shadow: var(--shadow-1); }
 .tabs[data-stretch="true"] { display: flex; width: 100%; }
 .tabs[data-stretch="true"] .tab { flex: 1 1 auto; justify-content: center; padding: 0 var(--s2); }
-.tabCount { color: var(--attention); font-variant-numeric: tabular-nums; }
+.tabCount { color: var(--attention); font-variant-numeric: tabular-nums; animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+
+/* ---------- Сегменты (Segmented.tsx): radiogroup, индикатор скользит ---------- */
+.seg {
+  --ind-bg: var(--selected);
+  --shadow-ind: none;
+  --r-ind: 0;
+  justify-self: start;
+  display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  border: 1px solid var(--control-border);
+  border-radius: var(--r-control);
+  overflow: hidden;
+}
+.segItem {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 var(--s3);
+  font-size: var(--fs-body);
+  font-weight: 500;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-press) var(--ease-out);
+}
+.segItem + .segItem { border-left: 1px solid var(--border); }
+.segItem:hover:not([data-checked="true"]) { background: var(--surface-hover); }
+.segItem input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.segItem[data-checked="true"] { color: var(--accent-text); }
+.segItem:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 
 /* ---------- Карточка ---------- */
 .card {

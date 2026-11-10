@@ -10,6 +10,9 @@
 
 .body { display: flex; min-height: 0; min-width: 0; }
 .main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* Смена раздела (R2 C): входит только содержимое — прозрачность + 4 px снизу; навигация не трогается.
+   Внутри раздела (вкладки, другой диалог) корень тот же — вход не повторяется. */
+.app[data-moved="true"] .main > :not(.strips) { animation: var(--kf-enter) var(--dur-fast) var(--ease-out); }
 
 /* ---------- Полоса прототипа ---------- */
 .demo {
@@ -88,7 +91,7 @@
 }
 .railItem > svg { flex: none; }
 .railItem:hover { background: var(--surface-hover); color: var(--text); }
-.railItem[aria-current="page"] { background: var(--surface-sunken); color: var(--text); font-weight: 600; }
+.railItem[aria-current="page"] { background: var(--surface-sunken); color: var(--text); }
 .railItem[aria-current="page"] > svg { color: var(--accent-text); }
 .navLabel { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kbd { display: none; }
@@ -158,6 +161,9 @@
   inset: auto auto 0 0;
   margin: 0;
   width: 15rem;
+  /* WebKit: у popover из UA height: fit-content растягивал меню на всю высоту окна (R2 D). */
+  height: auto;
+  align-content: start;
   padding: var(--s1);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
@@ -166,6 +172,8 @@
   box-shadow: var(--shadow-pop);
 }
 .menu:popover-open { display: grid; gap: 1px; animation: var(--kf-pop-in) var(--dur-fast) var(--ease-out); transform-origin: bottom left; }
+.menu[data-state="closing"]:not(:popover-open) { display: grid; gap: 1px; z-index: 50; pointer-events: none; transform-origin: bottom left;
+  animation: var(--kf-pop-out) var(--dur-exit) var(--ease-exit) forwards; }
 .menuItem {
   display: flex;
   align-items: center;
@@ -187,7 +195,8 @@
 .menuSep { height: 1px; margin: var(--s1) calc(-1 * var(--s1)); background: var(--border); }
 .menuGroup { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); min-height: 36px; padding: 0 var(--s1) 0 var(--s2); }
 .menuLabel { color: var(--text-2); font-size: var(--fs-body); }
-.menuSeg { display: inline-flex; padding: 2px; border-radius: var(--r-sm); background: var(--surface-sunken); }
+.menuSeg { display: inline-flex; padding: 2px; border-radius: var(--r-sm); background: var(--surface-sunken);
+  --ind-bg: var(--surface); --shadow-ind: 0 0 0 1px var(--border); --r-ind: var(--r-sm); }
 .menuSegItem {
   min-height: 26px;
   padding: 0 var(--s2);
@@ -202,7 +211,7 @@
 }
 @media (pointer: coarse) { .menuSegItem { min-height: 36px; } }
 .menuSegItem:hover, .menuSegItem:focus-visible { color: var(--text); }
-.menuSegItem[aria-checked="true"] { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+.menuSegItem[aria-checked="true"] { color: var(--text); }
 
 .badge {
   min-width: 18px;
@@ -282,3 +291,8 @@
   box-shadow: var(--shadow-pop); pointer-events: auto; min-width: 0; animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out);
 }
 .stripText { flex: 1; min-width: 0; }
+
+/* Движение навигации (R2 C): счётчик и точка появляются, а не возникают; смена цвета — переходом. */
+.badge { animation: var(--kf-pop-in) var(--dur-fast) var(--ease-out); }
+.dot { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); transition: background-color var(--dur-fast) var(--ease-out); }
+.tab { transition: color var(--dur-press) var(--ease-out); }

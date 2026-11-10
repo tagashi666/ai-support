@@ -156,4 +156,6 @@
 }
 @media (pointer: coarse) { .pill { min-height: 44px; } }
 .pill[data-tone="attention"] { background: var(--attention-bg); color: var(--attention); box-shadow: var(--shadow-pop), inset 0 0 0 1px var(--attention); }
+.pill[data-state="closing"] { animation: pillOut var(--dur-exit) var(--ease-exit) forwards; pointer-events: none; }
+@keyframes pillOut { from { opacity: 1; transform: translateX(-50%); } to { opacity: 0; transform: translate(-50%, var(--shift)); } }
 @keyframes pillIn { from { opacity: 0; transform: translate(-50%, var(--shift)); } to { opacity: 1; transform: translateX(-50%); } }

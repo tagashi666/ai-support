@@ -18,6 +18,7 @@
 .modeCard {
   position: relative; display: grid; gap: var(--s1); align-content: start; min-height: 44px; padding: var(--s3) var(--s4);
   border: 1px solid var(--control-border); border-radius: var(--r-card); background: var(--surface); cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out);
 }
 .modeCard input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .modeCard[data-checked="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--selected); }
@@ -27,7 +28,7 @@
 .modeName { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; }
 .modeDoes { font-size: var(--fs-body); line-height: var(--lh-body); }
 .modeClient { font-size: var(--fs-body); line-height: var(--lh-body); color: var(--text-2); }
-.modeNow { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; color: var(--accent-text); }
+.modeNow { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; color: var(--accent-text); }
 .lock { display: inline-flex; align-items: center; gap: var(--s1); color: var(--text-2); font-size: var(--fs-small); }
 
 .pauseRow { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
@@ -42,12 +43,15 @@
 }
 .stripText { flex: 1; min-width: 0; }
 .stripClose { margin-left: auto; flex: none; }
+.strip[data-state="closing"] { animation: var(--kf-sink-out) var(--dur-exit) var(--ease-exit) forwards; }
 .revert, .changeBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
 .revert { padding: var(--s2) var(--s3); border-radius: var(--r-control); background: var(--surface-sunken); font-size: var(--fs-body); }
 .changeBar {
   position: sticky; bottom: 0; justify-content: space-between; padding: var(--s3) var(--s4); margin-top: auto;
   border-top: 1px solid var(--border); background: var(--surface); box-shadow: var(--shadow-pop);
 }
+.changeBar { animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out); }
+.changeBar[data-state="closing"] { animation: var(--kf-sink-out) var(--dur-exit) var(--ease-exit) forwards; }
 .changeText { display: grid; gap: 2px; min-width: 0; flex: 1 1 16rem; font-size: var(--fs-body); line-height: var(--lh-body); }
 
 /* Поля */
@@ -67,12 +71,12 @@
 .numInput .input { width: 6rem; }
 .unit { color: var(--text-2); font-size: var(--fs-body); min-width: 2rem; }
 .toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); min-height: 44px; font-size: var(--fs-body); cursor: pointer; }
-.toggle input { width: 2.5rem; height: 1.5rem; accent-color: var(--accent); flex: none; }
 .toggleText { display: grid; gap: 2px; }
 .scale { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s1); }
 .scaleEnd { color: var(--text-2); font-size: var(--fs-small); }
 .scaleStep { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; cursor: pointer; }
-.scaleStep::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--control-border); background: var(--surface); }
+.scaleStep::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--control-border); background: var(--surface);
+  transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
 .scaleStep[data-checked="true"]::before { border-color: var(--accent); background: var(--accent); }
 .scaleStep input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .scaleStep:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -4px; border-radius: 50%; }
@@ -86,12 +90,6 @@
 
 /* Лента */
 .activityBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s3); }
-.filters { justify-self: start; display: inline-flex; flex-wrap: wrap; border: 1px solid var(--control-border); border-radius: var(--r-control); overflow: hidden; }
-.filter { position: relative; display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--s3); font-size: var(--fs-body); cursor: pointer; }
-.filter + .filter { border-left: 1px solid var(--border); }
-.filter input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-.filter[data-checked="true"] { background: var(--selected); color: var(--accent-text); font-weight: 600; }
-.filter:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
 .activity { list-style: none; margin: 0; padding: 0; display: grid; }
 .activityRow {
   display: grid; grid-template-columns: 3.5rem minmax(0, 1fr); gap: var(--s1) var(--s3); padding: var(--s3) 0;
@@ -130,3 +128,9 @@
 .muted, .hint, .totals { max-width: 72ch; }
 .field, .numRow, .toggle, .linkForm, .links, .preview, .result, .revert, .pauseRow, .headRow { max-width: 44rem; }
 .activity, .activityBar { max-width: 72rem; }
+
+/* Смена состояний (R2 C): новый блок — заглушка → содержимое, вкладка, ошибка, пусто — входит
+   прозрачностью; стоящие на месте при перерисовке не мигают (анимация — только при вставке). */
+.inner > *, .panel > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+.skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }

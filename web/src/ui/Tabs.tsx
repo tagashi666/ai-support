@@ -1,5 +1,6 @@
 import type { JSX } from 'preact';
 import { useRef } from 'preact/hooks';
+import { useSlide } from './motion';
 import s from './ui.module.css';
 
 export interface TabItem<V extends string> {
@@ -19,6 +20,8 @@ interface TabsProps<V extends string> {
 /** Вкладки: tablist / tab со стрелками и одной остановкой Tab (8.7). */
 export function Tabs<V extends string>({ items, value, onChange, label, stretch }: TabsProps<V>): JSX.Element {
   const ref = useRef<HTMLDivElement>(null);
+  const ind = useRef<HTMLSpanElement>(null);
+  useSlide(ref, ind, '[aria-selected="true"]', value);
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
     event.preventDefault();
@@ -29,7 +32,8 @@ export function Tabs<V extends string>({ items, value, onChange, label, stretch 
     requestAnimationFrame(() => ref.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus());
   };
   return (
-    <div class={s.tabs} data-stretch={stretch ? 'true' : undefined} role="tablist" aria-label={label} ref={ref} onKeyDown={onKeyDown}>
+    <div class={`${s.tabs} ui-slide`} data-stretch={stretch ? 'true' : undefined} role="tablist" aria-label={label} ref={ref} onKeyDown={onKeyDown}>
+      <span class="ui-slide-ind" ref={ind} aria-hidden="true" />
       {items.map((item) => (
         <button
           key={item.value}

@@ -1,4 +1,5 @@
 import type { JSX } from 'preact';
+import { Collapse } from '@/ui/Collapse';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { confidenceLevel } from '@shared/confidence';
 import type { KbConflict, KbDocResponse } from '@shared/api-types';
@@ -49,7 +50,7 @@ function DiffLine({ before, after }: { before: string; after: string }): JSX.Ele
         <span>{t('kb.diff.summary', { added: stats.added, removed: stats.removed })}</span>
         <Button variant="link" size="sm" aria-expanded={shown} onClick={() => setShown(!shown)}>{shown ? t('kb.diff.hide') : t('kb.diff.show')}</Button>
       </div>
-      {shown && <DiffView before={before} after={after} />}
+      <Collapse open={shown}><DiffView before={before} after={after} /></Collapse>
     </div>
   );
 }
@@ -406,7 +407,7 @@ export function ArticleEditor({ name }: { name: string | null }): JSX.Element {
       <Sheet open={conflict !== null} onClose={() => setConflict(null)} title={t('kb.conflict.title')}>
         <p class={sheetStyles.text}>{conflictText}</p>
         <p class={k.hint}>{t('kb.conflict.safe')}</p>
-        {compare && conflict && <DiffView before={normalizeDoc(conflict.text ?? '')} after={text} />}
+        <Collapse open={Boolean(compare && conflict)}>{conflict && <DiffView before={normalizeDoc(conflict.text ?? '')} after={text} />}</Collapse>
         <div class={sheetStyles.actions}>
           <Button variant="quiet" aria-expanded={compare} onClick={() => setCompare(!compare)}>{t('kb.conflict.compare')}</Button>
           <Button variant="secondary" onClick={() => void resolveConflict('theirs')}>{t('kb.conflict.theirs')}</Button>
