@@ -11,7 +11,18 @@ import s from './ui.module.css';
  * Тост. Наведение или фокус ставят паузу — и отсчёту, и действию за ним
  * (toast.hold → deferred.pause, M-2): «Отменить» не может «протухнуть», пока на него смотрят.
  */
+/*
+ * Где мышь была, когда тост появился: тост, выросший под неподвижным курсором, паузу не
+ * ставит, а настоящее движение — ставит. movementX в WebKit у синтетических событий бывает
+ * нулевым, поэтому сравниваем и координаты (R2 D: одинаково во всех движках).
+ */
+const pointer = { x: Number.NaN, y: Number.NaN };
+if (typeof window !== 'undefined') {
+  window.addEventListener('pointermove', (event) => { pointer.x = event.clientX; pointer.y = event.clientY; }, { capture: true, passive: true });
+}
+
 function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.Element {
+  const born = useRef({ x: pointer.x, y: pointer.y });
   const [left, setLeft] = useState(toast.ttl ?? 0);
   const [held, setHeld] = useState(false);
   const heldRef = useRef(false);
@@ -46,7 +57,10 @@ function ToastItem({ toast, leaving }: { toast: Toast; leaving: boolean }): JSX.
       style={timed ? { '--ttl': `${toast.ttl}ms` } : undefined}
       // Пауза — от настоящего движения курсора: тост, всплывший под неподвижным курсором
       // (браузер шлёт «пустой» mousemove после перестройки), окно отмены не держит.
-      onPointerMove={(event) => { if (event.pointerType === 'mouse' && (event.movementX || event.movementY)) hold(true); }}
+      onPointerMove={(event) => {
+        if (event.pointerType !== 'mouse') return;
+        if (event.movementX || event.movementY || event.clientX !== born.current.x || event.clientY !== born.current.y) hold(true);
+      }}
       onPointerLeave={() => hold(false)}
       onFocusIn={() => hold(true)}
       onFocusOut={() => hold(false)}
