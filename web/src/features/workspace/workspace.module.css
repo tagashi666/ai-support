@@ -28,10 +28,15 @@
 
 .skeletons { display: grid; gap: 2px; padding-top: var(--s2); }
 .skeletonRow { height: var(--row-h); border-radius: var(--r-card); background: var(--surface-sunken); animation: pulse 1.2s ease-in-out infinite; }
-.skeletonHead { height: 96px; margin: var(--s3); border-radius: var(--r-card); background: var(--surface-sunken); }
-.skeletonFeed { height: 40vh; margin: var(--s3); border-radius: var(--r-card); background: var(--surface-sunken); animation: pulse 1.2s ease-in-out infinite; }
+.skeletonHead { min-height: 113px; }
+.skeletonFoot { min-height: 121px; }
+/* Каркас ленты — пузыри по обе стороны, как в настоящем диалоге (J-2). */
+.skeletonBubbles { display: grid; gap: var(--s3); }
+.skeletonBubbles > span { height: 56px; width: 60%; border-radius: var(--r-bubble); background: var(--surface-sunken); animation: pulse 1.2s ease-in-out infinite; }
+.skeletonBubbles > span:nth-child(even) { justify-self: end; width: 45%; }
+.skeletonFeed { flex: 1; margin: var(--s4); border-radius: var(--r-card); background: var(--surface-sunken); animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { opacity: 0.55; } }
-@media (prefers-reduced-motion: reduce) { .skeletonRow, .skeletonFeed { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .skeletonRow, .skeletonFeed, .skeletonBubbles > span { animation: none; } }
 .code { color: var(--text-3); font-size: var(--fs-small); }
 
 /* Фильтр */
@@ -66,7 +71,7 @@
 .threadState { flex: 1; display: grid; align-content: start; gap: var(--s3); padding: var(--s6) var(--s4); color: var(--text-2); }
 .stateActions { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
-/* Лента */
+/* Лента: «⋯» сбоку от пузыря у его низа (Bubble aside), а не строкой под ним (J-15) — высота ряда = высота пузыря. */
 .msgRow { position: relative; display: flex; flex-direction: column; }
 .msgRow[data-side="in"] { align-items: flex-start; }
 .msgRow[data-side="out"] { align-items: flex-end; }
@@ -75,7 +80,6 @@
   place-items: center;
   width: 32px;
   height: 32px;
-  margin-top: 2px;
   border: 0;
   border-radius: var(--r-control);
   background: transparent;
@@ -83,7 +87,7 @@
   opacity: 0;
 }
 .msgRow:hover .msgMenu, .msgRow:focus-within .msgMenu { opacity: 1; }
-@media (max-width: 767px), (pointer: coarse) { .msgMenu { opacity: 0.7; width: 44px; height: 44px; margin-top: 0; } }
+@media (max-width: 767px), (pointer: coarse) { .msgMenu { opacity: 0.7; width: 44px; height: 44px; } }
 .link { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
 .quote { display: block; margin-bottom: var(--s1); padding-left: var(--s2); border-left: 2px solid currentColor; font-size: var(--fs-small); white-space: normal; }
 .newLine { display: flex; align-items: center; gap: var(--s2); margin: var(--s2) 0; color: var(--accent-text); font-size: var(--fs-small); font-weight: 600; }
@@ -120,7 +124,8 @@
 .viewer { display: grid; gap: var(--s3); justify-items: center; }
 .viewer img { max-width: 100%; max-height: 70vh; border-radius: var(--r-card); }
 
-/* Черновик помощника */
+/* Черновик помощника; ушёл — карточка опускается и гаснет (M-14). */
+.draftSlot[data-state="closing"] { animation: var(--kf-sink-out) var(--dur-exit) var(--ease-exit) forwards; }
 .draftBody { font-size: var(--fs-msg); line-height: var(--lh-msg); }
 .expert { color: var(--text-3); font-size: var(--fs-small); }
 .expert summary { min-height: 32px; display: flex; align-items: center; cursor: pointer; }

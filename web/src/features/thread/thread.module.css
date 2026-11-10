@@ -24,6 +24,9 @@
 .headAvatar { display: none; }
 @media (min-width: 768px) { .headAvatar { display: inline-flex; } }
 .chipRow > button:first-child { flex: 0 1 auto; min-width: 0; }
+/* Строка чипа одной высоты с кнопкой и без (J-10); хвост строки — оставшееся место без переноса (J-3). */
+.chipRow { min-height: var(--control-h); }
+.chipRow > .chipFill { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: end; }
 
 /* ---------- Лента ---------- */
 .feedWrap { position: relative; flex: 1; min-height: 0; display: flex; }
@@ -55,6 +58,7 @@
   color: var(--note-text);
   animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out);
 }
+.note[data-still] { animation-name: var(--kf-fade-in); }
 .noteHead { display: flex; align-items: center; gap: var(--s2); font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; }
 .noteText { font-size: var(--fs-msg); line-height: var(--lh-msg); white-space: pre-wrap; overflow-wrap: anywhere; }
 .inlineUndo {

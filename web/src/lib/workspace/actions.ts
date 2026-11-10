@@ -19,7 +19,7 @@ import { deferred, deferWithUndo, type DeferredTask } from './deferred';
 import { DraftStore, type Quote } from './drafts';
 import { actionErrorText, sendErrorView } from './errors';
 import { clientWrote, dropPatch, lastSign, patched, patches, setPatch } from './local';
-import { mergeMessages, syncThread, threads, updateThread, type Outgoing } from './thread';
+import { mergeMessages, sentAs, syncThread, threads, updateThread, type Outgoing } from './thread';
 import { TypingSignal } from './typing';
 import { modeLabel } from './labels';
 import type { HereMode } from './who';
@@ -345,6 +345,7 @@ function setOutgoing(id: number, localId: string, change: Partial<Outgoing> | nu
 }
 
 function delivered(id: number, localId: string, message: ThreadMessage | null, suggestionId: number | null): void {
+  if (message && !sentAs.has(message.id)) sentAs.set(message.id, localId);
   updateThread(id, (current) => ({
     ...current,
     outgoing: current.outgoing.filter((item) => item.localId !== localId),

@@ -16,7 +16,7 @@ import {
 } from '@/lib/workspace/actions';
 import { modeLabel } from '@/lib/workspace/labels';
 import { availability } from '@/lib/workspace/registry';
-import { loadEarlier, threads, type Outgoing } from '@/lib/workspace/thread';
+import { claimSent, loadEarlier, sentAs, threads, type Outgoing } from '@/lib/workspace/thread';
 import { showToast } from '@/lib/actions/toasts';
 import type { Author } from '@/lib/types';
 import { Bubble } from '@/ui/Bubble';
@@ -28,6 +28,8 @@ import w from './workspace.module.css';
 import { smooth } from '@/ui/motion';
 
 const NEAR_BOTTOM = 120;
+/** Лента «прилипла» к низу: рост содержимого или сжатие окна держат низ на месте (J-1). */
+const STICK_PX = 24;
 const EARLIER_AT = 80;
 
 type Entry =
@@ -95,17 +97,18 @@ function AttachmentView({ file, onOpen }: { file: ThreadAttachment; onOpen: (fil
       </span>
     );
   }
+  // Размеров нет (старые записи) — место 4:3 у фото и 16:9 у видео заранее, картинка вписывается (J-4).
   const ratio = file.width && file.height ? `${file.width} / ${file.height}` : undefined;
   if (file.kind === 'tgs_sticker' || file.mime === 'application/x-tgsticker') return <TgsSticker id={file.id} />;
   if ((file.kind === 'photo' || file.kind === 'sticker' || (file.kind === 'animation' && file.mime === 'image/gif')) && file.mime !== 'application/x-tgsticker') {
     return (
-      <button type="button" class={w.media} style={ratio ? { aspectRatio: ratio } : undefined} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
+      <button type="button" class={w.media} style={{ aspectRatio: ratio ?? '4 / 3' }} onClick={() => onOpen(file)} aria-label={t('file.openPhoto')}>
         <img src={src} alt="" loading="lazy" width={file.width ?? undefined} height={file.height ?? undefined} />
       </button>
     );
   }
   if (file.kind === 'video' || file.kind === 'video_note' || file.kind === 'animation') {
-    return <video class={w.media} style={ratio ? { aspectRatio: ratio } : undefined} src={src} controls preload="none" />;
+    return <video class={w.media} style={{ aspectRatio: ratio ?? '16 / 9' }} src={src} controls preload="none" />;
   }
   if (file.kind === 'voice' || file.kind === 'audio') {
     return <audio class={w.audio} src={src} controls preload="none" aria-label={label} />;
@@ -162,6 +165,15 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   const anchor = useRef<{ height: number; top: number } | null>(null);
   const lastId = useRef<number | null>(null);
   const firstLoad = useRef(true);
+  const stick = useRef(true);
+  /** Плавная прокрутка вниз из кода ещё идёт: промежуточные scroll не отлепляют ленту. */
+  const gliding = useRef(false);
+  /**
+   * Что уже было на экране (M-8): при открытии и подгрузке ранних пузыри только
+   * проявляются, въезжают снизу лишь новые. key → «новый»; решается один раз.
+   */
+  const born = useRef<Map<string, boolean> | null>(null);
+  const bornAt = useRef(0);
   // «Новое» — линия перед непрочитанными при открытии (сколько их было в строке списка).
   const [newFrom] = useState(() => item.unread);
   const canQuote = availability('msg.quote', permissions.value) === 'show';
@@ -169,11 +181,23 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   const canWhy = permissions.value.has('conversation:reply');
 
   const messages = thread?.messages ?? [];
+  // Своё отправленное держит key пузыря в пути: не перемонтируется и не въезжает второй раз (J-5, M-7).
+  const claimed = claimSent(messages, thread?.outgoing ?? [], me);
   const entries: Entry[] = [
-    ...messages.map((message): Entry => ({ type: 'message', at: message.at, key: `m${message.id}`, message })),
+    ...messages.map((message): Entry => {
+      const local = sentAs.get(message.id);
+      return { type: 'message', at: message.at, key: local ? `o${local}` : `m${message.id}`, message };
+    }),
     ...(thread?.events ?? []).map((event): Entry => ({ type: 'event', at: event.at, key: `e${event.id}`, event })),
-    ...(thread?.outgoing ?? []).map((outgoing): Entry => ({ type: 'outgoing', at: outgoing.at, key: `o${outgoing.localId}`, outgoing })),
+    ...(thread?.outgoing ?? []).filter((outgoing) => !claimed.has(outgoing.localId))
+      .map((outgoing): Entry => ({ type: 'outgoing', at: outgoing.at, key: `o${outgoing.localId}`, outgoing })),
   ].sort((a, b) => a.at - b.at || (a.type === 'outgoing' ? 1 : b.type === 'outgoing' ? -1 : 0));
+  if (thread?.status === 'ready') {
+    if (!born.current) born.current = new Map(entries.map((entry) => [entry.key, false]));
+    else for (const entry of entries) if (!born.current.has(entry.key)) born.current.set(entry.key, entry.at >= bornAt.current);
+    bornAt.current = Math.max(bornAt.current, entries.at(-1)?.at ?? 0);
+  }
+  const still = (key: string): '' | undefined => (born.current?.get(key) === true || !born.current ? undefined : '');
   const clientIds = messages.filter((message) => message.voice === 'client').map((message) => message.id);
   const firstNew = newFrom > 0 ? clientIds[Math.max(0, clientIds.length - newFrom)] : undefined;
 
@@ -182,6 +206,25 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
     return !el || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM;
   };
 
+  const glide = (): void => {
+    const el = ref.current;
+    if (!el) return;
+    stick.current = true;
+    gliding.current = smooth() === 'smooth';
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth() });
+  };
+
+  // Низ на месте (J-1): картинка догрузилась, шапка или поле ответа сменили высоту, окно сжалось.
+  useEffect(() => {
+    const el = ref.current;
+    const column = el?.firstElementChild;
+    if (!el || !column || typeof ResizeObserver !== 'function') return undefined;
+    const observer = new ResizeObserver(() => { if (stick.current && !gliding.current) el.scrollTop = el.scrollHeight; });
+    observer.observe(el);
+    observer.observe(column);
+    return () => observer.disconnect();
+  }, []);
+
   // Первая загрузка — вниз; подгрузка ранних — сохранить место (без сдвига).
   useLayoutEffect(() => {
     const el = ref.current;
@@ -189,6 +232,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
     if (firstLoad.current) {
       firstLoad.current = false;
       el.scrollTop = el.scrollHeight;
+      stick.current = true;
       lastId.current = messages.at(-1)?.id ?? null;
       return;
     }
@@ -203,8 +247,12 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
       const fromClient = added.filter((message) => message.voice === 'client');
       if (fromClient.length) announcement.value = t('feed.newMessage', { name: liveName(item) });
       const own = added.some((message) => message.voice === 'operator' && message.author?.id === me);
-      if (own || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM + 200) {
-        el.scrollTo({ top: el.scrollHeight, behavior: smooth() });
+      if (stick.current && !gliding.current) {
+        // Внизу: просто держим низ — новый пузырь сам въезжает (без второй, прокручивающей анимации).
+        el.scrollTop = el.scrollHeight;
+        if (fromClient.length && document.visibilityState === 'visible') markRead(id);
+      } else if (own || el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM + 200) {
+        glide();
         // Новое входящее при видимой вкладке и ленте внизу — прочитано (прил. А.C, 7.2).
         if (fromClient.length && document.visibilityState === 'visible') markRead(id);
       } else if (fromClient.length) setUnseen((value) => value + fromClient.length);
@@ -214,6 +262,8 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   const onScroll = (): void => {
     const el = ref.current;
     if (!el) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (gliding.current) { if (gap < 2) gliding.current = false; } else stick.current = gap < STICK_PX;
     if (atBottom() && unseen) { setUnseen(0); markRead(id); }
     if (el.scrollTop < EARLIER_AT && thread?.hasMore && !thread.loadingEarlier) {
       anchor.current = { height: el.scrollHeight, top: el.scrollTop };
@@ -268,9 +318,10 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   const out: JSX.Element[] = [];
   let prev: Entry | undefined;
   for (const entry of entries) {
+    const quiet = still(entry.key);
     if (!prev || !sameDay(prev.at, entry.at)) {
       const day = dayDivider(entry.at, today);
-      out.push(<div key={`d${entry.key}`} class={s.day}><span>{day === 'today' ? t('feed.today') : day === 'yesterday' ? t('feed.yesterday') : day}</span></div>);
+      out.push(<div key={`d${entry.key}`} class={s.day} data-still={quiet}><span>{day === 'today' ? t('feed.today') : day === 'yesterday' ? t('feed.yesterday') : day}</span></div>);
     }
     if (entry.type === 'message' && entry.message.id === firstNew) out.push(<div key="new" class={w.newLine}><span>{t('feed.newLine')}</span></div>);
     if (entry.type === 'event') {
@@ -278,7 +329,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
     } else if (entry.type === 'message' && entry.message.voice === 'note') {
       const author = entry.message.author ? (entry.message.author.id === me ? t('feed.you') : entry.message.author.name) : t('feed.team');
       out.push(
-        <section key={entry.key} class={s.note} aria-label={t('feed.noteTitle')}>
+        <section key={entry.key} class={s.note} aria-label={t('feed.noteTitle')} data-still={quiet}>
           <p class={s.noteHead}><Icon name="lock" size={14} />{t('feed.noteTitle')} · {author}, <span class="num">{clock(entry.at)}</span></p>
           <p class={s.noteText}>{linkify(entry.message.text ?? '')}</p>
         </section>,
@@ -289,11 +340,13 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
         : message.voice === 'auto' ? 'auto' : message.author && message.author.id === me ? 'you' : 'colleague';
       const label = voice === 'client' ? liveName(item) : voice === 'assistant' ? t('feed.assistant') : voice === 'auto' ? t('feed.auto')
         : voice === 'colleague' ? message.author?.name ?? t('feed.operator') : t('feed.you');
-      const grouped = prev?.type === 'message' && prev.message.voice === message.voice && prev.message.author?.id === message.author?.id
-        && sameDay(prev.at, entry.at) && entry.at - prev.at < 10 * 60_000;
+      const mine = message.voice === 'operator' && message.author?.id === me;
+      const grouped = (prev?.type === 'message' ? prev.message.voice === message.voice && prev.message.author?.id === message.author?.id
+        : prev?.type === 'outgoing' && mine) && prev !== undefined && sameDay(prev.at, entry.at) && entry.at - prev.at < 10 * 60_000;
       const text = message.text ?? '';
       out.push(
         <div key={entry.key} class={`${grouped ? s.msgGrouped : s.msg} ${w.msgRow}`} data-side={voice === 'client' ? 'in' : 'out'} data-message-id={String(message.id)}
+          data-still={quiet}
           onContextMenu={(event) => { event.preventDefault(); setMenu(message); }}>
           <Bubble
             voice={voice}
@@ -301,23 +354,28 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
             a11y={`${voice === 'client' ? t('feed.clientA11y', { name: label }) : label}, ${clock(message.at)}: ${text || t(KIND_KEY[message.kind] ?? 'file.document')}`}
             meta={clock(message.at)}
             foot={message.attachments.length ? message.attachments.map((file) => <AttachmentView key={file.id} file={file} onOpen={setViewer} />) : undefined}
+            aside={(
+              <button type="button" class={w.msgMenu} aria-label={t('message.menu')} aria-haspopup="dialog" onClick={() => setMenu(message)}>
+                <Icon name="more" size={18} />
+              </button>
+            )}
           >
             {message.quote && <span class={w.quote}>↩ {message.quote}</span>}
             {text ? linkify(text) : message.attachments.length ? null : t(KIND_KEY[message.kind] ?? 'file.document')}
           </Bubble>
-          <button type="button" class={w.msgMenu} aria-label={t('message.menu')} aria-haspopup="dialog" onClick={() => setMenu(message)}>
-            <Icon name="more" size={18} />
-          </button>
         </div>,
       );
     } else {
       const outgoing = entry.outgoing;
       const failed = outgoing.state === 'failed';
+      // Та же раскладка и то же правило группы, что у отправленного: пузырь не меняет высоту, став настоящим (J-5).
+      const grouped = (prev?.type === 'outgoing' || (prev?.type === 'message' && prev.message.voice === 'operator' && prev.message.author?.id === me))
+        && sameDay(prev.at, entry.at) && entry.at - prev.at < 10 * 60_000;
       out.push(
-        <div key={entry.key} class={s.msg}>
+        <div key={entry.key} class={`${grouped ? s.msgGrouped : s.msg} ${w.msgRow}`} data-side="out" data-still={quiet}>
           <Bubble
             voice="you"
-            label={t('feed.you')}
+            label={grouped ? undefined : t('feed.you')}
             pending
             a11y={`${t('feed.you')}: ${outgoing.text || outgoing.fileName || ''}`}
             meta={<PendingMeta id={id} entry={outgoing} />}
@@ -344,15 +402,18 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
     <div class={s.feedWrap}>
       <div class={s.feed} ref={ref} role="log" aria-label={t('feed.label')} aria-busy={thread?.status === 'loading' ? 'true' : 'false'} tabIndex={0} onScroll={onScroll}>
         <div class={s.column}>
-          {thread?.loadingEarlier && <p class={s.event}>{t('feed.loadingEarlier')}</p>}
-          {thread?.status === 'loading' && <div class={w.skeletonFeed} />}
+          {/* Место под «Загружаем ранние…» стоит, пока есть ранние: надпись не сдвигает ленту (J-13). */}
+          {thread?.hasMore && <p class={s.event} aria-hidden={thread.loadingEarlier ? undefined : 'true'}>{thread.loadingEarlier ? t('feed.loadingEarlier') : '\u00a0'}</p>}
+          {thread?.status === 'loading' && (
+            <div class={w.skeletonBubbles} aria-hidden="true">{[0, 1, 2, 3].map((index) => <span key={index} />)}</div>
+          )}
           {thread?.status === 'ready' && entries.length === 0 && <p class={s.event}>{t('feed.empty')}</p>}
           {out}
         </div>
       </div>
       {unseen > 0 && (
         <Button variant="secondary" size="sm" icon="arrowDown" class={s.newBelow}
-          onClick={() => { ref.current?.scrollTo({ top: ref.current.scrollHeight, behavior: smooth() }); setUnseen(0); markRead(id); }}>
+          onClick={() => { glide(); setUnseen(0); markRead(id); }}>
           {t('feed.newBelow', { n: unseen })}
         </Button>
       )}

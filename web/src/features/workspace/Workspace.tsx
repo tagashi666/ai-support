@@ -59,7 +59,8 @@ export function Workspace({ id, client = false }: { id: string | null; client?: 
         <WorkList openId={open} tutorialOpen={id === TUTORIAL_ID} />
       </section>
       <section class={s.threadCol}>
-        {open !== null ? <WorkThread key={open} id={open} />
+        {/* Без key: шапка и поле ответа не перемонтируются при смене диалога (J-2, M-8), лента — по своему key. */}
+        {open !== null ? <WorkThread id={open} />
           : id === TUTORIAL_ID ? <TutorialThread />
           : <div class={s.summary}><LiveToday compact /></div>}
       </section>

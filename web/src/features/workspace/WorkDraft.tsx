@@ -1,6 +1,6 @@
 import type { JSX } from 'preact';
-import { useState } from 'preact/hooks';
-import type { InboxItem, ThreadHead } from '@shared/api-types';
+import { useRef, useState } from 'preact/hooks';
+import type { InboxItem, ThreadHead, ThreadSuggestion } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { levelLabel } from '@/lib/labels';
 import { connection } from '@/lib/live/store';
@@ -11,6 +11,7 @@ import { threads, updateThread } from '@/lib/workspace/thread';
 import { Button } from '@/ui/Button';
 import { Icon } from '@/ui/Icon';
 import { Option, Sheet } from '@/ui/Sheet';
+import { usePresence } from '@/ui/motion';
 import s from '@/features/thread/thread.module.css';
 import w from './workspace.module.css';
 
@@ -37,14 +38,26 @@ export function sendSuggestion(id: number): boolean {
  * Уверенность словами с причиной и источниками; «Не уверен» свёрнут и без
  * «Отправить» — отправить можно только из поля после «Править».
  */
-export function WorkDraft({ id, head, typing }: { id: number; item: InboxItem; head: ThreadHead; typing: boolean }): JSX.Element | null {
+export function WorkDraft(props: { id: number; item: InboxItem; head: ThreadHead; typing: boolean }): JSX.Element | null {
+  // Черновик ушёл (отправлен, убран, устарел на сервере): карточка уходит выходом, а не пропадает (M-14).
+  const draft = threads.value.get(props.id)?.suggestion ?? null;
+  const last = useRef<ThreadSuggestion | null>(draft);
+  if (draft) last.current = draft;
+  const { mounted, closing } = usePresence(draft !== null);
+  if (!mounted || !last.current) return null;
+  return (
+    <div class={w.draftSlot} data-state={closing ? 'closing' : undefined} inert={closing || undefined}>
+      <DraftCard {...props} draft={last.current} />
+    </div>
+  );
+}
+
+function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; typing: boolean; draft: ThreadSuggestion }): JSX.Element | null {
   const [expanded, setExpanded] = useState(false);
   const [full, setFull] = useState(false);
   const [reasons, setReasons] = useState(false);
   const [keepStale, setKeepStale] = useState(false);
   const thread = threads.value.get(id);
-  const draft = thread?.suggestion ?? null;
-  if (!draft) return null;
   const perms = permissions.value;
   const canReply = availability('draft.send', perms) === 'show';
   const closed = head.window.applies && !head.window.open;

@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { InboxItem, ThreadHead } from '@shared/api-types';
 import { t } from '@/i18n/ru';
 import { duration, roughDuration } from '@/lib/format/format';
@@ -48,6 +48,19 @@ function headStatus(item: InboxItem, head: ThreadHead, at: number): { text: stri
 const MODES: readonly HereMode[] = ['inherit', 'suggest', 'shadow', 'off', 'auto'];
 
 /**
+ * Шапка до ответа /api/thread — из строки списка (J-2): диалог сразу рисуется
+ * своей настоящей раскладкой (шапка, лента-каркас, поле ответа), а не
+ * скелетоном другой высоты. Заявка и окно ответа — по каналу и строке.
+ */
+function guessHead(item: InboxItem): ThreadHead {
+  const ticket = item.channel === 'bedolaga' || item.channel === 'minishop' ? { kind: item.channel, number: null } : null;
+  return {
+    item, ticket, attachments: ticket === null, sender: true, hidden: false, presence: [],
+    window: { applies: item.window !== null, open: item.window?.open ?? true, closes_at: item.window?.closes_at ?? null },
+  };
+}
+
+/**
  * Диалог на живых данных (6.3): шапка с чипом «кто отвечает» и главной
  * кнопкой, лента, черновик помощника, поле ответа. Шапка рисуется сразу из
  * строки списка; лента — после ответа /api/thread.
@@ -61,13 +74,15 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
   patches.value;
   const item = freshItem(thread?.head ?? null, listed) ? itemOf(id) ?? null : null;
   void item?.updated_at;
-  const head = thread?.head ?? null;
+  const head = thread?.head ?? (item ? guessHead(item) : null);
   const at = now.value;
   const perms = permissions.value;
   const me = meKey.value;
   const assistant = bootstrap.value?.assistant ?? { mode: 'suggest' as const, keys: true, minConfidence: 0.9 };
 
+  // Диалог сменился без перемонтирования шапки (J-2): открытые листы — закрыть.
   useEffect(() => {
+    setSheet(null);
     openThreadId.value = id;
     void loadThread(id);
     return () => { if (openThreadId.peek() === id) openThreadId.value = null; };
@@ -98,6 +113,18 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
 
   const back = (): void => navigate({ name: 'chats', id: null });
 
+  // Тосты на узком экране встают над полем ответа, а не на него (J-14): --toast-lift = высота низа.
+  const foot = useRef<HTMLElement>(null);
+  const gone = thread?.status === 'gone' && !head?.hidden;
+  useEffect(() => {
+    const el = foot.current;
+    const root = document.documentElement.style;
+    if (!el || typeof ResizeObserver !== 'function') return undefined;
+    const observer = new ResizeObserver(() => root.setProperty('--toast-lift', `${el.offsetHeight}px`));
+    observer.observe(el);
+    return () => { observer.disconnect(); root.removeProperty('--toast-lift'); };
+  }, [gone, item === null]);
+
   if (!item || !head) {
     if (thread?.status === 'error') {
       return (
@@ -110,7 +137,14 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
         </div>
       );
     }
-    return <div class={w.threadState} aria-busy="true"><div class={w.skeletonHead} /><div class={w.skeletonFeed} /></div>;
+    // Строки ещё нет (прямая ссылка до списка): каркас той же раскладки — шапка, лента, поле ответа.
+    return (
+      <div class={s.thread} aria-busy="true">
+        <div class={`${s.head} ${w.skeletonHead}`} />
+        <div class={s.feedWrap}><div class={w.skeletonFeed} /></div>
+        <div class={`${s.foot} ${w.skeletonFoot}`} />
+      </div>
+    );
   }
 
   const name = liveName(item);
@@ -186,12 +220,13 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
           <Chip text={who.text} tone={who.tone} lead={who.lead} menu={who.menu} onClick={() => setSheet('who')} />
           {primary}
           {who.ledBy && <span class={w.ledBy}>{t('who.ledBy', { name: who.ledBy })}</span>}
+          {/* Присутствие — в той же строке, в оставшемся месте (J-3): появляется и пропадает без сдвига шапки. */}
+          {colleagues.length > 0 && (
+            <span class={`${s.chipFill} ${w.presence}`} aria-live="polite">
+              {colleagues.map((entry) => t(entry.state === 'typing' ? 'presence.typing' : 'presence.viewing', { name: entry.name })).join(' · ')}
+            </span>
+          )}
         </div>
-        {colleagues.length > 0 && (
-          <p class={w.presence} aria-live="polite">
-            {colleagues.map((entry) => t(entry.state === 'typing' ? 'presence.typing' : 'presence.viewing', { name: entry.name })).join(' · ')}
-          </p>
-        )}
         {item.flags.not_found && <p class={w.quietLine}>{t('thread.notInBase')}</p>}
         {head.hidden && (
           <p class={w.quietLine}>
@@ -208,10 +243,10 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
         </div>
       ) : (
         <>
-          <WorkFeed id={id} item={item} />
-          <footer class={s.foot}>
-            {!done && who.kind !== 'colleague' && <WorkDraft id={id} item={item} head={head} typing={typing} />}
-            <WorkComposer id={id} item={item} head={head} colleague={who.kind === 'colleague' ? item.owner?.name ?? '' : null} />
+          <WorkFeed key={id} id={id} item={item} />
+          <footer class={s.foot} ref={foot}>
+            {!done && who.kind !== 'colleague' && <WorkDraft key={id} id={id} item={item} head={head} typing={typing} />}
+            <WorkComposer key={id} id={id} item={item} head={head} colleague={who.kind === 'colleague' ? item.owner?.name ?? '' : null} />
           </footer>
         </>
       )}

@@ -172,7 +172,8 @@
 .rowReason[data-tone="ai"] { color: var(--ai-ink); }
 
 /* ---------- Пузыри ---------- */
-.bubbleWrap { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s1); max-width: 100%; }
+/* Во всю ширину ряда: иначе 82% у пузыря считались от ширины его же текста и короткие фразы переносились. */
+.bubbleWrap { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s1); width: 100%; max-width: 100%; }
 .bubbleWrap[data-side="out"] { align-items: flex-end; }
 .bubbleLabel {
   display: inline-flex;
@@ -196,6 +197,8 @@
   animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out);
 }
 @media (max-width: 767px) { .bubble { max-width: 86%; } }
+/* Уже бывшее на экране при открытии и ранние (M-8): только проявляются, въезжают снизу лишь новые. */
+[data-still] .bubble { animation-name: var(--kf-fade-in); }
 .bubble[data-voice="client"] { background: var(--bubble-in); color: var(--text); border-bottom-left-radius: var(--r-bubble-tail); }
 .bubble[data-voice="you"] { background: var(--accent); color: var(--on-accent); border-bottom-right-radius: var(--r-bubble-tail); }
 .bubble[data-voice="colleague"] { background: var(--bubble-colleague); color: var(--text); border-bottom-right-radius: var(--r-bubble-tail); }
@@ -215,6 +218,10 @@
 }
 .bubble[data-voice="you"] .bubbleMeta { color: var(--on-accent); }
 .bubble[data-voice="assistant"] .bubbleMeta { color: var(--ai-ink); }
+/* Сбоку от пузыря у низа, вне потока: ширина пузыря и высота ряда не меняются (J-15). */
+.bubble { position: relative; }
+.bubbleAside { position: absolute; bottom: 0; left: calc(100% + var(--s1)); white-space: normal; }
+.bubbleWrap[data-side="out"] .bubbleAside { left: auto; right: calc(100% + var(--s1)); }
 .bubbleFoot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-top: var(--s2); white-space: normal; }
 
 /* ---------- Лист (<dialog>) ----------

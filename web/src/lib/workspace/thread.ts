@@ -48,6 +48,28 @@ export interface ThreadState {
 }
 
 export const threads = signal<ReadonlyMap<number, ThreadState>>(new Map());
+/**
+ * Своё сообщение, ставшее настоящим: id сообщения → localId пузыря в пути.
+ * Лента держит прежний key, и пузырь не перемонтируется и не въезжает второй раз (J-5, M-7).
+ */
+export const sentAs = new Map<number, string>();
+
+/**
+ * Ключи ленты для своих сообщений: ответ отправки записал соответствие в sentAs;
+ * если кадр сокета пришёл раньше ответа — пузырь в пути узнаём по своему тексту.
+ * Возвращает localId пузырей в пути, которые уже стоят настоящими сообщениями.
+ */
+export function claimSent(messages: readonly ThreadMessage[], outgoing: readonly Outgoing[], me: string): Set<string> {
+  const claimed = new Set<string>();
+  for (const id of messages.map((message) => message.id)) { const local = sentAs.get(id); if (local) claimed.add(local); }
+  for (const entry of outgoing) {
+    if (claimed.has(entry.localId) || entry.state !== 'sending' || entry.kind !== 'text') continue;
+    const match = messages.find((message) => !sentAs.has(message.id) && message.voice === 'operator' && message.author?.id === me
+      && message.text === entry.text && message.at >= entry.at - 60_000);
+    if (match) { sentAs.set(match.id, entry.localId); claimed.add(entry.localId); }
+  }
+  return claimed;
+}
 /** Открытый сейчас диалог (для кадров и догона). */
 export const openThreadId = signal<number | null>(null);
 

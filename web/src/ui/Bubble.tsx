@@ -12,11 +12,13 @@ interface BubbleProps {
   foot?: ComponentChildren;
   /** Полная подпись для экранного диктора: «Клиент Анна, 16:21: …». */
   a11y: string;
+  /** Кнопка сбоку от пузыря у его низа («⋯» сообщения): не занимает строку под пузырём (J-15). */
+  aside?: ComponentChildren;
   children: ComponentChildren;
 }
 
 /** Пузырь ленты: голоса различаются формой, цветом и подписью (6.3.2). */
-export function Bubble({ voice, label, meta, pending, foot, a11y, children }: BubbleProps): JSX.Element {
+export function Bubble({ voice, label, meta, pending, foot, a11y, aside, children }: BubbleProps): JSX.Element {
   const side = voice === 'client' ? 'in' : 'out';
   return (
     <div class={s.bubbleWrap} data-side={side}>
@@ -31,6 +33,7 @@ export function Bubble({ voice, label, meta, pending, foot, a11y, children }: Bu
         <span aria-hidden="true">{children}</span>
         <span class={`${s.bubbleMeta} num`}>{pending && <Icon name="clock" size={12} />}{meta}</span>
         {foot && <div class={s.bubbleFoot}>{foot}</div>}
+        {aside && <span class={s.bubbleAside}>{aside}</span>}
       </div>
     </div>
   );
