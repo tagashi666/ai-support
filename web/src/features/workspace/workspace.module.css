@@ -106,7 +106,10 @@
   overflow: hidden;
   background: var(--surface-sunken);
 }
-.media img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.media:has(> img) { position: relative; }
+/* Картинка — поверх рамки aspect-ratio, а не внутри потока кнопки: в Firefox процент высоты
+   внутри <button> не разрешается, картинка без width/height была 0×0 и loading=lazy её не грузил. */
+.media > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: contain; }
 .audio { width: min(280px, 100%); }
 .fileCard {
   display: inline-flex;
