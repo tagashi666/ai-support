@@ -90,9 +90,12 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto('/next/knowledge/templates');
       await expect(page.getByRole('list', { name: 'Шаблоны' })).toBeVisible();
       expect(await serious(page)).toEqual([]);
-      await page.goto('/next/knowledge/hints');
-      await expect(page.getByRole('list', { name: 'Экраны' })).toBeVisible();
-      expect(await serious(page)).toEqual([]);
+      // «Подсказки по кабинету» — только при подключённом Bedolaga (в CI его нет).
+      if (await page.getByRole('tab', { name: 'Подсказки по кабинету' }).count()) {
+        await page.goto('/next/knowledge/hints');
+        await expect(page.getByRole('list', { name: 'Экраны' })).toBeVisible();
+        expect(await serious(page)).toEqual([]);
+      }
     });
   });
 }

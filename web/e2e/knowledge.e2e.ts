@@ -76,7 +76,9 @@ test('уход с несохранённым — вопрос; чужая пра
   await openEditor(page, name);
   await page.getByLabel('Текст статьи').fill('Мой текст.');
   await expect.poll(async () => page.evaluate((key) => localStorage.getItem(key), `next.kb.${name}`)).not.toBeNull();
-  await page.goto('/next/knowledge'); // полная перезагрузка: браузерный вопрос не задаётся в автотесте, текст — на устройстве
+  // Полная перезагрузка: браузер спрашивает «Покинуть страницу?» — уходим; текст остаётся на устройстве.
+  page.once('dialog', (dialog) => { void dialog.accept(); });
+  await page.goto('/next/knowledge');
   await openEditor(page, name);
   await expect(page.getByText(/Вернули ваш несохранённый текст/)).toBeVisible();
   await expect(page.getByLabel('Текст статьи')).toHaveValue('Мой текст.');
@@ -166,10 +168,12 @@ test('шаблоны: создать, найти, удалить с «Отмен
   await sheet.getByLabel('Название').fill('Проверим и вернёмся');
   await sheet.getByLabel('Текст').fill('Проверим и вернёмся с ответом.');
   await sheet.getByRole('button', { name: 'Сохранить' }).click();
-  await page.getByRole('searchbox', { name: 'Найти шаблон' }).fill(shortcut);
-  const row = page.getByRole('list', { name: 'Шаблоны' }).getByRole('listitem');
+  await expect(sheet).toBeHidden();
+  const list = page.getByRole('list', { name: 'Шаблоны' });
+  const row = list.getByRole('listitem').filter({ hasText: `/${shortcut} · Проверим и вернёмся` });
   await expect(row).toHaveCount(1);
-  await expect(row).toContainText(`/${shortcut} · Проверим и вернёмся`);
+  await page.getByRole('searchbox', { name: 'Найти шаблон' }).fill(shortcut);
+  await expect(list.getByRole('listitem')).toHaveCount(1);
   await row.getByRole('button', { name: 'Удалить' }).click();
   await expect(page.getByText(/Шаблон «Проверим и вернёмся» удалён/)).toBeVisible();
   await page.getByRole('button', { name: 'Отменить' }).click();
@@ -194,7 +198,7 @@ test('статья из палитры открывает саму статью'
 test('«В знания…» из диалога — новая статья с вопросом и ответом', async ({ page, request }) => {
   const { conversation, text } = await assistantMessage(request);
   await page.goto(`/next/chats/${conversation}`);
-  await page.locator('[data-side="out"]').filter({ hasText: text }).last().getByRole('button', { name: 'Действия с сообщением' }).click();
+  await page.locator('[data-side="out"]').filter({ hasText: text }).first().getByRole('button', { name: 'Действия с сообщением' }).click();
   await page.getByRole('menuitemradio', { name: 'В знания…' }).click();
   await expect(page).toHaveURL(/\/next\/knowledge\/new$/);
   await expect(page.getByLabel('Текст статьи')).not.toHaveValue('');

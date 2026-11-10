@@ -122,7 +122,7 @@ test('«Что делал помощник» и «Это неверно»', asyn
   await list.getByRole('button', { name: 'Это неверно' }).first().click();
   const sheet = page.getByRole('dialog', { name: 'Это неверно' });
   await sheet.getByRole('menuitemradio', { name: 'Неверный факт' }).click();
-  await sheet.getByRole('textbox').fill('Устройств можно пять');
+  await sheet.getByRole('textbox', { name: 'Что не так (по желанию)' }).fill('Устройств можно пять');
   await sheet.getByRole('button', { name: 'Отметить' }).click();
   await expect(sheet).toBeHidden();
   await expect(list.getByText('Отмечено как неверное').first()).toBeVisible();
