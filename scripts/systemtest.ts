@@ -110,7 +110,11 @@ try {
   check('отключённый не в списке', !after.people.some((p) => p.name === 'Иван'), after);
 
   console.log('Серверы (10.6 п.1)');
-  check('наблюдатель читает /api/nodes', (await call('GET', '/api/nodes', undefined, viewer)).status === 200);
+  response = await call('GET', '/api/nodes', undefined, viewer);
+  const viewerNodes = await response.text();
+  check('наблюдатель читает /api/nodes', response.status === 200);
+  check('наблюдателю внутренние имена не видны (в них бывают адреса)', !viewerNodes.includes('de-fra-2') && viewerNodes.includes('Франкфурт-2'), viewerNodes.slice(0, 200));
+  check('владельцу внутренние имена видны', (await (await call('GET', '/api/nodes')).text()).includes('de-fra-2'));
   check('наблюдателю переименовать — 403', (await call('POST', '/api/nodes/alias', { name: 'de-fra-2', alias: 'Германия' }, viewer)).status === 403);
   check('наблюдателю обновить — 403', (await call('POST', '/api/nodes/refresh', {}, viewer)).status === 403);
   check('руководителю переименовать — по праву settings:nodes', (await call('POST', '/api/nodes/alias', { name: 'de-fra-2', alias: 'Германия' }, lead)).status
