@@ -9,7 +9,7 @@ import { useFrozenList } from '@/lib/hooks/useFrozenList';
 import { useRowWindow } from '@/lib/hooks/useRowWindow';
 import { sectionLabel } from '@/lib/labels';
 import { getJson, readToken } from '@/lib/live/api';
-import { isUrgentCode, liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
+import { isUrgentCode, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, liveCounts, liveItems, loadError, loading, startLive } from '@/lib/live/store';
 import { isSplit, reducedMotion } from '@/lib/media';
 import { listOrder, paletteOpen, selectTick } from '@/lib/palette/run';
@@ -183,10 +183,10 @@ function WorkRow({ item, current, tabIndex, onKeyDown, actions, leaving = false,
             ? <span class={w.check} data-checked={actions.selected ? 'true' : 'false'} aria-hidden="true">{actions.selected ? '✓' : ''}</span>
             : here ? (
               <span class={w.avatarWrap}>
-                <Avatar name={name} channel={liveChannel(item)} />
+                <Avatar name={name} />
                 <span class={w.rowPresence} role="img" aria-label={t('presence.row', { name: here.name })}>{here.name.slice(0, 1).toLocaleUpperCase('ru')}</span>
               </span>
-            ) : <Avatar name={name} channel={liveChannel(item)} />}
+            ) : <Avatar name={name} />}
           title={name}
           time={listTime(item.activity_at, at)}
           who={preview.who}

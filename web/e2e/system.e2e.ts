@@ -1,5 +1,5 @@
 /**
- * «Система» (план, этап 6: 6.9): вердикт и «Подробнее» → «Серверы», имя «для помощника»
+ * «Система» (план, этап 6: 6.9): вердикт и строка неполадки → «Серверы», имя «для помощника»
  * (Enter, Esc), уведомления (смена уровня и «Отменить», тест), откат — лист яруса 2,
  * axe на вкладках и листах в обеих темах, 390 без горизонтальной прокрутки.
  * Установка обновления меняет поддельное состояние (после неё «обновить» больше нечего),
@@ -27,7 +27,7 @@ const LEVEL_NAME = { all: 'Каждое событие', important: 'Тольк�
 
 test.beforeEach(async ({ page }) => { await signIn(page); });
 
-test('вердикт с неполадкой «Франкфурт-2»; «Подробнее» ведёт в «Серверы»', async ({ page }) => {
+test('вердикт с неполадкой «Франкфурт-2»; строка неполадки открыта и ведёт в «Серверы»', async ({ page }) => {
   await page.goto('/next/system');
   await expect(page.getByRole('heading', { name: 'Система', level: 1 }), 'вердикт, шаг 1').toBeVisible();
   // Сервер не отвечает — неполадка (как на «Сегодня»): «Есть неисправность»; при одних предупреждениях — «Есть что проверить: N».
@@ -42,7 +42,10 @@ test('вердикт с неполадкой «Франкфурт-2»; «Под�
 
   await page.getByRole('button', { name: 'Приложение' }).click();
   await expect(page.getByText('Время работы'), 'вердикт, шаг 6').toBeVisible();
-  await page.getByRole('button', { name: 'Подробнее' }).click();
+  // Второй кнопки «Подробнее» в вердикте нет (R-28): путь — строка «Серверы» → «Открыть серверы».
+  await expect(page.getByRole('button', { name: 'Подробнее' })).toHaveCount(0);
+  await page.locator('button[aria-expanded]').filter({ hasText: 'Серверы' }).click();
+  await page.getByRole('button', { name: 'Открыть серверы' }).click();
   await expect(page).toHaveURL(/\/next\/system\/servers$/);
   await expect(page.getByText('Франкфурт-2').first(), 'вердикт, шаг 7').toBeVisible();
   await expect(page.getByText(/отвечают, 1 выключен|отвечает, 1 выключен/), 'вердикт, шаг 8').toBeVisible();

@@ -1,8 +1,8 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; display: flex; flex-direction: column; }
-.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
+.inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); align-content: start; }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
-.panel { display: grid; gap: var(--s6); min-width: 0; }
-.group { display: grid; gap: var(--s3); min-width: 0; }
+.panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s6); min-width: 0; }
+.group { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s3); min-width: 0; }
 .head { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-2); }
 .headRow { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s2) var(--s4); }
 .subhead { font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 600; margin-top: var(--s2); }
@@ -12,8 +12,8 @@
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .skeleton { height: 16rem; border-radius: var(--r-card); background: var(--surface-sunken); }
 
-/* Карточки режима: сетка по 18rem (R2 A4) — на телефоне список, шире — в ряд. */
-.cards { display: grid; gap: var(--s2); grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr)); max-width: 96rem; }
+/* Карточки режима: сетка по 18rem (R2 A4) — на телефоне список, шире — 2×2 в той же колонке, что и форма. */
+.cards { display: grid; gap: var(--s2); grid-template-columns: repeat(auto-fill, minmax(min(18rem, 100%), 1fr)); max-width: 44rem; }
 @media (min-width: 900px) { .cards { gap: var(--s3); } }
 .modeCard {
   position: relative; display: grid; gap: var(--s1); align-content: start; min-height: 44px; padding: var(--s3) var(--s4);
@@ -72,8 +72,16 @@
 .unit { color: var(--text-2); font-size: var(--fs-body); min-width: 2rem; }
 .toggle { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); min-height: 44px; font-size: var(--fs-body); cursor: pointer; }
 .toggleText { display: grid; gap: 2px; }
-.scale { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s1); }
-.scaleEnd { color: var(--text-2); font-size: var(--fs-small); }
+/* Шкала: на телефоне — строкой под заголовком, подписи под крайними точками; шире — справа в ряд. */
+.scaleRow { grid-template-columns: minmax(0, 1fr); }
+.scale { display: grid; grid-template-columns: repeat(5, 44px); justify-content: space-between; align-items: center; }
+.scaleEnd { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); grid-row: 2; }
+.scaleEnd:first-child { grid-column: 1 / 3; justify-self: start; }
+.scaleEnd:last-child { grid-column: 4 / 6; justify-self: end; }
+@media (min-width: 600px) {
+  .scaleRow { grid-template-columns: minmax(0, 1fr) auto; }
+  .scale { display: inline-flex; align-items: center; gap: var(--s1); }
+}
 .scaleStep { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; cursor: pointer; }
 .scaleStep::before { content: ""; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--control-border); background: var(--surface);
   transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }

@@ -147,7 +147,6 @@
 .unreadDot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; align-self: center; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
 .row[data-unread="true"] .unreadDot { opacity: 1; }
 .rowTime { flex: none; font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-3); font-weight: 500; }
-.row[data-unread="true"] .rowTime { color: var(--accent-text); }
 .rowLine {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -392,7 +391,6 @@
 .toastAction:hover { background: color-mix(in srgb, var(--toast-text) 14%, transparent); }
 .toastClose { color: var(--toast-text); }
 .toastClose:hover { background: color-mix(in srgb, var(--toast-text) 14%, transparent); }
-.toastTimer { font-variant-numeric: tabular-nums; color: color-mix(in srgb, var(--toast-text) 80%, transparent); font-size: var(--fs-small); min-width: 1.25rem; text-align: right; }
 /* Отсчёт окна отмены: полоса тает за --ttl, пауза — вместе с таймером действия. */
 .toastBar {
   position: absolute;
@@ -450,11 +448,12 @@
   --r-ind: 0;
   justify-self: start;
   display: inline-flex;
-  flex-wrap: wrap;
   max-width: 100%;
   border: 1px solid var(--control-border);
   border-radius: var(--r-control);
-  overflow: hidden;
+  /* В одну строку: не влезло — прокрутка внутри рамки, а не перенос одного пункта (R-ревью). */
+  overflow: auto hidden;
+  scrollbar-width: none;
 }
 .segItem {
   position: relative;
@@ -464,6 +463,8 @@
   padding: 0 var(--s3);
   font-size: var(--fs-body);
   font-weight: 500;
+  flex: none;
+  white-space: nowrap;
   cursor: pointer;
   transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-press) var(--ease-out);
 }
@@ -472,6 +473,10 @@
 .segItem input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
 .segItem[data-checked="true"] { color: var(--accent-text); }
 .segItem:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* Не влезло — край обёртки гаснет на 24 px со стороны скрытых вкладок. */
+:has(> .tabs[data-more="end"]) { mask-image: linear-gradient(to right, var(--text) calc(100% - var(--s6)), transparent); }
+:has(> .tabs[data-more="start"]) { mask-image: linear-gradient(to left, var(--text) calc(100% - var(--s6)), transparent); }
+:has(> .tabs[data-more="both"]) { mask-image: linear-gradient(to right, transparent, var(--text) var(--s6), var(--text) calc(100% - var(--s6)), transparent); }
 
 /* ---------- Карточка ---------- */
 .card {

@@ -2,6 +2,8 @@
 .inner { width: 100%; padding: var(--s6) var(--page-x) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 .inner > * { min-width: 0; }
 .head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
+/* «⋯» (44 px) не делает шапку выше, чем у других разделов: строка — высота заголовка. */
+.head > :not(h1) { margin-block: calc(-1 * var(--s2)); }
 .title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2) var(--s4); }
@@ -25,10 +27,10 @@
 .menuItem:hover { background: var(--surface-hover); }
 
 /* Карточки показателей */
-.cards { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fill, minmax(min(13rem, 100%), 1fr)); }
+.cards { display: grid; gap: var(--s3); grid-template-columns: repeat(auto-fit, minmax(min(13rem, 100%), 1fr)); align-items: start; }
 .card { display: grid; gap: var(--s1); align-content: start; padding: var(--pad-card); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); min-width: 0; }
 .cardTitle { font-size: var(--fs-body); font-weight: 600; color: var(--text-2); }
-.big { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; overflow-wrap: anywhere; }
+.big { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; overflow-wrap: anywhere; }
 .line { font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
 .few { color: var(--attention); font-size: var(--fs-small); line-height: var(--lh-small); }
 .linkBtn { display: inline-flex; align-items: center; min-height: 44px; padding: 0; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: var(--fs-body); text-align: left; cursor: pointer; }
@@ -41,11 +43,15 @@
 .blockTitle { font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 600; }
 .two { display: grid; gap: var(--s4); }
 .two { grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); align-items: start; }
-.charts { display: grid; gap: var(--s4); }
+.charts { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
 @media (min-width: 1024px) { .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .bars { display: flex; align-items: flex-end; gap: 2px; height: 5rem; }
-/* Высота столбца — transform: scaleY от низа (R2 C): смена периода едет переходом, без анимации height. */
-.bar { flex: 1 1 0; min-width: 2px; height: 100%; background: var(--accent); border-radius: 2px 2px 0 0; transform-origin: 50% 100%;
+/* Столбец не шире 24 px; при малом числе дней график по ширине столбцов, подписи — под крайними. */
+.plot { grid-template-columns: minmax(0, 1fr); }
+.plot > .bars, .plot > .axis { width: max(calc(var(--n, 1) * var(--s6) + (var(--n, 1) - 1) * 2px), 10rem); max-width: 100%; }
+.plot > .bars { justify-content: space-between; }
+/* Высота — transform: scaleY от низа (R2 C): смена периода едет переходом, без анимации height. */
+.bar { flex: 0 1 var(--s6); min-width: 2px; height: 100%; background: var(--accent); border-radius: 2px 2px 0 0; transform-origin: 50% 100%;
   transition: transform var(--dur-move) var(--ease-move); }
 .bar[data-zero="true"] { background: var(--border); height: 2px; }
 .axis { display: flex; justify-content: space-between; color: var(--text-2); font-size: var(--fs-small); }

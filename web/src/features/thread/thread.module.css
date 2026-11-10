@@ -33,7 +33,7 @@
 .feed { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s4) var(--s4) var(--s6); }
 .feed:focus-visible { outline-offset: -3px; }
 @media (min-width: 1024px) { .feed { padding: var(--s4) var(--s6) var(--s8); } }
-.column { display: flex; flex-direction: column; gap: var(--s3); max-width: 100%; }
+.column { display: flex; flex-direction: column; gap: var(--s3); max-width: 50rem; }
 .msg { margin-top: var(--s2); }
 .msgGrouped { margin-top: calc(-1 * var(--s2)); }
 .day { display: flex; justify-content: center; margin: var(--s2) 0; }
@@ -78,12 +78,13 @@
 .foot {
   display: grid;
   gap: var(--s2);
-  padding: var(--s2) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom));
+  padding: var(--s2) var(--s4) calc(var(--s3) + env(safe-area-inset-bottom));
   border-top: 1px solid var(--border);
   background: var(--surface);
 }
 @media (min-width: 1024px) { .foot { padding: var(--s3) var(--s6) var(--s4); } }
-.foot > * { width: 100%; }
+/* Черновик и поле ответа — одной колонкой с лентой: строка не длиннее ≈ 50rem. */
+.foot > * { width: 100%; max-width: 50rem; }
 
 .notice { padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 
@@ -218,7 +219,10 @@
   .draft { padding: var(--s3); gap: var(--s2); }
   .draftText[data-clamp="true"] { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
   .draftWhy, .draftSources { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: var(--fs-small); line-height: var(--lh-small); }
-  .draftActions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* Шаг 8: у кнопок-ссылок цель касания 44, но видимый отступ — как у текста. */
+  .more { margin-block: calc(-1 * var(--s3)); }
+  .draftActions { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; }
+  .draftActions > * { white-space: nowrap; }
   .draftActions svg { display: none; }
   .draftNote { grid-column: 1 / -1; }
 }

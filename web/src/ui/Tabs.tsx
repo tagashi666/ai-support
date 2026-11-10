@@ -1,5 +1,5 @@
 import type { JSX } from 'preact';
-import { useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { useSlide } from './motion';
 import s from './ui.module.css';
 
@@ -22,6 +22,23 @@ export function Tabs<V extends string>({ items, value, onChange, label, stretch 
   const ref = useRef<HTMLDivElement>(null);
   const ind = useRef<HTMLSpanElement>(null);
   useSlide(ref, ind, '[aria-selected="true"]', value);
+  // Ряд шире прокручивающей обёртки: край, за которым ещё вкладки, гаснет (data-more), без перерисовки.
+  useLayoutEffect(() => {
+    const list = ref.current;
+    const box = list?.parentElement;
+    if (!list || !box) return undefined;
+    const check = (): void => {
+      const max = box.scrollWidth - box.clientWidth;
+      const more = max <= 1 ? '' : box.scrollLeft <= 1 ? 'end' : box.scrollLeft >= max - 1 ? 'start' : 'both';
+      if (more) list.dataset.more = more; else delete list.dataset.more;
+    };
+    check();
+    box.addEventListener('scroll', check, { passive: true });
+    const observer = new ResizeObserver(check);
+    observer.observe(box);
+    observer.observe(list);
+    return () => { box.removeEventListener('scroll', check); observer.disconnect(); };
+  }, []);
   const onKeyDown = (event: KeyboardEvent): void => {
     if (event.key !== 'ArrowRight' && event.key !== 'ArrowLeft') return;
     event.preventDefault();

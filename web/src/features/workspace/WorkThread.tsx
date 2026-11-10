@@ -208,7 +208,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
           <div class={`${s.headActions} ${w.headActions}`}>
             {!done && (
               <Button variant="secondary" size="sm" icon="check" onClick={guarded('conv.resolve', resolveNow)}>
-                {head.ticket ? t('thread.resolveTicket') : t('thread.resolve')}
+                {head.ticket && isSplit.value ? t('thread.resolveTicket') : t('thread.resolve')}
               </Button>
             )}
             <Button variant="quiet" size="sm" icon="more" label={t('thread.more')} aria-haspopup="dialog" onClick={() => setSheet('more')} />

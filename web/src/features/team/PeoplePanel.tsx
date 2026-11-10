@@ -236,7 +236,7 @@ export function PeoplePanel({ item }: { item?: string }): JSX.Element {
                     <span class={k.personMeta}>
                       <span class={k.status} data-off={person.active ? undefined : 'true'}>{person.active ? tr('team.people.on') : tr('team.people.off')}</span>
                       {stats && person.active ? (
-                        <span>{tr('team.people.last', { when: seen ? listTime(seen, now) : tr('team.people.never') })}</span>
+                        <span>{seen ? tr('team.people.last', { when: listTime(seen, now) }) : tr('team.people.never')}</span>
                       ) : null}
                     </span>
                   </span>

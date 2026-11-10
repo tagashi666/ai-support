@@ -160,7 +160,7 @@
   position: fixed;
   inset: auto auto 0 0;
   margin: 0;
-  width: 15rem;
+  width: 17rem;
   /* WebKit: у popover из UA height: fit-content растягивал меню на всю высоту окна (R2 D). */
   height: auto;
   align-content: start;
@@ -205,7 +205,7 @@
   background: transparent;
   color: var(--text-2);
   font: inherit;
-  font-size: var(--fs-small);
+  font-size: var(--fs-body);
   font-weight: 500;
   transition: background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out);
 }
@@ -230,8 +230,9 @@
 .badge[data-tone="attention"] { background: var(--attention-bg); color: var(--attention); }
 .dot {
   position: absolute;
-  top: 8px;
-  left: calc(50% + 6px);
+  /* Правый верхний угол значка 20 px, без наезда на рисунок. */
+  top: 4px;
+  left: calc(50% + 10px);
   width: 8px;
   height: 8px;
   border-radius: 50%;

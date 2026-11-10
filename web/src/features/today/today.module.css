@@ -15,12 +15,18 @@
 .metricLabel { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .metricValue { margin: 0; font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; font-variant-numeric: tabular-nums; }
 .metric[data-tone="attention"] .metricValue { color: var(--attention); }
-@media (max-width: 767px) { .metrics { grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr)); gap: var(--s2); } .metric { padding: var(--s2) var(--s3); align-content: space-between; } .metricLabel { white-space: normal; } }
+/* Телефон: две колонки, нечётная последняя — на всю ширину (без пустой ячейки), подписи в строку. */
+@media (max-width: 767px) {
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s2); }
+  .metric { padding: var(--s2) var(--s3); }
+  .metric:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
 
 /* Карточки: от 22rem, не больше четырёх колонок; auto-fit — карточки растягиваются на
    всю ширину, пустых колонок справа нет. «Ждут вас» — на две колонки, когда их хотя бы две. */
 .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(max(22rem, calc((100% - 3 * var(--s4)) / 4)), 100%), 1fr)); gap: var(--s4); align-items: start; grid-auto-flow: row dense; container-type: inline-size; }
-@container (min-width: 45rem) { .wide { grid-column: span 2; } }
+/* «Ждут вас» — на две строки: справа под «Помощником» встаёт «Нужно внимание», а не одна внизу. */
+@container (min-width: 45rem) { .wide { grid-column: span 2; grid-row: span 2; } }
 .screen[data-compact="true"] .grid { grid-template-columns: minmax(0, 1fr); }
 .col { display: grid; gap: var(--s4); min-width: 0; }
 

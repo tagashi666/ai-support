@@ -9,7 +9,7 @@ import { clock, fullDate, listTime } from '@/lib/format/format';
 import { awaySince, LAST_VISIT_KEY, MODE_DOES, MODE_LABEL } from '@/lib/assistant/model';
 import { aiMode, can, loadActivity, markedWrong, pause } from '@/lib/assistant/store';
 import { getJson, readToken } from '@/lib/live/api';
-import { liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
+import { liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, connection, liveCounts, liveItems, loading, syncedAt } from '@/lib/live/store';
 import { href, navigate, type Route } from '@/lib/router';
 import { now } from '@/lib/store/state';
@@ -51,7 +51,7 @@ function WaitingRow({ item }: { item: InboxItem }): JSX.Element {
   const preview = livePreview(item);
   const name = liveName(item);
   return (
-    <Row id={String(item.id)} wrapped avatar={<Avatar name={name} channel={liveChannel(item)} />} title={name}
+    <Row id={String(item.id)} wrapped avatar={<Avatar name={name} />} title={name}
       time={listTime(item.activity_at, at)} who={preview.who} preview={preview.text} reason={reason.text} tone={reason.tone}
       unread={item.unread > 0} onOpen={() => navigate({ name: 'chats', id: String(item.id) })} />
   );
@@ -244,8 +244,9 @@ export function LiveToday(): JSX.Element {
               {!pending && attentionCard}
               {!pending && awayCard}
             </div>
-            {/* Строка «Система» — только с готовыми карточками: под заглушками её сдвигало бы (CLS, R2 D). */}
-            {!pending && system}
+            {/* Строка «Система» — только с готовыми карточками: под заглушками её сдвигало бы (CLS, R2 D).
+                Неполадку уже называет «Нужно внимание» — второй раз строкой её не повторяем. */}
+            {!pending && !(linked && firstIssue) && system}
           </div>
         )}
       </div>

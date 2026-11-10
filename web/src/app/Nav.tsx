@@ -195,6 +195,7 @@ function Account({ current }: { current: Route }): JSX.Element {
         <div class={s.menuSep} role="separator" />
         <a role="menuitem" class={s.menuItem} href={href(device)} onClick={go(device)}>{t('nav.device')}</a>
         <a role="menuitem" class={s.menuItem} href="/?ui=classic">{t('nav.classic')}</a>
+        {live && <div class={s.menuSep} role="separator" />}
         {live && <button type="button" role="menuitem" class={s.menuItem} onClick={() => { close(); signOut(); }}>{t('live.signOut')}</button>}
       </div>
     </div>

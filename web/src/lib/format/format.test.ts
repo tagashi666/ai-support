@@ -12,6 +12,7 @@ describe('форматирование', () => {
     expect(duration(160 * MIN)).toBe('2 ч 40 мин');
     expect(duration(3 * 24 * 60 * MIN)).toBe('3 дня');
     expect(roughDuration(133 * MIN)).toBe('2 ч');
+    expect(roughDuration(73 * MIN)).toBe('1 ч');
   });
 
   it('время в строке списка', () => {

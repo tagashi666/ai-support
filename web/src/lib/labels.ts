@@ -41,19 +41,25 @@ export interface ReasonView {
   tone: Tone;
 }
 
+/**
+ * Время ожидания — в начале строки: при обрезке многоточием пропадает причина, а не время
+ * («Ждёт 3 ч · передан человеку»).
+ */
+export const withWaitLead = (waited: string | null, text: string): string =>
+  waited ? t('reason.waitsLead', { for: waited, what: text.charAt(0).toLocaleLowerCase('ru') + text.slice(1) }) : text;
+
 /** Причина в строке списка (7.1): одна, словами, со временем ожидания. */
 export function reasonView(reason: Reason, now: number, waitingSince?: number): ReasonView {
   const waited = waitingSince !== undefined ? roughDuration(now - waitingSince) : null;
-  const withWait = (text: string): string =>
-    waited ? `${text} · ${t('reason.waitsFor', { for: waited })}` : text;
+  const withWait = (text: string): string => withWaitLead(waited, text);
   switch (reason.kind) {
-    case 'asksHuman': return { text: withWait(t('reason.asksHuman')), tone: 'attention' };
-    case 'handedOver': return { text: t('reason.handedOver', { topic: reason.topic }), tone: 'attention' };
+    case 'asksHuman': return { text: withWait(t('reason.asksHuman')), tone: 'quiet' };
+    case 'handedOver': return { text: t('reason.handedOver', { topic: reason.topic }), tone: 'quiet' };
     case 'slaOver': return { text: t('reason.slaOver', { ago: roughDuration(now - reason.since) }), tone: 'attention' };
-    case 'aiSilent': return { text: withWait(t('reason.aiSilent')), tone: 'attention' };
+    case 'aiSilent': return { text: withWait(t('reason.aiSilent')), tone: 'quiet' };
     case 'draftUnsure': return { text: t('reason.draftUnsure'), tone: 'ai' };
     case 'draftReady': return { text: withWait(t('reason.draftReady')), tone: 'ai' };
-    case 'important': return { text: t('reason.important'), tone: 'attention' };
+    case 'important': return { text: t('reason.important'), tone: 'quiet' };
     case 'slaSoon': return { text: t('reason.slaSoon', { left: roughDuration(reason.due - now) }), tone: 'quiet' };
     case 'waiting': return { text: t('reason.waiting', { for: waited ?? '' }), tone: 'quiet' };
     case 'aiReplying': return { text: t('reason.aiReplying'), tone: 'quiet' };

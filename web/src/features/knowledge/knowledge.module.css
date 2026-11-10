@@ -14,7 +14,7 @@
 
 /* Поиск и фильтр списка */
 .bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
-.search { flex: 1 1 16rem; min-width: 0; max-width: 36rem; }
+.search { flex: 1 1 10rem; min-width: 0; max-width: 36rem; }
 
 /* Строки статей, идей и шаблонов */
 .list { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border); }
@@ -28,8 +28,8 @@
 .itemHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s1) var(--s3); }
 .itemTitle { font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 600; overflow-wrap: anywhere; }
 .itemMeta { color: var(--text-2); font-size: var(--fs-small); line-height: var(--lh-small); }
-.itemText { color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tag { display: inline-block; padding: 0 var(--s2); border-radius: var(--r-tag); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
+.itemText { max-width: 72ch; color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag { justify-self: start; display: inline-block; padding: 0 var(--s2); border-radius: var(--r-tag); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
 .tag[data-tone="idea"] { background: var(--ai-bg); color: var(--ai-text); }
 .tag[data-tone="draft"] { background: var(--surface-sunken); color: var(--text-2); }
 

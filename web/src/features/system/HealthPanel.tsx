@@ -1,7 +1,6 @@
 import type { JSX } from 'preact';
 import { Collapse } from '@/ui/Collapse';
 import { useEffect, useState } from 'preact/hooks';
-import { t } from '@/i18n/ru';
 import { tr } from '@/i18n/sections/system';
 import { showToast } from '@/lib/actions/toasts';
 import { clock } from '@/lib/format/format';
@@ -131,7 +130,8 @@ function UpdateGlance(): JSX.Element | null {
 export function HealthPanel(): JSX.Element {
   const online = connection.value !== 'offline';
   const ready = bootstrap.value !== null;
-  const [openId, setOpenId] = useState<string | null>(null);
+  // undefined — ещё не трогали: открыта строка неполадки (вместо второй кнопки «Подробнее» в вердикте, R-28).
+  const [picked, setOpenId] = useState<string | null | undefined>(undefined);
   useEffect(() => { if (ready && online) void loadHealth(); }, [ready, online]);
   const d = diag.value;
   const stale = d.state === 'ready' && !online;
@@ -159,6 +159,7 @@ export function HealthPanel(): JSX.Element {
   const verdict = verdictOf(checks);
   const target = verdictTarget(checks);
   const tone: Tone = verdict.level === 'ok' ? 'ok' : verdict.level === 'check' ? 'warn' : 'error';
+  const openId = picked !== undefined ? picked : target && verdict.level !== 'ok' ? checks.find((check) => check.link === target)?.id ?? null : null;
   const at = checkedAt.value;
   return (
     <div class={s.panel}>
@@ -172,7 +173,6 @@ export function HealthPanel(): JSX.Element {
         </div>
         <p class={s.verdictText}>{verdict.text}</p>
         {stale && <p class={s.hint}>{tr('system.offlineStale')}</p>}
-        {target && verdict.level !== 'ok' && <div class={s.actions}><Button variant="primary" size="sm" onClick={() => goTo(target)}>{t('problem.more')}</Button></div>}
       </Card>
       <div class={s.cols}>
         <Card label={tr('system.checked')}>

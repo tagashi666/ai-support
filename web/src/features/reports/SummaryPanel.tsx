@@ -53,7 +53,7 @@ function Charts({ data }: { data: StatsResponse }): JSX.Element {
       </div>
       {!table ? (
         <div class={r.charts}>
-          <div class={r.panel}>
+          <div class={`${r.panel} ${r.plot}`} style={{ '--n': days.length }}>
             <span class={r.cardTitle}>{tr('reports.byDay')}</span>
             <Bars values={days.map((row) => row.incoming)} label={tr('reports.byDay')} />
             {days.length > 1 && (
@@ -62,7 +62,7 @@ function Charts({ data }: { data: StatsResponse }): JSX.Element {
               </div>
             )}
           </div>
-          <div class={r.panel}>
+          <div class={`${r.panel} ${r.plot}`} style={{ '--n': hours.length }}>
             <span class={r.cardTitle}>{tr('reports.byHour')}</span>
             <Bars values={hours.map((row) => row.n)} label={tr('reports.byHour')} />
             <div class={r.axis} aria-hidden="true"><span>0:00</span><span>12:00</span><span>23:00</span></div>
