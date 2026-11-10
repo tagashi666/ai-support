@@ -60,7 +60,7 @@ export function NumberField({ field, label, hint, min, max, step = 1, unit, scal
         <input id={id} class={a.input} type="number" inputMode="decimal" min={min} max={max} step={step} value={text}
           disabled={locked(field)} aria-invalid={error ? 'true' : undefined} aria-describedby={error ? `${id}-err` : undefined}
           onInput={(event) => onInput((event.target as HTMLInputElement).value)} />
-        {unit && <span class={a.unit}>{unit}</span>}
+        <span class={a.unit} aria-hidden={unit ? undefined : 'true'}>{unit}</span>
       </span>
       <Lock field={field} />
       {error && <span class={a.error} id={`${id}-err`} role="alert">{error}</span>}

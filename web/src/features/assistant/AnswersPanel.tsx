@@ -92,7 +92,7 @@ export function AnswersPanel(): JSX.Element {
             <h2 class={a.head} id="as-rules">{t('assistant.rules.title')}</h2>
             <span class={a.muted}>{t('assistant.rules.onlyAuto')}</span>
           </div>
-          <div class={a.numRow}>
+          <div class={`${a.numRow} ${a.scaleRow}`}>
             <span class={a.numLabel} id="as-caution">{t('assistant.key.minConfidence')}
               <span class={a.hint}>{t(CAUTION_LABEL[caution] ?? 'assistant.caution.2')}</span>
             </span>
