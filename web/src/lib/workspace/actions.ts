@@ -196,13 +196,18 @@ export function markRead(id: number): void {
   void post(`/api/conversations/${id}/read`, {}).catch(() => dropPatch(id));
 }
 
-/** «Взять себе»: передача человеку и закрепление на 15 мин — сразу, помощник молчит. */
+/**
+ * «Взять себе»: передача человеку и закрепление на 15 мин — сразу, помощник молчит.
+ * Два запроса; кадр после первого не снимает заплатку — она держится до ответа
+ * второго (L-8), иначе строка на миг мигает «без владельца».
+ */
 export async function take(id: number, quiet = false): Promise<boolean> {
   const me = bootstrap.peek()?.me;
-  patch(id, { owner: me ? { id: me.id, name: me.name, until: Date.now() + LEASE_MS } : null });
+  patch(id, { owner: me ? { id: me.id, name: me.name, until: Date.now() + LEASE_MS } : null }, false, true);
   try {
     await state(id, { handoff: true });
     await post(`/api/conversations/${id}/engage`, {});
+    release(id);
     void syncThread(id);
     if (!quiet) undoable(t('toast.took'), () => { void giveBack(id, true); });
     return true;
@@ -214,11 +219,12 @@ export async function take(id: number, quiet = false): Promise<boolean> {
 }
 
 export async function giveBack(id: number, quiet = false): Promise<void> {
-  patch(id, { owner: null, flags: { ...(itemOf(id)?.flags ?? { important: false, not_found: false }), handoff: false } });
+  patch(id, { owner: null, flags: { ...(itemOf(id)?.flags ?? { important: false, not_found: false }), handoff: false } }, false, true);
   try {
     await state(id, { handoff: false });
     // Закрепление снимается, только если оно ваше; чужое сервер не отдаст (409).
     await post(`/api/conversations/${id}/release`, {}).catch(() => undefined);
+    release(id);
     void syncThread(id);
     if (!quiet) undoable(t('toast.gaveBack'), () => { void take(id, true); });
   } catch (err) {
