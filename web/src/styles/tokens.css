@@ -1,24 +1,27 @@
 /*
- * Токены новой панели (план, раздел 8). Цвета задаются только здесь.
- * Слои: смысловые токены темы → компоненты используют только их.
- * Тема: :root[data-theme="light|dark"]; без атрибута — по системе.
- * Контраст пар «токен — поверхность» проверяет web/src/styles/contrast.test.ts.
+ * Токены новой панели (план, раздел 8; полировка — audit/ui-polish/palette.md).
+ * Цвета, размеры шрифта, радиусы и тени задаются только здесь — scale.test.ts
+ * не пускает значения мимо шкалы в *.module.css.
+ * Тема: :root[data-theme="light|dark"]; без атрибута — по системе. Тёмный блок
+ * повторён для data-theme и для prefers-color-scheme — тест сверяет, что они одинаковы.
+ * Контраст пар «токен — поверхность» проверяет contrast.test.ts.
  */
 
 :root {
   color-scheme: light;
 
-  /* Поверхности */
+  /* Поверхности: sunken < bg < surface = raised; hover — между surface и sunken */
   --bg: #F6F5F2;
   --surface: #FFFFFF;
-  --surface-sunken: #EFEDE8;
-  --surface-hover: #F1EFEA;
+  --surface-sunken: #ECE9E3;
+  --surface-hover: #F3F1EC;
+  --surface-raised: #FFFFFF;
   --border: #E4E1DA;
   --control-border: #7D8591;
 
-  /* Текст */
+  /* Текст: три ступени, соседние различимы */
   --text: #1C1F24;
-  --text-2: #4B515B;
+  --text-2: #3A3F48;
   --text-3: #5E6570;
 
   /* Акцент: кнопка, ваш пузырь, ссылки, выбор */
@@ -32,7 +35,7 @@
 
   /* Голоса ленты */
   --bubble-in: #E8E6E1;
-  --bubble-colleague: #DCE8FF;
+  --bubble-colleague: #CFDDFB;
 
   /* Помощник — фиолетовый только у него */
   --ai-bg: #EFE9FB;
@@ -43,15 +46,23 @@
   --note-bg: #FFF4CC;
   --note-text: #4A3B00;
 
-  /* «Нужно вам» — янтарный только здесь */
+  /* «Нужно вам» — янтарный; предупреждение — тот же тон отдельным токеном */
   --attention: #92400E;
   --attention-bg: #FEF3C7;
+  --warn: #92400E;
+  --warn-bg: #FEF3C7;
 
   /* Порядок и ошибки */
   --ok: #166534;
+  --ok-bg: #E7F4EA;
   --danger: #B42318;
+  --danger-bg: #FDECEA;
   --danger-btn: #B42318;
   --on-danger: #FFFFFF;
+
+  /* Тост: тёмная плашка в светлой теме, приподнятая — в тёмной */
+  --toast-bg: #1C1F24;
+  --toast-text: #F6F5F2;
 
   /* Аватары: приглушённые тона, текст — --avatar-ink */
   --avatar-ink: #1C1F24;
@@ -63,59 +74,92 @@
   --avatar-6: #D8E4E6;
 
   --scrim: rgba(16, 24, 40, 0.32);
+  --shadow-1: 0 1px 2px rgba(16, 24, 40, 0.08);
   --shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.12), 0 2px 6px rgba(16, 24, 40, 0.08);
   --pop-ring: 0 0 0 0 transparent;
 
-  /* Типографика (rem: настройка «Размер текста» масштабирует всё) */
+  /* Типографика: 5 ступеней (12, 14, 16, 18, 22), начертания 400/500/600.
+     rem: настройка «Размер текста» масштабирует всё. */
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  --fs-title: 1.375rem;   /* 22 */
-  --lh-title: 1.75rem;
-  --fs-card: 1.0625rem;   /* 17 */
-  --lh-card: 1.5rem;
-  --fs-name: 0.9375rem;   /* 15 */
-  --lh-name: 1.25rem;
-  --fs-body: 0.875rem;    /* 14 */
-  --lh-body: 1.25rem;
-  --fs-msg: 1rem;         /* 16 */
-  --lh-msg: 1.5rem;
-  --fs-button: 0.9375rem; /* 15 */
-  --fs-small: 0.75rem;    /* 12 */
+  --fs-small: 0.75rem;    /* 12 — метки, время, подсказки */
   --lh-small: 1rem;
+  --fs-body: 0.875rem;    /* 14 — основной текст интерфейса */
+  --lh-body: 1.25rem;
+  --fs-msg: 1rem;         /* 16 — сообщения ленты */
+  --lh-msg: 1.5rem;
+  --fs-name: 1rem;        /* 16 — имя в строке списка */
+  --lh-name: 1.375rem;
+  --fs-card: 1rem;        /* 16 — заголовок карточки и листа, 600 */
+  --lh-card: 1.5rem;
+  --fs-lead: 1.125rem;    /* 18 — вводная фраза экрана, имя в шапке диалога */
+  --lh-lead: 1.625rem;
+  --fs-title: 1.375rem;   /* 22 — заголовок экрана */
+  --lh-title: 1.75rem;
+  --fs-button: 0.875rem;  /* 14; на касании 16 */
 
-  /* Сетка 4 px */
+  /* Отступы: 4, 8, 12, 16, 24, 32, 48; карточка и лист — --pad-card */
   --s1: 0.25rem;
   --s2: 0.5rem;
   --s3: 0.75rem;
   --s4: 1rem;
-  --s5: 1.25rem;
   --s6: 1.5rem;
   --s8: 2rem;
   --s12: 3rem;
+  --pad-card: var(--s4);
+  --page-max: 72rem;
 
-  /* Формы */
-  --r-tag: 6px;
-  --r-control: 10px;
-  --r-card: 12px;
-  --r-bubble: 16px;
-  --r-bubble-tail: 6px;
-  --r-sheet: 20px;
+  /* Радиусы: 6, 10, 14, круг */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
   --r-pill: 999px;
+  --r-tag: var(--r-sm);
+  --r-control: var(--r-md);
+  --r-card: var(--r-lg);
+  --r-bubble: var(--r-lg);
+  --r-bubble-tail: var(--r-sm);
+  --r-sheet: var(--r-lg);
 
   /* Размеры */
   --rail: 96px;
   --row-h: 76px;
   --control-h: 40px;
+  --control-sm: 32px;
+  --target: 44px;          /* цель касания */
   --tabbar-h: 56px;
   --avatar: 44px;
 
-  /* Движение */
-  --ease: cubic-bezier(.2, .8, .2, 1);
-  --t-press: 120ms;
-  --t-state: 160ms;
-  --t-move: 200ms;
-  --t-sheet: 240ms;
+  /* Листы: высота по видимой области (dvh), вырез сверху и полоса жестов снизу */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --sheet-w: 28rem;
+  --sheet-w-wide: 52rem;
+  --sheet-w-pane: 24rem;
+  --sheet-max-h: min(80dvh, 40rem);
+  --sheet-max-h-wide: min(88dvh, 52rem);
+  --sheet-max-h-phone: calc(100dvh - var(--safe-top) - var(--s6));
+
+  /* Движение (web/src/ui/motion.ts повторяет числа для JS).
+     Вход — --ease-out, выход на ~30% короче — --ease-exit, перемещение — --ease-move.
+     Сдвиги — токенами: при «уменьшить движение» они обнуляются, остаётся прозрачность. */
+  --dur-press: 100ms;
+  --dur-fast: 160ms;
+  --dur-move: 220ms;
+  --dur-sheet: 280ms;
+  --dur-exit: 160ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-exit: cubic-bezier(.4, 0, 1, 1);
+  --ease-move: cubic-bezier(.3, 0, .2, 1);
+  --shift: 8px;
+  --shift-sheet: 100%;
+  --pop-scale: 0.98;
+  --press-scale: 0.97;
 
   --kb-inset: 0px;
+}
+
+@media (min-width: 1024px) {
+  :root { --pad-card: 1.25rem; }
 }
 
 /* «Это устройство → Плотность → Компактно» (6.12): для мыши; на касаниях цели остаются 44 px. */
@@ -128,16 +172,8 @@
 @media (pointer: coarse) {
   :root, :root[data-density="compact"] {
     --control-h: 44px;
-    --fs-name: 1rem;
-    --lh-name: 1.375rem;
+    --control-sm: 44px;
     --fs-button: 1rem;
-  }
-}
-
-@media (min-width: 1800px) {
-  :root {
-    --fs-msg: 1.0625rem; /* 17 */
-    --lh-msg: 1.625rem;
   }
 }
 
@@ -146,13 +182,14 @@
   color-scheme: dark;
   --bg: #12141A;
   --surface: #1A1D24;
-  --surface-sunken: #222630;
-  --surface-hover: #20242C;
+  --surface-sunken: #0F1116;
+  --surface-hover: #252A34;
+  --surface-raised: #2A2F3A;
   --border: #2A2E38;
   --control-border: #6B7380;
   --text: #E7E9EE;
-  --text-2: #B4BAC6;
-  --text-3: #9AA2B0;
+  --text-2: #C3C8D2;
+  --text-3: #9098A6;
   --accent: #2F5BD8;
   --accent-hover: #3A66E0;
   --on-accent: #FFFFFF;
@@ -169,10 +206,16 @@
   --note-text: #F3E6B3;
   --attention: #F5B45A;
   --attention-bg: #33260F;
+  --warn: #F5B45A;
+  --warn-bg: #33260F;
   --ok: #6FD08C;
+  --ok-bg: #16301F;
   --danger: #FF8A80;
+  --danger-bg: #3A1D1B;
   --danger-btn: #C2362B;
   --on-danger: #FFFFFF;
+  --toast-bg: #2C313C;
+  --toast-text: #E7E9EE;
   --avatar-ink: #E7E9EE;
   --avatar-1: #3A3429;
   --avatar-2: #2B3A30;
@@ -181,6 +224,7 @@
   --avatar-5: #372F47;
   --avatar-6: #2A3B3E;
   --scrim: rgba(0, 0, 0, 0.5);
+  --shadow-1: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
   --pop-ring: 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
@@ -190,13 +234,14 @@
     color-scheme: dark;
     --bg: #12141A;
     --surface: #1A1D24;
-    --surface-sunken: #222630;
-    --surface-hover: #20242C;
+    --surface-sunken: #0F1116;
+    --surface-hover: #252A34;
+    --surface-raised: #2A2F3A;
     --border: #2A2E38;
     --control-border: #6B7380;
     --text: #E7E9EE;
-    --text-2: #B4BAC6;
-    --text-3: #9AA2B0;
+    --text-2: #C3C8D2;
+    --text-3: #9098A6;
     --accent: #2F5BD8;
     --accent-hover: #3A66E0;
     --on-accent: #FFFFFF;
@@ -213,10 +258,16 @@
     --note-text: #F3E6B3;
     --attention: #F5B45A;
     --attention-bg: #33260F;
+    --warn: #F5B45A;
+    --warn-bg: #33260F;
     --ok: #6FD08C;
+    --ok-bg: #16301F;
     --danger: #FF8A80;
+    --danger-bg: #3A1D1B;
     --danger-btn: #C2362B;
     --on-danger: #FFFFFF;
+    --toast-bg: #2C313C;
+    --toast-text: #E7E9EE;
     --avatar-ink: #E7E9EE;
     --avatar-1: #3A3429;
     --avatar-2: #2B3A30;
@@ -225,8 +276,23 @@
     --avatar-5: #372F47;
     --avatar-6: #2A3B3E;
     --scrim: rgba(0, 0, 0, 0.5);
+    --shadow-1: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
     --pop-ring: 0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --shift: 0px;
+    --shift-sheet: 0%;
+    --pop-scale: 1;
+    --press-scale: 1;
+    --dur-press: 0ms;
+    --dur-move: 0ms;
+    --dur-fast: 120ms;
+    --dur-sheet: 120ms;
+    --dur-exit: 120ms;
   }
 }
 

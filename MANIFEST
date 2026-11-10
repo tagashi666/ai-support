@@ -374,6 +374,7 @@ web/src/lib/workspace/workspace.test.ts
 web/src/main.tsx
 web/src/styles/base.css
 web/src/styles/contrast.test.ts
+web/src/styles/scale.test.ts
 web/src/styles/tokens.css
 web/src/ui/Avatar.tsx
 web/src/ui/Bubble.tsx

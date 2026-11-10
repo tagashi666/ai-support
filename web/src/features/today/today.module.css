@@ -1,18 +1,18 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; }
-.inner { max-width: 68rem; margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); }
+.inner { max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); }
 @media (min-width: 1024px) { .inner { padding: var(--s8) var(--s8) var(--s12); } }
 .screen[data-compact="true"] .inner { max-width: 60rem; padding: var(--s8) var(--s6); }
 
 .head { display: grid; gap: var(--s2); margin-bottom: var(--s6); }
 .headRow { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s4); flex-wrap: wrap; }
-.greeting { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; letter-spacing: -0.01em; }
+.greeting { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; }
 .date { color: var(--text-3); font-size: var(--fs-body); }
 .date::first-letter { text-transform: uppercase; }
-.verdict { font-size: 1.25rem; line-height: 1.75rem; color: var(--text-2); max-width: 36rem; text-wrap: pretty; }
-@media (min-width: 1024px) { .verdict { font-size: 1.375rem; line-height: 2rem; } }
+/* Вердикт — вводная фраза под заголовком, не второй заголовок (P-5). */
+.verdict { font-size: var(--fs-lead); line-height: var(--lh-lead); color: var(--text-2); max-width: 36rem; text-wrap: pretty; }
 
 .grid { display: grid; gap: var(--s4); align-items: start; }
-@media (min-width: 900px) { .grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: var(--s5); } }
+@media (min-width: 900px) { .grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: var(--s6); } }
 .screen[data-compact="true"] .grid { grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 1440px) { .screen[data-compact="true"] .grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
 .col { display: grid; gap: var(--s4); min-width: 0; }
@@ -22,15 +22,13 @@
   display: flex;
   align-items: baseline;
   gap: var(--s2);
-  font-size: var(--fs-small);
-  line-height: var(--lh-small);
+  font-size: var(--fs-card);
+  line-height: var(--lh-card);
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-2);
+  color: var(--text);
 }
 .count { color: var(--attention); }
-.cardMeta { color: var(--text-3); font-weight: 500; text-transform: none; letter-spacing: 0; }
+.cardMeta { color: var(--text-3); font-size: var(--fs-body); font-weight: 500; }
 .rows { display: grid; margin: 0 calc(-1 * var(--s3)); }
 @media (min-width: 1024px) { .rows { margin: 0 calc(-1 * var(--s4)); } }
 .more { justify-self: start; margin-left: calc(-1 * var(--s2)); }

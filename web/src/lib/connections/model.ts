@@ -230,7 +230,7 @@ export function clientPreview(profile: Profile): PreviewLine[] {
 
 // --- папки ----------------------------------------------------------------
 
-/** Образцы цвета папки: в базе лежит строка #rrggbb, имена — для чтения с экрана. */
+/** Образцы цвета папки: в базе лежит строка #rrggbb, имена — для чтения с экрана. Это данные (цвет, выбранный человеком), а не тема — поэтому не токены (P-19, решение шага 1 полировки). */
 export const FOLDER_COLORS: ReadonlyArray<{ value: string; name: Parameters<typeof tr>[0] }> = [
   { value: '#2563eb', name: 'connections.color.blue' },
   { value: '#0f766e', name: 'connections.color.teal' },

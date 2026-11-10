@@ -1,8 +1,8 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: 72rem; margin: 0 auto; padding: var(--s5) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
+.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 @media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
 .inner > * { min-width: 0; }
-.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; }
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .panel { display: grid; gap: var(--s4); min-width: 0; }
 .muted { color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
@@ -10,7 +10,7 @@
 .error { color: var(--danger); font-size: var(--fs-body); line-height: var(--lh-body); overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); }
 .skeleton { height: 8rem; border-radius: var(--r-card); background: var(--surface-sunken); }
-.block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--s4); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
+.block { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); padding: var(--pad-card); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
 .empty { display: grid; gap: var(--s3); justify-items: start; padding: var(--s6) 0; }
 
 /* Люди */
@@ -64,7 +64,7 @@ fieldset.radios { margin: 0; padding: 0; border: 0; display: grid; gap: var(--s2
 @media (min-width: 768px) { .roleGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .roleCard { display: grid; gap: var(--s3); align-content: start; padding: var(--s4); }
 .roleHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--s1) var(--s3); }
-.roleTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 650; }
+.roleTitle { font-size: var(--fs-card); line-height: var(--lh-card); font-weight: 600; }
 .tag { display: inline-block; padding: 0 var(--s2); border-radius: var(--r-tag); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-small); font-weight: 600; }
 .tag[data-custom="true"] { background: var(--attention-bg); color: var(--text); }
 .groups { display: grid; gap: var(--s4); }

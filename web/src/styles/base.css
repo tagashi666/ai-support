@@ -34,7 +34,7 @@ svg { flex: none; }
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: var(--r-sm);
 }
 
 ::selection { background: var(--accent-soft); }
@@ -50,11 +50,46 @@ svg { flex: none; }
   white-space: nowrap;
 }
 
+/*
+ * Общие кадры движения. Имена — глобальные: модули берут их через var(--kf-*),
+ * чтобы CSS-модули не переименовали их (animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out)).
+ * Сдвиг и масштаб — токены: при «уменьшить движение» остаётся только прозрачность.
+ */
+:root {
+  --kf-fade-in: ui-fade-in;
+  --kf-fade-out: ui-fade-out;
+  --kf-rise-in: ui-rise-in;
+  --kf-sink-out: ui-sink-out;
+  --kf-pop-in: ui-pop-in;
+  --kf-pop-out: ui-pop-out;
+  --kf-sheet-up-in: ui-sheet-up-in;
+  --kf-sheet-down-out: ui-sheet-down-out;
+  --kf-sheet-left-in: ui-sheet-left-in;
+  --kf-sheet-right-out: ui-sheet-right-out;
+}
+@keyframes ui-fade-in { from { opacity: 0; } }
+@keyframes ui-fade-out { to { opacity: 0; } }
+@keyframes ui-rise-in { from { opacity: 0; transform: translateY(var(--shift)); } }
+@keyframes ui-sink-out { to { opacity: 0; transform: translateY(var(--shift)); } }
+@keyframes ui-pop-in { from { opacity: 0; transform: translateY(var(--shift)) scale(var(--pop-scale)); } }
+@keyframes ui-pop-out { to { opacity: 0; transform: scale(var(--pop-scale)); } }
+@keyframes ui-sheet-up-in { from { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); } }
+@keyframes ui-sheet-down-out { to { opacity: var(--sheet-fade, 1); transform: translateY(var(--shift-sheet)); } }
+@keyframes ui-sheet-left-in { from { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); } }
+@keyframes ui-sheet-right-out { to { opacity: var(--sheet-fade, 1); transform: translateX(var(--shift-sheet)); } }
+
+/*
+ * «Уменьшить движение» (система): токены в tokens.css убирают сдвиги и масштаб,
+ * переходы остаются короткой сменой прозрачности. Вспышка строки ([data-flash])
+ * не гасится — это сигнал, а не движение. Плавная прокрутка — только из JS с
+ * проверкой reducedMotion (lib/media.ts).
+ */
 @media (prefers-reduced-motion: reduce) {
+  :root { --sheet-fade: 0; }
   *, *::before, *::after {
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
     scroll-behavior: auto !important;
+  }
+  *:not([data-flash]), *::before, *::after {
+    animation-iteration-count: 1 !important;
   }
 }

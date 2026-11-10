@@ -17,8 +17,8 @@
   align-items: center;
   gap: var(--s2);
   min-height: 40px;
-  padding: 4px var(--s4);
-  padding-top: max(4px, env(safe-area-inset-top));
+  padding: var(--s1) var(--s4);
+  padding-top: max(var(--s1), var(--safe-top));
   border-bottom: 1px solid var(--border);
   background: var(--surface-sunken);
   color: var(--text-2);
@@ -28,7 +28,7 @@
 .demoTag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s2);
   font-weight: 600;
   color: var(--text-2);
 }
@@ -64,9 +64,9 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--s1);
   width: 100%;
-  padding: 10px 2px 8px;
+  padding: var(--s2) 2px;
   border: 0;
   border-radius: var(--r-card);
   background: transparent;
@@ -75,7 +75,7 @@
   line-height: var(--lh-small);
   font-weight: 600;
   text-decoration: none;
-  transition: background-color var(--t-press) var(--ease), color var(--t-press) var(--ease);
+  transition: background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out);
 }
 .railItem:hover { background: var(--surface-hover); color: var(--text); }
 .railItem[aria-current="page"] { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--border); }
@@ -86,13 +86,13 @@
   top: 12px;
   bottom: 12px;
   width: 3px;
-  border-radius: 0 3px 3px 0;
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
   background: var(--accent);
 }
 .railItem[aria-current="page"] .railIcon { color: var(--accent-text); }
 .railIcon { position: relative; display: grid; place-items: center; }
 .railRare { color: var(--text-3); }
-.railFoot { margin-top: auto; padding: var(--s2) 0; display: grid; justify-items: center; gap: 4px; text-align: center; color: inherit; text-decoration: none; border-radius: 10px; }
+.railFoot { margin-top: auto; padding: var(--s2) 0; display: grid; justify-items: center; gap: var(--s1); text-align: center; color: inherit; text-decoration: none; border-radius: var(--r-md); }
 .railFoot:hover, .railFoot[aria-current="page"] { background: var(--surface-hover); }
 .railName { font-size: var(--fs-small); line-height: var(--lh-small); font-weight: 600; color: var(--text); }
 .railRole { font-size: var(--fs-small); line-height: var(--lh-small); color: var(--text-3); }
@@ -103,13 +103,13 @@
   left: calc(100% - 4px);
   min-width: 18px;
   height: 18px;
-  padding: 0 5px;
+  padding: 0 var(--s1);
   border-radius: var(--r-pill);
   background: var(--attention-bg);
   color: var(--attention);
-  font-size: 0.6875rem;
+  font-size: var(--fs-small);
   line-height: 18px;
-  font-weight: 700;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: center;
   box-shadow: 0 0 0 2px var(--bg);
@@ -144,7 +144,7 @@
   justify-content: center;
   gap: 2px;
   min-height: 44px;
-  padding: 6px 2px;
+  padding: var(--s1) 2px;
   border: 0;
   background: transparent;
   color: var(--text-3);

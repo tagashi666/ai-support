@@ -29,7 +29,7 @@ export function Bubble({ voice, label, meta, pending, foot, a11y, children }: Bu
       <div class={s.bubble} data-voice={voice} data-pending={pending ? 'true' : 'false'}>
         <span class="visually-hidden">{a11y}</span>
         <span aria-hidden="true">{children}</span>
-        <span class={`${s.bubbleMeta} num`}>{meta}</span>
+        <span class={`${s.bubbleMeta} num`}>{pending && <Icon name="clock" size={12} />}{meta}</span>
         {foot && <div class={s.bubbleFoot}>{foot}</div>}
       </div>
     </div>

@@ -5,7 +5,7 @@
 
 /* Строка списка с «⋯»: меню видно при наведении и фокусе; на сенсоре — всегда, цель 44 px. */
 .rowWrap { position: relative; }
-.rowFront > button:first-child { padding-right: 48px; }
+.rowFront > button:first-child { padding-right: var(--s12); }
 .rowMenu {
   position: absolute;
   top: 50%;
@@ -20,6 +20,7 @@
   background: transparent;
   color: var(--text-3);
   opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out), background-color var(--dur-press) var(--ease-out), color var(--dur-press) var(--ease-out);
 }
 .rowWrap:hover .rowMenu, .rowWrap:focus-within .rowMenu, .rowMenu:focus-visible { opacity: 1; }
 .rowMenu:hover { background: var(--surface-hover); color: var(--text); }
@@ -123,6 +124,7 @@
 .draftBody { font-size: var(--fs-msg); line-height: var(--lh-msg); }
 .expert { color: var(--text-3); font-size: var(--fs-small); }
 .expert summary { min-height: 32px; display: flex; align-items: center; cursor: pointer; }
+@media (pointer: coarse) { .expert summary { min-height: var(--target); } }
 
 /* Поле ответа */
 .composerBar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
@@ -141,7 +143,7 @@
   border-radius: var(--r-control);
   color: var(--text-3);
 }
-.templateSearch input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-size: 1rem; outline: none; }
+.templateSearch input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font-size: var(--fs-msg); outline: none; }
 .templateList { display: grid; gap: var(--s1); }
 .template {
   display: grid;
@@ -168,20 +170,23 @@
 .swipeBtn + .swipeBtn { border-left: 1px solid var(--border); }
 .swipeScrim { position: fixed; inset: 0; z-index: 0; border: 0; background: transparent; padding: 0; }
 .rowWrap[data-swiped="true"] { z-index: 1; }
-.check { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 2px solid var(--control-border); border-radius: 50%; color: var(--on-accent); font-weight: 700; }
+.check { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border: 2px solid var(--control-border); border-radius: 50%; color: var(--on-accent); font-weight: 600; }
 .check[data-checked="true"] { background: var(--accent); border-color: var(--accent); }
+@media (pointer: coarse) { .check { width: var(--target); height: var(--target); } }
 .rowWrap[data-selecting="true"] .rowFront > button:first-child { padding-right: var(--s4); }
 .bulkBar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); border-top: 1px solid var(--border); background: var(--surface); position: sticky; bottom: 0; z-index: 2; }
+/* Панель выбора въезжает снизу, а не появляется скачком (M-10). */
+.bulkBar { animation: var(--kf-rise-in) var(--dur-fast) var(--ease-out); }
 .bulkBar > span { margin-right: auto; font-size: var(--fs-body); font-weight: 600; }
 .viewerActions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s3); }
 .why { display: grid; gap: var(--s2); font-size: var(--fs-body); line-height: var(--lh-body); }
 
 /* Черновик с другого устройства (7.8): «Взять его / Оставить этот». */
 .draftConflict { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); padding: var(--s2) var(--s3); margin-bottom: var(--s2);
-  border: 1px solid var(--border-strong, var(--border)); border-radius: var(--r2, 8px); background: var(--surface-sunken); font-size: var(--fs-small); }
+  border: 1px solid var(--control-border); border-radius: var(--r-sm); background: var(--surface-sunken); font-size: var(--fs-small); }
 .draftConflict > span { flex: 1 1 200px; }
 /* Мини-аватар присутствия в строке списка (7.7): кто сейчас в диалоге. */
 .avatarWrap { position: relative; display: inline-grid; }
 .rowPresence { position: absolute; right: -3px; bottom: -3px; width: 18px; height: 18px; border-radius: 50%;
-  display: grid; place-items: center; font-size: 10px; font-weight: 700; line-height: 1;
+  display: grid; place-items: center; font-size: var(--fs-small); font-weight: 600; line-height: 1;
   background: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 2px var(--surface); }

@@ -1,6 +1,6 @@
 /* Первый запуск и учебный диалог (6.13). Только токены, движение — transform/opacity. */
 .welcome { display: grid; gap: var(--s3); max-width: 34rem; padding: var(--s6) 0 var(--s4); font-size: var(--fs-card); line-height: var(--lh-card); color: var(--text-2); }
-.welcomeTitle { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; color: var(--text); }
+.welcomeTitle { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; color: var(--text); }
 .welcomeActions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s2); }
 
 .list { display: grid; gap: var(--s3); margin-bottom: var(--s4); }
@@ -27,14 +27,14 @@
 
 .tutorial { display: flex; flex-direction: column; gap: var(--s3); flex: 1; min-height: 0; overflow-y: auto; padding: var(--s3) var(--s4) var(--s8); }
 .tutHead { display: flex; align-items: center; gap: var(--s2); }
-.tutTitle { flex: 1; min-width: 0; font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 650; overflow-wrap: anywhere; }
-.tutBanner { padding: var(--s2) var(--s3); border: 2px dashed var(--control-border); border-radius: var(--r-card); color: var(--text-2); }
+.tutTitle { flex: 1; min-width: 0; font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 600; overflow-wrap: anywhere; }
+.tutBanner { padding: var(--s3) var(--pad-card); border: 2px dashed var(--control-border); border-radius: var(--r-card); color: var(--text-2); }
 .tasks { display: grid; gap: var(--s1); }
 .tasksTitle { font-size: var(--fs-small); font-weight: 600; color: var(--text-2); }
 .taskList { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: var(--s1) var(--s4); }
 .taskList li[data-done="true"] { color: var(--ok); }
 .tutFeed { display: grid; gap: var(--s2); }
-.tutNote { padding: var(--s2) var(--s3); border-radius: var(--r-card); background: var(--note-bg); color: var(--note-text); }
+.tutNote { padding: var(--s3) var(--pad-card); border-radius: var(--r-card); background: var(--note-bg); color: var(--note-text); }
 .tutDraft { display: grid; gap: var(--s2); padding: var(--s3); border-radius: var(--r-card); background: var(--ai-bg); }
 .tutComposer { display: grid; gap: var(--s2); }
 .tutComposer textarea { width: 100%; min-height: 4.5rem; padding: var(--s2); border: 1px solid var(--control-border); border-radius: var(--r-control);

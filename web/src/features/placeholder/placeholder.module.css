@@ -8,9 +8,9 @@
   padding: var(--s8) var(--s4);
   flex: 1;
 }
-.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; }
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .text { color: var(--text-2); font-size: var(--fs-name); line-height: 1.5rem; }
-.more { padding: var(--s5) var(--s4); overflow-y: auto; flex: 1; }
+.more { padding: var(--s6) var(--s4); overflow-y: auto; flex: 1; }
 .list { list-style: none; margin: var(--s4) 0 0; padding: var(--s1); display: grid; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); }
 .item {
   display: flex;

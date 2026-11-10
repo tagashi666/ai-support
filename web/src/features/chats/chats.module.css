@@ -61,7 +61,7 @@
 .list { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
 @media (min-width: 768px) { .list { background: var(--surface); } }
 .listHead { display: grid; gap: var(--s3); padding: var(--s3) var(--s4) var(--s3); }
-.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; letter-spacing: -0.01em; }
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; }
 
 .search {
   display: flex;
@@ -82,13 +82,13 @@
   height: 100%;
   border: 0;
   background: transparent;
-  font-size: 1rem;
+  font-size: var(--fs-msg);
   color: var(--text);
   outline: none;
 }
 .search input::placeholder { color: var(--text-3); }
 
-.scroller { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--s2) 72px; }
+.scroller { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--s2) calc(var(--s12) + var(--s6)); }
 .section { padding-top: var(--s2); }
 .sectionHead {
   position: sticky;
@@ -119,7 +119,7 @@
 @media (max-width: 767px), (pointer: coarse) { .sectionToggle { min-height: 44px; } }
 .sectionCount { color: var(--text-3); letter-spacing: 0; }
 .sectionCount[data-tone="attention"] { color: var(--attention); }
-.chevron, .chevronClosed { margin-left: auto; color: var(--text-3); transition: transform var(--t-state) var(--ease); }
+.chevron, .chevronClosed { margin-left: auto; color: var(--text-3); transition: transform var(--dur-fast) var(--ease-out); }
 .chevronClosed { transform: rotate(-90deg); }
 .sectionHint { padding: 0 var(--s4) var(--s1); color: var(--text-3); font-size: var(--fs-small); line-height: var(--lh-small); }
 .rows { display: grid; gap: 2px; }
@@ -137,7 +137,7 @@
   transform: translateX(-50%);
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--s2);
   min-height: 40px;
   padding: 0 var(--s4);
   border: 0;
@@ -148,8 +148,8 @@
   font-weight: 600;
   white-space: nowrap;
   box-shadow: var(--shadow-pop);
-  animation: pillIn var(--t-state) var(--ease);
+  animation: pillIn var(--dur-fast) var(--ease-out);
 }
 @media (pointer: coarse) { .pill { min-height: 44px; } }
 .pill[data-tone="attention"] { background: var(--attention-bg); color: var(--attention); box-shadow: var(--shadow-pop), inset 0 0 0 1px var(--attention); }
-@keyframes pillIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes pillIn { from { opacity: 0; transform: translate(-50%, var(--shift)); } to { opacity: 1; transform: translateX(-50%); } }

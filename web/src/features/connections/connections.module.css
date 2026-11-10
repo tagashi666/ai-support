@@ -1,8 +1,8 @@
 .screen { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; }
-.inner { width: 100%; max-width: 72rem; margin: 0 auto; padding: var(--s5) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
+.inner { width: 100%; max-width: var(--page-max); margin: 0 auto; padding: var(--s6) var(--s4) var(--s12); display: grid; gap: var(--s4); align-content: start; }
 @media (min-width: 1024px) { .inner { padding: var(--s6) var(--s8) var(--s12); } }
 .inner > * { min-width: 0; }
-.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; }
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; }
 .tabsScroll { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
 .panel { display: grid; gap: var(--s4); min-width: 0; }
 .muted { color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
@@ -35,7 +35,7 @@
 .secret { display: flex; gap: var(--s2); align-items: stretch; }
 .secret .input { flex: 1 1 auto; min-width: 0; }
 .check { display: flex; align-items: flex-start; gap: var(--s3); min-height: 44px; font-size: var(--fs-body); }
-.check input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.check input { margin-top: 2px; width: 18px; height: 18px; flex: none; }
 .details { border: 1px solid var(--border); border-radius: var(--r-control); padding: var(--s2) var(--s3); }
 .details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-size: var(--fs-body); font-weight: 600; }
 .details > div { display: grid; gap: var(--s3); padding-bottom: var(--s3); }
@@ -47,10 +47,10 @@
 .pickItem { display: flex; align-items: flex-start; gap: var(--s3); min-height: 44px; padding: var(--s3); border: 1px solid var(--border); border-radius: var(--r-control); cursor: pointer; }
 .pickItem[data-checked="true"] { border-color: var(--accent); background: var(--selected); }
 .pickItem:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
-.pickItem input { margin-top: 3px; width: 18px; height: 18px; flex: none; }
+.pickItem input { margin-top: 2px; width: 18px; height: 18px; flex: none; }
 .pickText { display: grid; gap: 2px; }
 .pickName { font-size: var(--fs-name); font-weight: 600; }
-.recipe { margin: 0; padding-left: var(--s5); display: grid; gap: var(--s2); font-size: var(--fs-body); line-height: var(--lh-body); }
+.recipe { margin: 0; padding-left: var(--s6); display: grid; gap: var(--s2); font-size: var(--fs-body); line-height: var(--lh-body); }
 .run { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s2); }
 .runItem { display: flex; align-items: center; gap: var(--s3); min-height: 32px; font-size: var(--fs-body); color: var(--text-2); }
 .runMark { flex: none; width: 22px; height: 22px; border-radius: var(--r-pill); border: 2px solid var(--control-border); display: grid; place-items: center; font-size: var(--fs-small); }
@@ -59,7 +59,7 @@
 .runItem[data-state="current"] { color: var(--text); font-weight: 600; }
 .runItem[data-state="current"] .runMark { border-color: var(--accent); }
 .failBox { display: grid; gap: var(--s3); padding: var(--s3); border: 1px solid var(--danger); border-radius: var(--r-control); }
-.okBox { font-size: var(--fs-card); font-weight: 650; color: var(--ok); }
+.okBox { font-size: var(--fs-card); font-weight: 600; color: var(--ok); }
 
 /* Профиль и пример */
 .profile { display: grid; gap: var(--s4); }
@@ -77,7 +77,7 @@
 .colors legend { font-size: var(--fs-body); font-weight: 600; padding: 0 0 var(--s2); }
 .color { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border-radius: var(--r-pill); cursor: pointer; }
 .color input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-.color span { width: 28px; height: 28px; border-radius: var(--r-pill); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--control-border); display: grid; place-items: center; color: #fff; font-size: var(--fs-small); font-weight: 700; }
+.color span { width: 28px; height: 28px; border-radius: var(--r-pill); border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--control-border); display: grid; place-items: center; color: var(--on-accent); font-size: var(--fs-small); font-weight: 600; }
 .color:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 0; }
 .color input:checked + span { box-shadow: 0 0 0 2px var(--text); }
 .checks { display: grid; }

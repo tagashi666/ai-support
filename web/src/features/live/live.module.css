@@ -1,10 +1,10 @@
 /* Живой режим новой панели (этап 2): сводка, вход по ключу. */
 .summary { display: grid; align-content: start; gap: var(--s4); padding: var(--s6) var(--s4); }
-.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 650; letter-spacing: -0.01em; }
+.title { font-size: var(--fs-title); line-height: var(--lh-title); font-weight: 600; letter-spacing: -0.01em; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--s3); margin: 0; }
 .tile { display: grid; gap: var(--s1); padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface); border: 1px solid var(--border); }
 .tile dt { color: var(--text-2); }
-.tile dd { margin: 0; font-size: var(--fs-title); font-weight: 650; }
+.tile dd { margin: 0; font-size: var(--fs-title); font-weight: 600; }
 .tile[data-tone="attention"] dd { color: var(--attention); }
 .hint { color: var(--text-2); max-width: 46ch; }
 .code { color: var(--text-3); font-size: var(--fs-small); }
@@ -16,6 +16,6 @@
   border: 1px solid var(--control-border); background: var(--surface); color: var(--text); font: inherit; font-weight: 400;
 }
 .field input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
-.error { color: var(--danger-text, var(--attention)); }
+.error { color: var(--danger); }
 .actions { display: flex; gap: var(--s2); flex-wrap: wrap; }
 .link { color: var(--accent-text); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }

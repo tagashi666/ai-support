@@ -16,8 +16,8 @@ import { navigate, route } from '@/lib/router';
 const BASE_TITLE = typeof document === 'undefined' ? '' : document.title;
 let baseIcon: string | null = null;
 
-/** Значок с точкой: тот же квадрат и точка внимания в углу (data: — разрешён CSP img-src). */
-const DOT_ICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#2563EB"/><path d="M9 11.5c0-1.4 1.1-2.5 2.5-2.5h9c1.4 0 2.5 1.1 2.5 2.5v6c0 1.4-1.1 2.5-2.5 2.5H15l-4 3.5V20h0c-1.1-.2-2-1.2-2-2.4z" fill="#fff"/><circle cx="25" cy="7" r="6.5" fill="#E5484D" stroke="#fff" stroke-width="1.5"/></svg>')}`;
+/** Значок с точкой: тот же квадрат и точка внимания в углу (data: — разрешён CSP img-src). Цвета — значения токенов --accent и --danger-btn светлой темы: вкладка браузера тему панели не знает (P-19). */
+const DOT_ICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#2563EB"/><path d="M9 11.5c0-1.4 1.1-2.5 2.5-2.5h9c1.4 0 2.5 1.1 2.5 2.5v6c0 1.4-1.1 2.5-2.5 2.5H15l-4 3.5V20h0c-1.1-.2-2-1.2-2-2.4z" fill="#fff"/><circle cx="25" cy="7" r="6.5" fill="#B42318" stroke="#fff" stroke-width="1.5"/></svg>')}`;
 
 export function tabTitle(mine: number, base = BASE_TITLE): string { return mine > 0 ? `(${mine}) ${base}` : base; }
 
