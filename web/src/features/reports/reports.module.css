@@ -42,7 +42,7 @@
 .blockHead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s2); }
 .blockTitle { font-size: var(--fs-name); line-height: var(--lh-name); font-weight: 600; }
 .two { display: grid; gap: var(--s4); }
-.two { grid-template-columns: repeat(auto-fill, minmax(min(22rem, 100%), 1fr)); align-items: start; }
+.two { grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); align-items: start; }
 .charts { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s4); }
 @media (min-width: 1024px) { .charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .bars { display: flex; align-items: flex-end; gap: 2px; height: 5rem; }

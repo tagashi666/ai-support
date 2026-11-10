@@ -102,18 +102,10 @@ svg { flex: none; }
  * Раскрытие без JS-измерений: сетка 0fr → 1fr (ui/Collapse.tsx). Внутри — overflow: clip,
  * содержимое ещё и проявляется прозрачностью. Закрытое — inert (Collapse ставит сам).
  */
-.ui-collapse {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows var(--dur-move) var(--ease-move);
-}
+.ui-collapse { display: grid; grid-template-rows: 0fr; }
 .ui-collapse[data-open="true"] { grid-template-rows: 1fr; }
-.ui-collapse > * {
-  min-height: 0;
-  overflow: clip;
-  opacity: 0;
-  transition: opacity var(--dur-fast) var(--ease-out);
-}
+/* Высота меняется сразу (анимация высоты пересчитывает раскладку каждый кадр — дёргается на слабых машинах), содержимое проявляется. */
+.ui-collapse > * { min-height: 0; overflow: clip; opacity: 0; transition: opacity var(--dur-fast) var(--ease-out); }
 .ui-collapse[data-open="true"] > * { opacity: 1; }
 
 /*
@@ -121,15 +113,6 @@ svg { flex: none; }
  * auto плавно; где нет (WebKit, Firefox) — содержимое проявляется прозрачностью.
  */
 details[open] > :not(summary) { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
-@supports (interpolate-size: allow-keywords) and selector(::details-content) {
-  details { interpolate-size: allow-keywords; }
-  details::details-content {
-    block-size: 0;
-    overflow-y: clip;
-    transition: block-size var(--dur-move) var(--ease-move), content-visibility var(--dur-move) allow-discrete;
-  }
-  details[open]::details-content { block-size: auto; }
-}
 
 /* Наведение и выбор у всех нажимаемых — переходом цвета (нулевая специфичность: свои transition модулей главнее). */
 :where(a, button, summary, label, [role="option"], [role="menuitem"], [role="tab"]) {

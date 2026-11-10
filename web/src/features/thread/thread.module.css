@@ -31,9 +31,10 @@
 /* ---------- Лента ---------- */
 .feedWrap { position: relative; flex: 1; min-height: 0; display: flex; }
 .feed { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: var(--s4) var(--s4) var(--s6); }
+@media (min-width: 1024px) { .feed { padding: var(--s4) var(--s6) var(--s6); } }
 .feed:focus-visible { outline-offset: -3px; }
 @media (min-width: 1024px) { .feed { padding: var(--s4) var(--s6) var(--s8); } }
-.column { display: flex; flex-direction: column; gap: var(--s3); max-width: 50rem; }
+.column { display: flex; flex-direction: column; gap: var(--s3); }
 .msg { margin-top: var(--s2); }
 .msgGrouped { margin-top: calc(-1 * var(--s2)); }
 .day { display: flex; justify-content: center; margin: var(--s2) 0; }
@@ -50,6 +51,8 @@
 .note {
   display: grid;
   gap: var(--s1);
+  max-width: min(44rem, 100%);
+  align-self: center;
   padding: var(--s3) var(--s4);
   border-radius: var(--r-card);
   background: var(--note-bg);
@@ -83,8 +86,8 @@
   background: var(--surface);
 }
 @media (min-width: 1024px) { .foot { padding: var(--s3) var(--s6) var(--s4); } }
-/* Черновик и поле ответа — одной колонкой с лентой: строка не длиннее ≈ 50rem. */
-.foot > * { width: 100%; max-width: 50rem; }
+/* Черновик и поле ответа — во всю колонку диалога, как лента. */
+.foot > * { width: 100%; }
 
 .notice { padding: var(--s3) var(--s4); border-radius: var(--r-card); background: var(--surface-sunken); color: var(--text-2); font-size: var(--fs-body); line-height: var(--lh-body); }
 
@@ -231,3 +234,7 @@
 /* Открытие диалога (R2 C): шапка и лента — новые элементы (key по диалогу) и входят
    прозрачностью; лента не сдвигается — только opacity. Заглушка → содержимое так же. */
 .head, .feedWrap { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+
+/* Смена диалога: шапка и низ проявляются (ключ по id), без сдвига. */
+.head, .foot { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
+@media (prefers-reduced-motion: reduce) { .head, .foot { animation: none; } }

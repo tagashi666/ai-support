@@ -99,3 +99,12 @@
 .inner > *, .panel > *, .ideas > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
 .skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
+/* R3: статьи и шаблоны на широком экране — сетка карточек, а не строки на 2000 px. */
+@media (min-width: 1280px) {
+  .cards { grid-template-columns: repeat(auto-fill, minmax(20rem, 1fr)); gap: var(--s3); border-top: 0; }
+  .cards > li { display: grid; }
+  .cards .item { align-content: start; gap: var(--s1); padding: var(--s4); border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); min-height: 7.5rem; }
+  .cards .item:hover { background: var(--surface-hover); }
+  .cards .itemText { white-space: normal; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+}

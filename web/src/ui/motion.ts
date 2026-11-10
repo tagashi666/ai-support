@@ -7,7 +7,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { reducedMotion } from '@/lib/media';
 
-export const DUR = { press: 100, fast: 160, move: 220, sheet: 280, exit: 160 } as const;
+export const DUR = { press: 80, fast: 140, move: 200, sheet: 240, exit: 120 } as const;
 export const EASE = {
   out: 'cubic-bezier(.2, .8, .2, 1)',
   exit: 'cubic-bezier(.4, 0, 1, 1)',

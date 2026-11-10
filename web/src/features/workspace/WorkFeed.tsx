@@ -422,7 +422,8 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
   return (
     <div class={s.feedWrap}>
       <div class={s.feed} ref={ref} role="log" aria-label={t('feed.label')} aria-busy={thread?.status === 'loading' ? 'true' : 'false'} tabIndex={0} onScroll={onScroll}>
-        <div class={s.column}>
+        {/* Открытие диалога: лента проявляется с лёгким подъёмом, когда пришла (анимация стартует со сменой data-ready). */}
+        <div class={`${s.column} ${w.feedIn}`} data-ready={thread?.status === 'ready' ? 'true' : 'false'}>
           {/* Место под «Загружаем ранние…» стоит, пока есть ранние: надпись не сдвигает ленту (J-13). */}
           {thread?.hasMore && <p class={s.event} aria-hidden={thread.loadingEarlier ? undefined : 'true'}>{thread.loadingEarlier ? t('feed.loadingEarlier') : '\u00a0'}</p>}
           {thread?.status === 'loading' && (

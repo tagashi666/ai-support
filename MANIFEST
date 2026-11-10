@@ -65,9 +65,11 @@ scripts/nexttest.ts
 scripts/notifytest.ts
 scripts/pack.sh
 scripts/perfbench.ts
+scripts/perfprobe.mjs
 scripts/releasecheck.sh
 scripts/sectest.ts
 scripts/setuptest.ts
+scripts/shots.mjs
 scripts/smoke.ts
 scripts/source-updater.sh
 scripts/systemtest.ts

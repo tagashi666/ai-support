@@ -57,7 +57,7 @@ export function Thread({ chat }: { chat: Chat }): JSX.Element {
   const primary = (() => {
     switch (chip.primary) {
       case 'take': return <Button variant="primary" onClick={() => take(chat.id)}>{t('who.take')}</Button>;
-      case 'giveBack': return <Button variant="secondary" icon="spark" onClick={() => giveBack(chat.id)}>{t('who.giveBack')}</Button>;
+      case 'giveBack': return <Button variant="secondary" onClick={() => giveBack(chat.id)}>{t('who.giveBack')}</Button>;
       case 'resume': return <Button variant="primary" onClick={resume}>{t('who.resume')}</Button>;
       case 'intercept': return <Button variant="secondary" onClick={() => setSheet('intercept')}>{t('who.intercept')}</Button>;
       case 'reopen': return <Button variant="secondary" onClick={() => reopen(chat.id)}>{t('thread.reopen')}</Button>;
@@ -147,7 +147,7 @@ export function Thread({ chat }: { chat: Chat }): JSX.Element {
         <p class={sheetStyles.text}><strong>{t('who.autoWill')}</strong></p>
         <div class={sheetStyles.actions}>
           <Button variant="secondary" onClick={close} autoFocus>{t('sheet.cancel')}</Button>
-          <Button variant="primary" icon="spark" onClick={() => { close(); setModeHere(chat.id, 'aiAuto'); }}>{t('who.autoYes')}</Button>
+          <Button variant="primary" onClick={() => { close(); setModeHere(chat.id, 'aiAuto'); }}>{t('who.autoYes')}</Button>
         </div>
       </Sheet>
 

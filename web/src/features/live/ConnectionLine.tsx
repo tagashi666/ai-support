@@ -29,7 +29,7 @@ export function ConnectionLine(): JSX.Element {
   else if (state === 'offline') {
     text = t('connection.offline', { time: syncedAt.value ? clock(syncedAt.value) : '—' });
     tone = 'attention';
-  } else if (state === 'syncing') text = t('connection.syncing');
+  }
 
   return (
     <div class={s.status} role="status" data-active={tone === 'attention' && text ? 'true' : 'false'} data-connection={state}>

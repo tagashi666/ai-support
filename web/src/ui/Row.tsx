@@ -54,7 +54,6 @@ export function Row(props: RowProps): JSX.Element {
         </span>
         <span class={s.rowReason} data-tone={tone}>
           {tone === 'attention' && <Icon name="urgent" size={14} />}
-          {tone === 'ai' && <Icon name="spark" size={14} />}
           <span>{reason}</span>
         </span>
       </span>

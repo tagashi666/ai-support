@@ -169,7 +169,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
   const primary = (() => {
     switch (who.primary) {
       case 'take': return <Button variant="primary" onClick={guarded('conv.take', () => { void take(id); })}>{t('who.take')}</Button>;
-      case 'return': return <Button variant="secondary" icon="spark" onClick={guarded('conv.return', () => { void giveBack(id); })}>{t('who.giveBack')}</Button>;
+      case 'return': return <Button variant="secondary" onClick={guarded('conv.return', () => { void giveBack(id); })}>{t('who.giveBack')}</Button>;
       case 'reopen': return <Button variant="secondary" onClick={guarded('conv.reopen', () => reopen(id))}>{t('thread.reopen')}</Button>;
       case 'takeover': return <Button variant="secondary" onClick={() => setSheet('takeover')}>{t('who.intercept')}</Button>;
       case 'askHandover': return <Button variant="secondary" onClick={() => askHandover(id, item.owner?.name ?? '')}>{t('who.askHandover')}</Button>;
@@ -274,7 +274,7 @@ export function WorkThread({ id }: { id: number }): JSX.Element {
         <p class={sheetStyles.text}><strong>{t('who.autoWill')}</strong></p>
         <div class={sheetStyles.actions}>
           <Button variant="secondary" onClick={close} autoFocus>{t('sheet.cancel')}</Button>
-          <Button variant="primary" icon="spark" onClick={() => { close(); void setMode(id, 'auto'); }}>{t('who.autoYes')}</Button>
+          <Button variant="primary" onClick={() => { close(); void setMode(id, 'auto'); }}>{t('who.autoYes')}</Button>
         </div>
       </Sheet>
 

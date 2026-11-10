@@ -15,7 +15,7 @@ interface ChipProps {
 /** Чип «кто отвечает» (6.3.1). Значок всегда рядом с цветом: состояние не передаётся только цветом. */
 export function Chip({ text, tone, lead: leadKind, menu, onClick, id }: ChipProps): JSX.Element {
   const lead = leadKind === 'spark'
-    ? <Icon name="spark" size={16} class={s.chipIcon} />
+    ? <span class={s.chipDot} aria-hidden="true" />
     : leadKind === 'pause' ? <Icon name="pause" size={16} /> : <span class={s.chipDot} aria-hidden="true" />;
   return (
     <button

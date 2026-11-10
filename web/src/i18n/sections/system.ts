@@ -141,6 +141,7 @@ export const dict = {
 
   // Серверы
   'system.servers.dataAt': 'Данные от {time}',
+  'system.servers.dataLabel': 'Данные от',
   'system.servers.refresh': 'Обновить',
   'system.servers.refreshFailed': 'Не удалось обновить серверы: {reason}',
   'system.servers.summary': '{ok} из {total} {verb}',

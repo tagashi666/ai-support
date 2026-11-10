@@ -57,7 +57,7 @@ export function Today({ compact = false }: { compact?: boolean }): JSX.Element {
     <Card class={`${s.card} ${s.ai}`} label={t('today.assistant')}>
       <h2 class={s.cardTitle}>{t('today.assistant')}</h2>
       <p class={s.mode}>
-        <Icon name={paused ? 'pause' : 'spark'} size={18} />
+        {paused && <Icon name="pause" size={18} />}
         {paused ? t('today.modePaused', { time: clock(paused) }) : t('today.modeSuggest')}
       </p>
       <p class={s.text}>{paused ? t('today.modePausedHint') : t('today.modeSuggestHint')}</p>

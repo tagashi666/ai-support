@@ -55,7 +55,7 @@ export function ArticlesPanel(): JSX.Element {
       )}
       {kb.value && all.length > 0 && shown.length === 0 && <p class={k.muted}>{t('kb.nothingFound')}</p>}
       {shown.length > 0 && (
-        <ul class={k.list} aria-label={t('kb.tab.articles')}>
+        <ul class={`${k.list} ${k.cards}`} aria-label={t('kb.tab.articles')}>
           {shown.map((row) => (
             <li key={row.name}>
               <a class={k.item} href={href(articleRoute(row.name))}

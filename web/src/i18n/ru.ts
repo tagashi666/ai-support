@@ -129,7 +129,6 @@ export const ru = {
   // Связь с сервером (6.14): в норме строки нет
   'connection.restoring': 'Восстанавливаем связь…',
   'connection.offline': 'Нет связи · данные на {time}',
-  'connection.syncing': 'Связь есть, обновляем…',
   'connection.retry': 'Повторить',
 
   // Вход по ключу

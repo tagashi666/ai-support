@@ -159,7 +159,7 @@ function serversCheck(nodes: NodesState | null | undefined, enabled: boolean): C
     : nodes.snapshot.error ? tr('system.servers.errorIssue') : undefined;
   return checkOf('servers', tone, serversWords(list), {
     link: 'servers', ...(issue ? { issue } : {}),
-    details: [detail(tr('system.servers.dataAt'), clock(nodes.snapshot.at)), ...(names.length ? [detail(tr('system.servers.silentList'), names.join(', '))] : [])],
+    details: [detail(tr('system.servers.dataLabel'), clock(nodes.snapshot.at)), ...(names.length ? [detail(tr('system.servers.silentList'), names.join(', '))] : [])],
   });
 }
 

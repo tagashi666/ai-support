@@ -206,3 +206,6 @@
 .check { transition: background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
 .template { transition: background-color var(--dur-press) var(--ease-out); }
 .fileCard { transition: color var(--dur-fast) var(--ease-out); }
+
+/* Открытие диалога (R3): лента — подъём и проявление, шапка и низ — проявление. Только transform/opacity. */
+.feedIn[data-ready="true"] { animation: var(--kf-enter) var(--dur-move) var(--ease-out); }

@@ -118,7 +118,7 @@ export function LiveToday(): JSX.Element {
   const waitingCard = waiting > 0 && (
     <Card class={`${s.card} ${s.wide}`} label={t('today.waitingCard')}>
       <h2 class={s.cardTitle}>{t('today.waitingCard')}</h2>
-      <div class={s.rows}>{waitingItems.slice(0, 5).map((item) => <WaitingRow key={item.id} item={item} />)}</div>
+      <div class={s.rows}>{waitingItems.slice(0, 8).map((item) => <WaitingRow key={item.id} item={item} />)}</div>
       <Button variant="link" size="sm" class={s.more} onClick={() => navigate({ name: 'chats', id: null })}>
         {t('today.allChats')} <Icon name="right" size={16} />
       </Button>
@@ -142,12 +142,12 @@ export function LiveToday(): JSX.Element {
   );
 
   const assistantCard = !can('settings:read') ? (
-    <p class={s.system}><Icon name="spark" size={18} /><span>{t('today.assistantLine', { mode: t(MODE_LABEL[mode]) })}</span></p>
+    <p class={s.system}><span>{t('today.assistantLine', { mode: t(MODE_LABEL[mode]) })}</span></p>
   ) : (
     <Card class={`${s.card} ${s.ai}`} label={t('today.assistant')}>
       <h2 class={s.cardTitle}>{t('today.assistant')}</h2>
       <p class={s.mode}>
-        <Icon name={paused ? 'pause' : 'spark'} size={18} />
+        {paused && <Icon name="pause" size={18} />}
         {paused ? t('pause.state', { until: pauseText(paused.until, at) }) : t(MODE_LABEL[mode])}
       </p>
       <p class={s.text}>{paused ? t('today.modePausedHint') : t(MODE_DOES[mode])}</p>
@@ -228,7 +228,7 @@ export function LiveToday(): JSX.Element {
             заглушки другой раскладки, которые потом сдвинутся (CLS, R2 D). Появляется целиком. */}
         {boot && (
           <div class={s.body}>
-            {onboardingWanted(boot?.me) && <TodayOnboarding dialogs={liveItems.value.length} />}
+            {onboardingWanted(boot?.me) && <div class={s.onb}><TodayOnboarding dialogs={liveItems.value.length} /></div>}
             <RevertLine />
             {/* Числа держат место и до ответа сервера (J-6): «—», а не появление со сдвигом. */}
             <dl class={s.metrics}>

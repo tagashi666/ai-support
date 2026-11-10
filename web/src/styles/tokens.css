@@ -30,17 +30,17 @@
   --on-accent: #FFFFFF;
   --accent-text: #1D4ED8;
   --accent-soft: #E8EFFD;
-  --selected: #E8EFFD;
+  --selected: #ECEAE5;
   --focus: #2563EB;
 
   /* Голоса ленты */
   --bubble-in: #E8E6E1;
-  --bubble-colleague: #CFDDFB;
+  --bubble-colleague: #DDE5F2;
 
   /* Помощник — фиолетовый только у него */
-  --ai-bg: #EFE9FB;
-  --ai-ink: #5B3FC0;
-  --ai-text: #2B1B5E;
+  --ai-bg: #F0F1F3;
+  --ai-ink: #4B5160;
+  --ai-text: #1C1F24;
 
   /* Заметка для команды */
   --note-bg: #FFF4CC;
@@ -142,16 +142,16 @@
   /* Движение (web/src/ui/motion.ts повторяет числа для JS).
      Вход — --ease-out, выход на ~30% короче — --ease-exit, перемещение — --ease-move.
      Сдвиги — токенами: при «уменьшить движение» они обнуляются, остаётся прозрачность. */
-  --dur-press: 100ms;
-  --dur-fast: 160ms;
-  --dur-move: 220ms;
-  --dur-sheet: 280ms;
-  --dur-exit: 160ms;
+  --dur-press: 80ms;
+  --dur-fast: 140ms;
+  --dur-move: 200ms;
+  --dur-sheet: 240ms;
+  --dur-exit: 120ms;
   --ease-out: cubic-bezier(.2, .8, .2, 1);
   --ease-exit: cubic-bezier(.4, 0, 1, 1);
   --ease-move: cubic-bezier(.3, 0, .2, 1);
   --shift: 8px;
-  --shift-section: 4px;
+  --shift-section: 6px;
   --shift-sheet: 100%;
   --pop-scale: 0.98;
   --press-scale: 0.97;
@@ -185,28 +185,28 @@
 /* Тёмная тема: слои светлоты, без чистого чёрного */
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #12141A;
-  --surface: #1A1D24;
-  --surface-sunken: #0F1116;
-  --surface-hover: #252A34;
-  --surface-raised: #2A2F3A;
-  --border: #2A2E38;
-  --control-border: #6B7380;
-  --text: #E7E9EE;
-  --text-2: #C3C8D2;
-  --text-3: #9098A6;
-  --accent: #2F5BD8;
-  --accent-hover: #3A66E0;
+  --bg: #111214;
+  --surface: #17181B;
+  --surface-sunken: #0D0E10;
+  --surface-hover: #1F2125;
+  --surface-raised: #222429;
+  --border: #26282D;
+  --control-border: #6A6F79;
+  --text: #ECEDEF;
+  --text-2: #B9BCC3;
+  --text-3: #8D919A;
+  --accent: #3E6BC9;
+  --accent-hover: #4977D4;
   --on-accent: #FFFFFF;
-  --accent-text: #8FB2FF;
-  --accent-soft: #1E2A47;
-  --selected: #1E2A47;
-  --focus: #8FB2FF;
-  --bubble-in: #262A33;
-  --bubble-colleague: #24355C;
-  --ai-bg: #2A2346;
-  --ai-ink: #B9A6FF;
-  --ai-text: #E9E3FF;
+  --accent-text: #9CB6EA;
+  --accent-soft: #1C2230;
+  --selected: #23262C;
+  --focus: #9CB6EA;
+  --bubble-in: #212327;
+  --bubble-colleague: #232A36;
+  --ai-bg: #1D1F23;
+  --ai-ink: #A9ADB5;
+  --ai-text: #ECEDEF;
   --note-bg: #3A3216;
   --note-text: #F3E6B3;
   --attention: #F5B45A;
@@ -219,15 +219,15 @@
   --danger-bg: #3A1D1B;
   --danger-btn: #C2362B;
   --on-danger: #FFFFFF;
-  --toast-bg: #2C313C;
-  --toast-text: #E7E9EE;
+  --toast-bg: #26282D;
+  --toast-text: #ECEDEF;
   --avatar-ink: #E7E9EE;
-  --avatar-1: #3A3429;
-  --avatar-2: #2B3A30;
-  --avatar-3: #2C3447;
-  --avatar-4: #42302F;
-  --avatar-5: #372F47;
-  --avatar-6: #2A3B3E;
+  --avatar-1: #35322C;
+  --avatar-2: #2C3530;
+  --avatar-3: #2C313B;
+  --avatar-4: #3A2F2E;
+  --avatar-5: #33303A;
+  --avatar-6: #2B3537;
   --scrim: rgba(0, 0, 0, 0.5);
   --shadow-1: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -237,28 +237,28 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #12141A;
-    --surface: #1A1D24;
-    --surface-sunken: #0F1116;
-    --surface-hover: #252A34;
-    --surface-raised: #2A2F3A;
-    --border: #2A2E38;
-    --control-border: #6B7380;
-    --text: #E7E9EE;
-    --text-2: #C3C8D2;
-    --text-3: #9098A6;
-    --accent: #2F5BD8;
-    --accent-hover: #3A66E0;
+    --bg: #111214;
+    --surface: #17181B;
+    --surface-sunken: #0D0E10;
+    --surface-hover: #1F2125;
+    --surface-raised: #222429;
+    --border: #26282D;
+    --control-border: #6A6F79;
+    --text: #ECEDEF;
+    --text-2: #B9BCC3;
+    --text-3: #8D919A;
+    --accent: #3E6BC9;
+    --accent-hover: #4977D4;
     --on-accent: #FFFFFF;
-    --accent-text: #8FB2FF;
-    --accent-soft: #1E2A47;
-    --selected: #1E2A47;
-    --focus: #8FB2FF;
-    --bubble-in: #262A33;
-    --bubble-colleague: #24355C;
-    --ai-bg: #2A2346;
-    --ai-ink: #B9A6FF;
-    --ai-text: #E9E3FF;
+    --accent-text: #9CB6EA;
+    --accent-soft: #1C2230;
+    --selected: #23262C;
+    --focus: #9CB6EA;
+    --bubble-in: #212327;
+    --bubble-colleague: #232A36;
+    --ai-bg: #1D1F23;
+    --ai-ink: #A9ADB5;
+    --ai-text: #ECEDEF;
     --note-bg: #3A3216;
     --note-text: #F3E6B3;
     --attention: #F5B45A;
@@ -271,15 +271,15 @@
     --danger-bg: #3A1D1B;
     --danger-btn: #C2362B;
     --on-danger: #FFFFFF;
-    --toast-bg: #2C313C;
-    --toast-text: #E7E9EE;
+    --toast-bg: #26282D;
+    --toast-text: #ECEDEF;
     --avatar-ink: #E7E9EE;
-    --avatar-1: #3A3429;
-    --avatar-2: #2B3A30;
-    --avatar-3: #2C3447;
-    --avatar-4: #42302F;
-    --avatar-5: #372F47;
-    --avatar-6: #2A3B3E;
+    --avatar-1: #35322C;
+    --avatar-2: #2C3530;
+    --avatar-3: #2C313B;
+    --avatar-4: #3A2F2E;
+    --avatar-5: #33303A;
+    --avatar-6: #2B3537;
     --scrim: rgba(0, 0, 0, 0.5);
     --shadow-1: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
     --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45);

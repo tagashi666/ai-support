@@ -186,7 +186,7 @@
 }
 .bubbleLabel[data-voice="assistant"] { color: var(--ai-ink); }
 .bubble {
-  max-width: min(36rem, 75%);
+  max-width: min(44rem, 72%);
   padding: var(--s2) var(--s3);
   border-radius: var(--r-bubble);
   font-size: var(--fs-msg);

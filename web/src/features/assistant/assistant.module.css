@@ -142,3 +142,10 @@
 .inner > *, .panel > * { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
 .skeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+
+/* R3: широкий экран — разделы настроек двумя колонками, режимы помощника в один ряд. */
+@media (min-width: 1280px) {
+  .panel { grid-template-columns: repeat(auto-fit, minmax(min(34rem, 100%), 1fr)); column-gap: var(--s8); align-items: start; }
+  .panel > :first-child:has(.cards) { grid-column: 1 / -1; }
+  .cards { max-width: none; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+}

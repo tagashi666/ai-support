@@ -23,7 +23,7 @@ export function DraftCard({ chat, closed, typing }: { chat: Chat; closed: boolea
   if (typing && !expanded) {
     return (
       <p class={s.draftStrip}>
-        <Icon name="spark" size={16} />
+        
         <span>{t('draft.hasDraft')}</span>
         <button type="button" class={s.stripAction} onClick={() => setExpanded(true)}>{t('draft.show')}</button>
       </p>
@@ -38,7 +38,7 @@ export function DraftCard({ chat, closed, typing }: { chat: Chat; closed: boolea
     return (
       <section class={s.draft} data-level="unsure" aria-label={t('draft.title')}>
         <p class={s.draftUnsure}>
-          <Icon name="spark" size={16} />
+          
           <span>
             <strong>{t('draft.unsureTitle')}</strong>
             {draft.reason && <> {t('draft.unsureReason', { reason: draft.reason })}</>}
@@ -56,7 +56,7 @@ export function DraftCard({ chat, closed, typing }: { chat: Chat; closed: boolea
   return (
     <section class={s.draft} data-level={draft.level} aria-label={t('draft.title')}>
       <header class={s.draftHead}>
-        <Icon name="spark" size={16} />
+        
         <span>{t('draft.title')}</span>
         <span class={s.level} data-level={draft.level}>{levelLabel(draft.level)}</span>
         {(typing || draft.level === 'unsure') && (

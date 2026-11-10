@@ -76,3 +76,17 @@
 .grid > *, .card > *, .body { animation: var(--kf-fade-in) var(--dur-fast) var(--ease-out); }
 .cardSkeleton, .lastSkeleton { animation: var(--kf-pulse) 1.2s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .cardSkeleton, .lastSkeleton { animation: none; } }
+
+/* R3: широкий экран — две колонки. Слева «Ждут вас» во всю высоту, справа — числа, помощник,
+   «Нужно внимание», чек-лист. Без пустых полос справа и снизу. */
+.onb { min-width: 0; }
+@media (min-width: 1280px) {
+  .body:has(.wide) { grid-template-columns: minmax(0, 3fr) minmax(24rem, 2fr); column-gap: var(--s6); row-gap: var(--s4); align-items: start; }
+  .body:has(.wide) > * { grid-column: 2; }
+  .body:has(.wide) .grid { display: contents; }
+  .body:has(.wide) .grid > .wide { grid-column: 1; grid-row: 1 / span 8; }
+  .body:has(.wide) .grid > :not(.wide) { grid-column: 2; }
+  .body:has(.wide) .metrics { order: -1; grid-template-columns: repeat(auto-fit, minmax(7.5rem, 1fr)); }
+  .body:has(.wide) .onb > * { max-width: none; }
+  .body:has(.wide) .onb { order: 5; }
+}

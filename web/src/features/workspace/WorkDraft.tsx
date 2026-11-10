@@ -67,7 +67,7 @@ function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; 
   if (!canReply) {
     return (
       <section class={s.draft} data-level={draft.level} aria-label={t('draft.title')}>
-        <header class={s.draftHead}><Icon name="spark" size={16} /><span>{t('draft.readOnly')}</span></header>
+        <header class={s.draftHead}><span>{t('draft.readOnly')}</span></header>
         {!noText && <p class={s.draftText} data-clamp="true">{draft.text}</p>}
       </section>
     );
@@ -76,7 +76,7 @@ function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; 
   if (thread?.suggestionStale && !keepStale) {
     return (
       <section class={s.draft} data-level="unsure" aria-label={t('draft.title')}>
-        <p class={s.draftUnsure}><Icon name="spark" size={16} /><span>{t('draft.stale')}</span></p>
+        <p class={s.draftUnsure}><span>{t('draft.stale')}</span></p>
         <div class={s.draftActions}>
           <Button variant="secondary" size="sm" onClick={() => setKeepStale(true)}>{t('draft.keep')}</Button>
           <Button variant="quiet" size="sm" onClick={() => rejectDraft(id, null)}>{t('draft.remove')}</Button>
@@ -89,7 +89,7 @@ function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; 
     return (
       <section class={s.draft} data-level="unsure" aria-label={t('draft.title')}>
         <p class={s.draftUnsure}>
-          <Icon name="spark" size={16} />
+          
           <span><strong>{t('draft.askYou')}</strong>{draft.reason && <> {t('draft.unsureReason', { reason: draft.reason })}</>}</span>
         </p>
         {draft.operator_note && <p class={s.draftWhy}>{t('draft.noteForYou', { note: draft.operator_note })}</p>}
@@ -101,7 +101,7 @@ function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; 
   if (typing && !expanded) {
     return (
       <p class={s.draftStrip}>
-        <Icon name="spark" size={16} />
+        
         <span>{t('draft.hasDraft')}</span>
         <button type="button" class={s.stripAction} onClick={() => setExpanded(true)}>{t('draft.show')}</button>
       </p>
@@ -125,7 +125,7 @@ function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; 
     return (
       <section class={s.draft} data-level="unsure" aria-label={t('draft.title')}>
         <p class={s.draftUnsure}>
-          <Icon name="spark" size={16} />
+          
           <span><strong>{t('draft.unsureTitle')}</strong>{draft.reason && <> {t('draft.unsureReason', { reason: draft.reason })}</>}</span>
         </p>
         <div class={s.draftActions}>
@@ -141,7 +141,7 @@ function DraftCard({ id, head, typing, draft }: { id: number; head: ThreadHead; 
   return (
     <section class={s.draft} data-level={draft.level} aria-label={t('draft.title')}>
       <header class={s.draftHead}>
-        <Icon name="spark" size={16} />
+        
         <span>{t('draft.title')}</span>
         <span class={s.level} data-level={draft.level}>{levelLabel(draft.level)}</span>
         {(typing || draft.level === 'unsure') && <button type="button" class={s.stripAction} onClick={() => setExpanded(false)}>{t('draft.hide')}</button>}

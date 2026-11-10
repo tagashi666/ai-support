@@ -24,7 +24,6 @@ export function Bubble({ voice, label, meta, pending, foot, a11y, aside, childre
     <div class={s.bubbleWrap} data-side={side}>
       {label && (
         <span class={s.bubbleLabel} data-voice={voice} aria-hidden="true">
-          {voice === 'assistant' && <Icon name="spark" size={12} />}
           {label}
         </span>
       )}

@@ -81,7 +81,7 @@ export function TemplatesPanel(): JSX.Element {
       )}
       {templates.value && templates.value.length === 0 && <p class={k.muted}>{t('kb.template.empty')}</p>}
       {list.length > 0 && (
-        <ul class={k.list} aria-label={t('kb.tab.templates')}>
+        <ul class={`${k.list} ${k.cards}`} aria-label={t('kb.tab.templates')}>
           {list.map((row) => (
             <li key={row.id} class={k.templateRow}>
               <button type="button" class={k.item} disabled={!manage} onClick={() => setEditing(row)}>
