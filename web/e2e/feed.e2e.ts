@@ -146,11 +146,19 @@ test('M-1: строка после «Решено» в списке уходит
   await page.goto('/next/chats');
   const row = page.locator(`[data-row-id="${id}"]`);
   await expect(row).toBeVisible();
+  // Выход длится --dur-exit (160 мс): ловим его наблюдателем, а не опросом — медленный раннер успеет пропустить.
+  await page.evaluate((rowId) => {
+    const seen = { closing: false };
+    (window as unknown as { __leave: typeof seen }).__leave = seen;
+    new MutationObserver(() => {
+      if (document.querySelector(`[data-row-id="${rowId}"][data-state="closing"]`)) seen.closing = true;
+    }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['data-state'], childList: true });
+  }, id);
   await row.hover();
   await row.getByRole('button', { name: /Действия с диалогом/ }).last().click();
   await page.getByRole('dialog').getByRole('menuitemradio', { name: /^Решено/ }).click();
-  await expect(row).toHaveAttribute('data-state', 'closing');
   await expect(row).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { __leave: { closing: boolean } }).__leave.closing), 'строка уходила с выходом').toBe(true);
   await page.getByRole('button', { name: 'Отменить' }).click();
   await expect(row).toBeVisible();
 });
