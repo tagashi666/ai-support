@@ -1,4 +1,4 @@
-import { ImageEditor } from '@/features/media/ImageEditor';
+import { ImageEditor } from '@/features/media/lazy';
 import { isSendKey } from '@/lib/device';
 import { isMod, layerOpen, modLabel, tabArrows } from '@/lib/keys';
 import type { JSX } from 'preact';

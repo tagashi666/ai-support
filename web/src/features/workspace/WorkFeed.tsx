@@ -1,8 +1,7 @@
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { InboxItem, ThreadAttachment, ThreadEvent, ThreadMessage, ThreadSuggestion } from '@shared/api-types';
-import { ImageEditor } from '@/features/media/ImageEditor';
-import { TgsSticker } from '@/features/media/TgsSticker';
+import { ImageEditor, TgsSticker } from '@/features/media/lazy';
 import { WrongSheet } from '@/features/assistant/WrongSheet';
 import { can, markedWrong } from '@/lib/assistant/store';
 import { prefill } from '@/lib/knowledge/store';
