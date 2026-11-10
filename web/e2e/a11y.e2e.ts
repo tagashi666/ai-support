@@ -1,6 +1,6 @@
 /**
  * axe на главных экранах (план, 11.6 «Доступность»): список, диалог,
- * «Клиент», палитра, «Это устройство», «Сегодня» и «Помощник» — в светлой и тёмной теме. Серьёзных и критических нарушений нет.
+ * «Клиент», палитра, «Это устройство», «Сегодня», «Помощник» и «Знания» — в светлой и тёмной теме. Серьёзных и критических нарушений нет.
  */
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
@@ -67,6 +67,31 @@ for (const scheme of ['light', 'dark'] as const) {
       await page.goto('/next/chats');
       await page.keyboard.press('ControlOrMeta+KeyK');
       await expect(page.getByRole('dialog', { name: 'Поиск и команды' })).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+    });
+
+    test('«Знания»: статьи, редактор, лист публикации, идеи, шаблоны (этап 5)', async ({ page }) => {
+      await page.goto('/next/knowledge');
+      await expect(page.getByRole('list', { name: 'Статьи' })).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+      await page.goto('/next/knowledge/articles/skorost.md');
+      await expect(page.getByLabel('Текст статьи')).toBeVisible();
+      await expect(page.getByText(/Изменения против опубликованной/).first()).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+      await page.getByRole('button', { name: 'Опубликовать…' }).click();
+      await expect(page.getByRole('dialog', { name: 'Опубликовать статью?' })).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+      await page.keyboard.press('Escape');
+      await page.goto('/next/knowledge/ideas');
+      await expect(page.getByRole('list', { name: 'Идеи из диалогов' })).toBeVisible();
+      await page.getByRole('list', { name: 'Идеи из диалогов' }).getByRole('button').first().click();
+      await expect(page.getByRole('button', { name: 'Опубликовать для помощника' })).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+      await page.goto('/next/knowledge/templates');
+      await expect(page.getByRole('list', { name: 'Шаблоны' })).toBeVisible();
+      expect(await serious(page)).toEqual([]);
+      await page.goto('/next/knowledge/hints');
+      await expect(page.getByRole('list', { name: 'Экраны' })).toBeVisible();
       expect(await serious(page)).toEqual([]);
     });
   });

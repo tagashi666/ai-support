@@ -7,7 +7,7 @@
  * Переменные окружения ставятся до импорта конфигурации, поэтому модули
  * сервера подгружаются динамически внутри startDevPanel.
  */
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync, gzipSync } from 'node:zlib';
@@ -136,6 +136,28 @@ export async function startDevPanel(options: DevPanelOptions): Promise<DevPanel>
   store.addLocalAttachment(photoMsg.id, { fileRef: saved.fileRef, localPath: saved.localPath, mediaType: 'photo', mimeType: 'image/png',
     originalName: 'ошибка.png', bytes: saved.bytes, sha256: saved.sha256, width: 640, height: 320 });
   store.addNote(photoMsg.conversation_id, 'Клиент на iOS 17, проверить профиль.');
+
+  // «Знания» (этап 5): выдуманные статьи, черновик с правками, черновик-идеи.
+  const kbDir = join(dir, 'kb');
+  const draftDir = join(dir, 'draft');
+  writeFileSync(join(kbDir, 'podklyuchenie-ios.md'), '# Подключение iOS\n\n1. Установите приложение из App Store.\n2. Нажмите «+» и вставьте ссылку из письма.\n');
+  writeFileSync(join(kbDir, 'limit-ustroystv.md'), '# Лимит устройств\n\nНа тарифе до трёх устройств одновременно. Лишние отключаются в боте.\n');
+  writeFileSync(join(kbDir, 'skorost.md'), '# Скорость\n\nЕсли вечером медленно, выберите другой сервер в приложении.\n');
+  writeFileSync(join(draftDir, 'skorost.md'), '# Скорость\n\nЕсли вечером медленно, выберите другой сервер в приложении.\nПомогает и перезапуск приложения.\n');
+  writeFileSync(join(draftDir, 'vozvrat-platezha.md'), '# Возврат платежа\n\nВозврат оформляется в течение трёх дней после оплаты.\n');
+  writeFileSync(join(draftDir, 'prodlenie-posle-blokirovki-karty.md'), '# Продление после блокировки карты\n\nЕсли оплата не прошла, смените карту в разделе «Оплата» — подписка продлится сама.\n');
+  writeFileSync(join(draftDir, 'vtoroy-telefon.md'), '# Второй телефон на подписке\n\nДобавьте устройство по той же ссылке; лимит — три устройства.\n');
+  writeFileSync(join(draftDir, 'oshibka-sertifikata.md'), '# Ошибка сертификата на iOS\n\nОбновите профиль: удалите его и добавьте заново по ссылке.\n');
+  operations.registerCandidates([
+    { title: 'Продление после блокировки карты', file: 'prodlenie-posle-blokirovki-karty.md', confidence: 0.9 },
+    { title: 'Второй телефон на подписке', file: 'vtoroy-telefon.md', confidence: 0.7 },
+    { title: 'Ошибка сертификата на iOS', file: 'oshibka-sertifikata.md', confidence: 0.5 },
+  ], 'auto-learn');
+  store.syncKb('files', [
+    { extId: 'podklyuchenie-ios.md', title: 'Подключение iOS', body: 'Установите приложение из App Store.' },
+    { extId: 'limit-ustroystv.md', title: 'Лимит устройств', body: 'На тарифе до трёх устройств одновременно.' },
+    { extId: 'skorost.md', title: 'Скорость', body: 'Если вечером медленно, выберите другой сервер.' },
+  ]);
   // Анимированный стикер TGS (Lottie в gzip): квадрат, который вращается.
   const lottie = { v: '5.5.2', fr: 30, ip: 0, op: 60, w: 128, h: 128, nm: 'dev', ddd: 0, assets: [], layers: [{
     ddd: 0, ind: 1, ty: 4, nm: 'square', sr: 1, ip: 0, op: 60, st: 0, bm: 0,
