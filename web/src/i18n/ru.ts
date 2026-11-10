@@ -499,7 +499,7 @@ export const ru = {
   'palette.error': 'Поиск недоступен.',
   'palette.offline': 'Нет связи — работают только команды и недавнее.',
   'palette.nothing': 'По «{q}» ничего не нашлось.',
-  'palette.foot': '↑↓ выбрать · {enter} открыть · {tab} группа · > только команды · {esc} закрыть · {mod}{k}',
+  'palette.foot': '↑↓ выбрать · {enter} открыть · {esc} закрыть',
   'palette.note': 'Заметка',
   'palette.client': 'Клиент: открыть или закрыть панель',
   'palette.prev': 'Предыдущий диалог',

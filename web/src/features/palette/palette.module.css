@@ -46,6 +46,8 @@
 .retry { border: 0; background: transparent; color: var(--accent-text); font: inherit; text-decoration: underline; cursor: pointer; min-height: 44px; }
 .foot { padding: var(--s2) var(--s4); border-top: 1px solid var(--border); color: var(--text-3); font-size: var(--fs-small); }
 @media (max-width: 767px) { .foot { display: none; } }
+/* На компьютере закрывают Esc и щелчок мимо окна — «Отмена» рядом с ✕ поля только дублирует. */
+@media (min-width: 768px) { .cancel { display: none; } }
 .keys { display: grid; gap: var(--s1); margin: 0; }
 .keyRow { display: flex; justify-content: space-between; gap: var(--s3); font-size: var(--fs-body); padding: var(--s1) 0; border-bottom: 1px solid var(--border); }
 .keyRow dd { margin: 0; white-space: nowrap; }

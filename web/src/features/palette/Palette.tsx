@@ -6,7 +6,6 @@ import { getJson, readToken } from '@/lib/live/api';
 import { liveName } from '@/lib/live/labels';
 import { connection, inbox } from '@/lib/live/store';
 import { letterKeys } from '@/lib/device';
-import { modLabel } from '@/lib/keys';
 import { navigate } from '@/lib/router';
 import { articleRoute } from '@/lib/knowledge/model';
 import { now } from '@/lib/store/state';
@@ -110,7 +109,12 @@ export function Palette(): JSX.Element {
           run: () => navigate({ name: 'chats', id: String(row.id) }) });
       }
       for (const row of result.data.messages.slice(0, LIMIT)) {
-        list.push({ key: `m${row.id}`, group: 'messages', label: `«${(row.text ?? '').slice(0, 80)}»`, hint: listTime(row.created_at, now.peek()),
+        // Одинаковые сообщения разных клиентов различает имя (R-35).
+        const chat = result.data.conversations.find((entry) => entry.id === row.conversation_id);
+        const item = inbox.peek().entries.get(row.conversation_id)?.item;
+        const who = chat ? nameOf(chat, chat.id) : item ? liveName(item) : null;
+        const when = listTime(row.created_at, now.peek());
+        list.push({ key: `m${row.id}`, group: 'messages', label: `«${(row.text ?? '').slice(0, 80)}»`, hint: who ? `${who} · ${when}` : when,
           run: () => navigate({ name: 'chats', id: String(row.conversation_id) }) });
       }
       for (const row of result.data.customers.slice(0, LIMIT)) {
@@ -191,7 +195,7 @@ export function Palette(): JSX.Element {
             {searchable(query) && state === 'idle' && result?.q === q && options.every((option) => option.group === 'actions' || option.group === 'settings')
               && t('palette.nothing', { q })}
           </div>
-          <p class={s.foot}>{t('palette.foot', { mod: modLabel(), k: 'K', enter: 'Enter', tab: 'Tab', esc: 'Esc' })}</p>
+          <p class={s.foot}>{t('palette.foot', { enter: 'Enter', esc: 'Esc' })}</p>
         </>
       )}
     </dialog>
