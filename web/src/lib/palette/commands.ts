@@ -69,13 +69,14 @@ export const LETTERS: Readonly<Record<string, string>> = {
 
 /** Раздел классики для команды настроек (#v=<раздел>). */
 export const CLASSIC_VIEW: Record<string, string> = {
-  'set.knowledge': 'kb', 'set.sla': 'queue', 'set.reports': 'stats',
-  'set.nodes': 'nodes', 'set.team': 'team', 'set.system': 'diagnostics', 'set.connections': 'settings', 'go.knowledge': 'kb',
+  'set.sla': 'queue', 'set.reports': 'stats',
+  'set.nodes': 'nodes', 'set.team': 'team', 'set.system': 'diagnostics', 'set.connections': 'settings',
 };
 
-/** Разделы, которые уже есть в новой панели (этап 4): «Помощник» и его подразделы. */
-export const NEXT_VIEW: Record<string, { key: 'assistant'; sub?: string }> = {
+/** Разделы, которые уже есть в новой панели: «Помощник» (этап 4) и «Знания» (этап 5). */
+export const NEXT_VIEW: Record<string, { key: 'assistant' | 'knowledge'; sub?: string }> = {
   'go.assistant': { key: 'assistant' }, 'set.assistant': { key: 'assistant' }, 'set.lab': { key: 'assistant', sub: 'try' },
+  'go.knowledge': { key: 'knowledge' }, 'set.knowledge': { key: 'knowledge' },
 };
 
 const norm = (text: string): string => text.toLowerCase().replace(/ё/g, 'е').trim();

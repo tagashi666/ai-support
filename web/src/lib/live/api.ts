@@ -57,7 +57,7 @@ async function parseError(response: Response): Promise<ApiError> {
  * Изменяющий запрос с ключом. `keepalive` — запрос уйдёт, даже если вкладку
  * закрывают (отложенная фиксация и окно отмены, 7.6 и 6.3.5).
  */
-export async function sendJson<T>(path: string, token: string, body: unknown, options: { keepalive?: boolean; fetcher?: Fetch; method?: 'POST' | 'DELETE' } = {}): Promise<T> {
+export async function sendJson<T>(path: string, token: string, body: unknown, options: { keepalive?: boolean; fetcher?: Fetch; method?: 'POST' | 'DELETE' | 'PUT' } = {}): Promise<T> {
   let response: Response;
   try {
     response = await (options.fetcher ?? fetch)(path, {

@@ -17,9 +17,16 @@ import { LiveToday } from '@/features/today/LiveToday';
 import { KeysHelp } from '@/features/palette/KeysHelp';
 import { Palette } from '@/features/palette/Palette';
 import { DemoBar } from './DemoBar';
+import { lazyScreen } from './lazy';
 import { useGlobalKeys } from './useGlobalKeys';
 import { Rail, TabBar } from './Nav';
 import s from './shell.module.css';
+
+// «Знания» — отдельный чанк: в начальный JS не входят (этап 5).
+const KnowledgeScreen = lazyScreen(
+  () => import('@/features/knowledge/KnowledgeScreen').then((module) => module.KnowledgeScreen),
+  () => <div class={s.lazy} aria-busy="true" />,
+);
 
 /**
  * Стартовый экран (вопрос 14.3а): телефон — «Сегодня», компьютер — «Диалоги»
@@ -33,6 +40,7 @@ function resolveHome(current: Route, desktop: boolean): Route {
 function sectionScreen(current: Extract<Route, { name: 'section' }>, live: boolean): JSX.Element {
   if (current.key === 'device') return <DeviceScreen />;
   if (current.key === 'assistant' && live) return <AssistantScreen sub={current.sub} />;
+  if (current.key === 'knowledge' && live) return <KnowledgeScreen sub={current.sub} item={current.item} />;
   return <Placeholder section={current.key} />;
 }
 

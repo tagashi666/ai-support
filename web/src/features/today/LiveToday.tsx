@@ -12,7 +12,7 @@ import { getJson, readToken } from '@/lib/live/api';
 import { liveChannel, liveName, livePreview, liveReasonView } from '@/lib/live/labels';
 import { bootstrap, connection, liveCounts, liveItems, loading, syncedAt } from '@/lib/live/store';
 import { isDesktop } from '@/lib/media';
-import { navigate } from '@/lib/router';
+import { href, navigate, type Route } from '@/lib/router';
 import { now } from '@/lib/store/state';
 import { Avatar } from '@/ui/Avatar';
 import { Button } from '@/ui/Button';
@@ -20,6 +20,8 @@ import { Card } from '@/ui/Card';
 import { Icon } from '@/ui/Icon';
 import { Row } from '@/ui/Row';
 import s from './today.module.css';
+
+const IDEAS: Route = { name: 'section', key: 'knowledge', sub: 'ideas' };
 
 const DAY_MS = 24 * 60 * 60_000;
 
@@ -163,15 +165,20 @@ export function LiveToday({ compact = false }: { compact?: boolean }): JSX.Eleme
   );
 
   const attention = [
-    ideas ? { key: 'ideas', text: t('today.ideasLive', { n: ideas }), action: t('today.ideasAction'), href: '/?ui=classic#v=kb' } : null,
+    // «Разобрать» — в «Идеи из диалогов» новой панели (этап 5); «Что нового» — пока в классике (этап 6).
+    ideas ? { key: 'ideas', text: t('today.ideasLive', { n: ideas }), action: t('today.ideasAction'), href: href(IDEAS), route: IDEAS } : null,
     update ? { key: 'update', text: t('today.versionLive', { version: update }), action: t('today.versionAction'), href: '/?ui=classic#v=diagnostics' } : null,
-  ].filter((item): item is { key: string; text: string; action: string; href: string } => item !== null);
+  ].filter((item): item is { key: string; text: string; action: string; href: string; route?: Route } => item !== null);
   const attentionCard = attention.length > 0 && (
     <Card class={s.card} label={t('today.attention')}>
       <h2 class={s.cardTitle}>{t('today.attention')} <span class={`${s.cardMeta} num`}>{attention.length}</span></h2>
       <ul class={s.list}>
         {attention.map((item) => (
-          <li key={item.key} class={s.item}><span class={s.itemText}>{item.text}</span><a class={s.link} href={item.href}>{item.action}</a></li>
+          <li key={item.key} class={s.item}><span class={s.itemText}>{item.text}</span><a class={s.link} href={item.href} onClick={(event) => {
+            if (!item.route || event.metaKey || event.ctrlKey || event.shiftKey) return;
+            event.preventDefault();
+            navigate(item.route);
+          }}>{item.action}</a></li>
         ))}
       </ul>
     </Card>

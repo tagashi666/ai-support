@@ -2,7 +2,9 @@
  * Проверка собранной новой панели (web/dist), план 11.6:
  * - в index.html нет встроенного кода: <script> только с src, нет on*= и style=;
  * - в сборке нет внешних адресов (кроме пространств имён XML);
- * - бюджет размера: начальный JS ≤ 120 КБ gzip, CSS ≤ 40 КБ gzip.
+ * - бюджет размера: начальный JS ≤ 120 КБ gzip (точка входа и modulepreload из
+ *   index.html; разделы, которые грузятся по требованию, — отдельно, весь JS ≤ 200 КБ),
+ *   CSS ≤ 40 КБ gzip.
  * Запускается после vite build (npm run build:web).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -11,6 +13,7 @@ import { gzipSync } from 'node:zlib';
 
 const dist = new URL('../web/dist/', import.meta.url).pathname;
 const JS_BUDGET = 120 * 1024;
+const JS_TOTAL_BUDGET = 200 * 1024;
 const CSS_BUDGET = 40 * 1024;
 const ALLOWED_URLS = [/^http:\/\/www\.w3\.org\/(2000\/svg|1999\/xlink|1999\/xhtml|1998\/Math\/MathML|XML\/1998\/namespace)/];
 
@@ -44,9 +47,14 @@ check('нет карт исходников с путями машины', !text
 
 const gz = (ext: string): number => files.filter((file) => extname(file) === ext)
   .reduce((sum, file) => sum + gzipSync(readFileSync(file)).length, 0);
-const js = gz('.js');
+// Начальный JS — то, что браузер грузит до первого экрана: модуль точки входа и modulepreload.
+const initialRefs = [...html.matchAll(/<(?:script|link)\b[^>]*\b(?:src|href)="\/next\/(assets\/[^"]+\.js)"/giu)].map((match) => match[1]!);
+const js = [...new Set(initialRefs)].reduce((sum, ref) => sum + gzipSync(readFileSync(join(dist, ref))).length, 0);
+const jsTotal = gz('.js');
 const css = gz('.css');
-check(`JS ${(js / 1024).toFixed(1)} КБ gzip ≤ ${JS_BUDGET / 1024} КБ`, js <= JS_BUDGET);
+check('начальный JS найден в index.html', initialRefs.length > 0);
+check(`начальный JS ${(js / 1024).toFixed(1)} КБ gzip ≤ ${JS_BUDGET / 1024} КБ`, js > 0 && js <= JS_BUDGET);
+check(`весь JS ${(jsTotal / 1024).toFixed(1)} КБ gzip ≤ ${JS_TOTAL_BUDGET / 1024} КБ`, jsTotal <= JS_TOTAL_BUDGET);
 check(`CSS ${(css / 1024).toFixed(1)} КБ gzip ≤ ${CSS_BUDGET / 1024} КБ`, css <= CSS_BUDGET);
 
 console.log(failures === 0 ? '\nСборка новой панели в порядке' : `\nПровалено: ${failures}`);

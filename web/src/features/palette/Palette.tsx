@@ -9,7 +9,7 @@ import { letterKeys } from '@/lib/device';
 import { modLabel } from '@/lib/keys';
 import { navigate } from '@/lib/router';
 import { now } from '@/lib/store/state';
-import { COMMANDS, commandsOnly, matchCommand, readRecent, searchable, type Group } from '@/lib/palette/commands';
+import { CLASSIC_VIEW, COMMANDS, commandsOnly, matchCommand, readRecent, searchable, type Group } from '@/lib/palette/commands';
 import { commandAllowed, openThreadId, paletteOpen, runCommand } from '@/lib/palette/run';
 import { permissions } from '@/lib/workspace/actions';
 import s from './palette.module.css';
@@ -18,7 +18,7 @@ interface SearchResponse {
   conversations: Array<{ id: number; display_name: string | null; username: string | null; subject: string | null; last_message_at: number; hidden?: number }>;
   messages: Array<{ id: number; conversation_id: number; text: string | null; created_at: number }>;
   customers: Array<{ id: number; display_name: string | null; username: string | null; conversation_id: number | null }>;
-  knowledge: Array<{ id: number; title: string; excerpt?: string }>;
+  knowledge: Array<{ id: number; title: string; excerpt?: string; source?: string; ext_id?: string | null }>;
 }
 
 interface Option { key: string; group: Group; label: string; hint?: string; keys?: string; run: () => void }
@@ -114,11 +114,14 @@ export function Palette(): JSX.Element {
           run: () => { if (target) navigate({ name: 'chats', id: String(target), client: true }); } });
       }
       for (const row of result.data.knowledge.slice(0, LIMIT)) {
-        list.push({ key: `k${row.id}`, group: 'articles', label: row.title, hint: t('palette.inClassic'), run: () => location.assign('/?ui=classic#v=kb') });
+        // Статья из файлов открывается сама (этап 5); FAQ из Bedolaga правится там — открываем «Знания».
+        const file = row.source === 'files' && row.ext_id ? row.ext_id : null;
+        list.push({ key: `k${row.id}`, group: 'articles', label: row.title, hint: file ? t('palette.openArticle') : t('palette.bedolagaFaq'),
+          run: () => navigate(file ? { name: 'section', key: 'knowledge', sub: 'articles', item: file } : { name: 'section', key: 'knowledge' }) });
       }
     }
     for (const def of commands.filter((entry) => entry.group === 'settings').slice(0, q ? LIMIT : 0)) {
-      list.push({ key: def.id, group: 'settings', label: t(def.label), hint: t('palette.inClassic'), run: () => runCommand(def.id) });
+      list.push({ key: def.id, group: 'settings', label: t(def.label), ...(CLASSIC_VIEW[def.id] ? { hint: t('palette.inClassic') } : {}), run: () => runCommand(def.id) });
     }
     return list;
   }, [query, result, inThread, perms, letterKeys.value]);

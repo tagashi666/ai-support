@@ -11,8 +11,8 @@ export type Route =
   | { name: 'today' }
   | { name: 'chats'; id: string | null; client?: boolean }
   | { name: 'more' }
-  /** sub — подраздел: /next/assistant/activity (6.7). */
-  | { name: 'section'; key: SectionKey; sub?: string };
+  /** sub — подраздел: /next/assistant/activity (6.7); item — статья или идея: /next/knowledge/articles/<имя> (6.6). */
+  | { name: 'section'; key: SectionKey; sub?: string; item?: string };
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, '');
 const SECTIONS: readonly SectionKey[] = ['knowledge', 'assistant', 'reports', 'connections', 'team', 'system', 'device'];
@@ -21,6 +21,7 @@ export function parse(pathname: string): Route {
   const path = pathname.startsWith(BASE) ? pathname.slice(BASE.length) : pathname;
   const parts = path.split('/').filter(Boolean);
   const [head, second, third] = parts;
+  const decode = (value: string): string => { try { return decodeURIComponent(value); } catch { return value; } };
   if (!head) return { name: 'home' };
   if (head === 'today') return { name: 'today' };
   if (head === 'chats') {
@@ -29,7 +30,8 @@ export function parse(pathname: string): Route {
   }
   if (head === 'more') return { name: 'more' };
   if ((SECTIONS as readonly string[]).includes(head)) {
-    return second ? { name: 'section', key: head as SectionKey, sub: decodeURIComponent(second) } : { name: 'section', key: head as SectionKey };
+    if (!second) return { name: 'section', key: head as SectionKey };
+    return third ? { name: 'section', key: head as SectionKey, sub: decode(second), item: decode(third) } : { name: 'section', key: head as SectionKey, sub: decode(second) };
   }
   return { name: 'home' };
 }
@@ -40,7 +42,7 @@ export function href(route: Route): string {
     case 'today': return `${BASE}/today`;
     case 'chats': return route.id ? `${BASE}/chats/${encodeURIComponent(route.id)}${route.client ? '/client' : ''}` : `${BASE}/chats`;
     case 'more': return `${BASE}/more`;
-    case 'section': return `${BASE}/${route.key}${route.sub ? `/${encodeURIComponent(route.sub)}` : ''}`;
+    case 'section': return `${BASE}/${route.key}${route.sub ? `/${encodeURIComponent(route.sub)}${route.item ? `/${encodeURIComponent(route.item)}` : ''}` : ''}`;
   }
 }
 
@@ -58,7 +60,17 @@ function initialRoute(): Route {
 
 export const route = signal<Route>(initialRoute());
 
-export function navigate(next: Route, replace = false): void {
+/**
+ * Страж ухода (6.6, inv-manage P1-5): редактор с несохранённым текстом
+ * возвращает false и сам спрашивает «Сохранить как черновик / Не сохранять /
+ * Остаться», а потом повторяет переход с force.
+ */
+type Guard = (next: Route) => boolean;
+let guard: Guard | null = null;
+export function setLeaveGuard(next: Guard | null): void { guard = next; }
+
+export function navigate(next: Route, replace = false, force = false): void {
+  if (!force && guard && !guard(next)) return;
   const url = href(next);
   if (url !== location.pathname) {
     if (replace) history.replaceState(null, '', url);
@@ -67,4 +79,12 @@ export function navigate(next: Route, replace = false): void {
   route.value = next;
 }
 
-addEventListener('popstate', () => { route.value = parse(location.pathname); });
+addEventListener('popstate', () => {
+  const next = parse(location.pathname);
+  if (guard && !guard(next)) {
+    // «Назад» с несохранённым: адрес возвращаем, вопрос задаёт редактор.
+    history.pushState(null, '', href(route.value));
+    return;
+  }
+  route.value = next;
+});

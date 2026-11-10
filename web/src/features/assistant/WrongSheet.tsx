@@ -15,12 +15,13 @@ import a from './assistant.module.css';
 export function WrongSheet({ messageId, onClose }: { messageId: number | null; onClose: () => void }): JSX.Element {
   const [reason, setReason] = useState<FeedbackReason | null>(null);
   const [note, setNote] = useState('');
+  const [correct, setCorrect] = useState('');
   const [busy, setBusy] = useState(false);
-  const close = (): void => { setReason(null); setNote(''); onClose(); };
+  const close = (): void => { setReason(null); setNote(''); setCorrect(''); onClose(); };
   const submit = async (): Promise<void> => {
     if (messageId === null || busy) return;
     setBusy(true);
-    const ok = await sendFeedback(messageId, reason, note);
+    const ok = await sendFeedback(messageId, reason, note, correct);
     setBusy(false);
     if (ok) close();
   };
@@ -35,6 +36,11 @@ export function WrongSheet({ messageId, onClose }: { messageId: number | null; o
       <label class={a.field}>
         <span class={a.label}>{t('wrong.note')}</span>
         <textarea class={a.textarea} rows={3} maxLength={500} value={note} onInput={(event) => setNote((event.target as HTMLTextAreaElement).value)} />
+      </label>
+      <label class={a.field}>
+        <span class={a.label}>{t('wrong.correct')}</span>
+        <textarea class={a.textarea} rows={4} maxLength={4000} value={correct} onInput={(event) => setCorrect((event.target as HTMLTextAreaElement).value)} />
+        <span class={a.hint}>{t('wrong.correctHint')}</span>
       </label>
       <div class={sheetStyles.actions}>
         <Button variant="quiet" onClick={close}>{t('wrong.cancel')}</Button>

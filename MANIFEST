@@ -171,6 +171,7 @@ web/e2e/assistant.e2e.ts
 web/e2e/client.e2e.ts
 web/e2e/core.e2e.ts
 web/e2e/helpers.ts
+web/e2e/knowledge.e2e.ts
 web/e2e/list.e2e.ts
 web/e2e/media.e2e.ts
 web/e2e/palette.e2e.ts
@@ -180,6 +181,7 @@ web/public/favicon.svg
 web/src/app/App.tsx
 web/src/app/DemoBar.tsx
 web/src/app/Nav.tsx
+web/src/app/lazy.tsx
 web/src/app/shell.module.css
 web/src/app/useGlobalKeys.ts
 web/src/demo/seed.ts
@@ -206,6 +208,14 @@ web/src/features/client/LiveClient.tsx
 web/src/features/client/client.module.css
 web/src/features/device/DeviceScreen.tsx
 web/src/features/device/device.module.css
+web/src/features/knowledge/ArticleEditor.tsx
+web/src/features/knowledge/ArticlesPanel.tsx
+web/src/features/knowledge/HintsPanel.tsx
+web/src/features/knowledge/IdeasPanel.tsx
+web/src/features/knowledge/KnowledgeScreen.tsx
+web/src/features/knowledge/MineSheet.tsx
+web/src/features/knowledge/TemplatesPanel.tsx
+web/src/features/knowledge/knowledge.module.css
 web/src/features/live/ConnectionLine.tsx
 web/src/features/live/LiveBar.tsx
 web/src/features/live/SignIn.tsx
@@ -255,6 +265,10 @@ web/src/lib/hooks/swipe.test.ts
 web/src/lib/hooks/swipe.ts
 web/src/lib/hooks/useFrozenList.ts
 web/src/lib/keys.ts
+web/src/lib/knowledge/hints.ts
+web/src/lib/knowledge/knowledge.test.ts
+web/src/lib/knowledge/model.ts
+web/src/lib/knowledge/store.ts
 web/src/lib/labels.ts
 web/src/lib/live/api.ts
 web/src/lib/live/client.test.ts

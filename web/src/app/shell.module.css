@@ -155,3 +155,4 @@
 .tab[aria-current="page"] { color: var(--accent-text); }
 .tab .badge { top: -4px; }
 .tab .dot { top: -1px; right: -3px; }
+.lazy { flex: 1; min-height: 8rem; }

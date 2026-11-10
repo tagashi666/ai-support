@@ -4,7 +4,9 @@ import type { InboxItem, ThreadAttachment, ThreadEvent, ThreadMessage, ThreadSug
 import { ImageEditor } from '@/features/media/ImageEditor';
 import { TgsSticker } from '@/features/media/TgsSticker';
 import { WrongSheet } from '@/features/assistant/WrongSheet';
-import { markedWrong } from '@/lib/assistant/store';
+import { can, markedWrong } from '@/lib/assistant/store';
+import { prefill } from '@/lib/knowledge/store';
+import { navigate } from '@/lib/router';
 import { t, type Key } from '@/i18n/ru';
 import { clock, dayDivider, sameDay } from '@/lib/format/format';
 import { liveName } from '@/lib/live/labels';
@@ -246,6 +248,18 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
       .then((blob) => { setViewer(null); setEditing(new File([blob], file.name || 'image.png', { type: blob.type || 'image/png' })); })
       .catch(() => showToast({ text: t('editor.loadFailed'), kind: 'error', ttl: null }));
   };
+  /**
+   * «В знания…» (6.6): новая статья-черновик из ответа — название из вопроса
+   * клиента перед ним, текст — сам ответ. Ничего не публикуется.
+   */
+  const toKnowledge = (message: ThreadMessage): void => {
+    setMenu(null);
+    const list = thread?.messages ?? [];
+    const at = list.findIndex((entry) => entry.id === message.id);
+    const question = list.slice(0, at < 0 ? list.length : at).reverse().find((entry) => entry.voice === 'client' && entry.text)?.text ?? '';
+    prefill.value = { title: question.replace(/\s+/g, ' ').trim().slice(0, 120), body: message.text ?? '' };
+    navigate({ name: 'section', key: 'knowledge', sub: 'new' });
+  };
   const copy = (message: ThreadMessage): void => {
     setMenu(null);
     void navigator.clipboard.writeText(message.text ?? '').then(() => showToast({ text: t('toast.copied') })).catch(() => undefined);
@@ -350,6 +364,7 @@ export function WorkFeed({ id, item }: { id: number; item: InboxItem }): JSX.Ele
               ? <Option label={t('message.quote')} onSelect={() => quote(menu)} />
               : <Option label={t('message.quote')} hint={t('message.quoteUnavailable')} onSelect={() => setMenu(null)} />)}
             {menu.text && <Option label={t('message.copy')} onSelect={() => copy(menu)} />}
+            {menu.text && menu.voice !== 'client' && can('knowledge:manage') && <Option label={t('message.toKnowledge')} onSelect={() => toKnowledge(menu)} />}
             {menu.voice === 'assistant' && canWhy && <Option label={t('why.title')} onSelect={() => explain(menu)} />}
             {menu.voice === 'assistant' && canWhy && !markedWrong.value.has(menu.id) && (
               <Option label={t('today.wrong')} onSelect={() => { setWrongFor(menu.id); setMenu(null); }} />

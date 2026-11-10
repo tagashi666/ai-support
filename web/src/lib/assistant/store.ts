@@ -167,11 +167,21 @@ export async function loadActivity(since: number, options: { before?: number; li
 /** Сообщения, уже отмеченные «Это неверно» в этой вкладке (чтобы кнопка сразу сменилась). */
 export const markedWrong = signal<ReadonlySet<number>>(new Set());
 
-export async function sendFeedback(messageId: number, reason: FeedbackReason | null, note: string): Promise<boolean> {
+/**
+ * «Это неверно»; correct — «как правильно» (этап 5): сервер делает из него идею
+ * статьи в «Идеях из диалогов» — вопрос клиента и правильный ответ, без неверного.
+ */
+export async function sendFeedback(messageId: number, reason: FeedbackReason | null, note: string, correct = ''): Promise<boolean> {
   try {
-    await sendJson<FeedbackResponse>(`/api/messages/${messageId}/feedback`, token(), { verdict: 'wrong', reason, ...(note.trim() ? { note: note.trim() } : {}) });
+    const body = await sendJson<FeedbackResponse>(`/api/messages/${messageId}/feedback`, token(), {
+      verdict: 'wrong', reason, ...(note.trim() ? { note: note.trim() } : {}), ...(correct.trim() ? { correct: correct.trim() } : {}),
+    });
     markedWrong.value = new Set([...markedWrong.peek(), messageId]);
-    showToast({ text: t('wrong.done') });
+    if (typeof body.idea_id === 'number') {
+      const boot = bootstrap.peek();
+      if (boot && boot.counts.ideas !== null) bootstrap.value = { ...boot, counts: { ...boot.counts, ideas: boot.counts.ideas + 1 } };
+    }
+    showToast({ text: typeof body.idea_id === 'number' ? t('wrong.doneIdea') : t('wrong.done') });
     return true;
   } catch {
     showToast({ kind: 'error', text: t('wrong.failed'), ttl: null });
