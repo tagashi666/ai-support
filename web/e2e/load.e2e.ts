@@ -61,7 +61,8 @@ test('500 диалогов и минута кадров: окно отрисов
 
   // Пилюля: применить накопленное и наверх — тоже без долгих задач.
   await page.evaluate(() => { (window as unknown as { __long: number[] }).__long = []; });
-  await page.getByRole('button', { name: /обновлени/ }).click();
+  // Строка пилюли меняется с каждым кадром, пока поток не кончился: нажатие — событием, без ожидания «стабильности».
+  await page.getByRole('button', { name: /обновлени/ }).dispatchEvent('click');
   await expect.poll(() => scroller.evaluate((el) => el.scrollTop), { timeout: 5000 }).toBeLessThan(10);
   const after = await page.evaluate(() => (window as unknown as { __long: number[] }).__long);
   expect(Math.max(0, ...after), `долгие задачи после пилюли: ${after.map((ms) => Math.round(ms)).join(', ')}`).toBeLessThan(200);
