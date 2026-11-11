@@ -55,7 +55,7 @@
     "@playwright/test": "1.58.2",
     "@preact/signals": "^2.11.4",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.15.0",
+    "@types/node": "^26.6.2",
     "@types/ws": "^8.18.1",
     "playwright-core": "1.58.2",
     "preact": "^10.29.8",
